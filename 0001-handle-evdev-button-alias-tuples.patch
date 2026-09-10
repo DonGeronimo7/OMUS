@@ -1,0 +1,11 @@
+--- a/src/mouse_control/wizard.py
++++ b/src/mouse_control/wizard.py
+@@ -20,7 +20,7 @@
+ def get_button_name(code: int) -> str:
+     """Resolve a Linux input code to its symbolic name."""
+     name = ecodes.bytype.get(ecodes.EV_KEY, {}).get(code)
+-    if isinstance(name, list):
++    if isinstance(name, (list, tuple)):
+         name = name[0]
+     if isinstance(name, str) and (name.startswith("BTN_") or name.startswith("KEY_")):
+         return name
