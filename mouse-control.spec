@@ -2,13 +2,12 @@
 %global python_version %(/usr/bin/python3 -c "import sys; print('%s.%s' % sys.version_info[:2])")
 
 Name:           mouse-control
-Version:        0.3.3
+Version:        0.4.2
 Release:        1%{?dist}
-Summary:        Mouse button remapping and Libratbag DPI control
+Summary:        Mouse remapping with optional hardware backends
 # No license was declared in the supplied source; no redistribution grant is inferred.
 License:        LicenseRef-Proprietary
 Source0:        %{name}-%{version}.tar.gz
-Patch0:         0001-handle-evdev-button-alias-tuples.patch
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
@@ -22,12 +21,11 @@ Recommends:     libratbag-ratbagd
 
 %description
 A command-line mouse button remapper using evdev and uinput, with optional
-hardware DPI and polling-rate configuration through Libratbag. Includes an
+hardware DPI and polling-rate configuration through Libratbag or OpenRazer. Includes an
 interactive setup wizard and commands for managing a systemd user service.
 
 %prep
 %setup -q
-%patch -P 0 -p1
 # Compatibility shim: all package metadata remains in pyproject.toml.
 printf 'from setuptools import setup\nsetup()\n' > setup.py
 
@@ -39,15 +37,24 @@ printf 'from setuptools import setup\nsetup()\n' > setup.py
 
 %check
 /usr/bin/python3 -m pytest -q tests
+/usr/bin/python3 -m compileall -q src tests
 PYTHONPATH=%{buildroot}%{python_sitelib} %{buildroot}%{_bindir}/mouse-control --help
 
 %files
-%doc README.md
+%doc README.md CHANGELOG.md
 %{_bindir}/mouse-control
 %{python_sitelib}/mouse_control/
 %{python_sitelib}/mouse_control-*.egg-info/
 
 %changelog
+* Thu Sep 10 2026 Marc-A. Geronimo - 0.4.2-1
+- Add physical keyboard/media-key capture with manual-entry fallback.
+- Add extensible Ratbag/OpenRazer/Generic hardware backend selection.
+- Preserve G305 DPI stages, polling defaults, config and service behavior.
+- Keep OpenRazer optional and hardware failures nonfatal to remapping.
+- Include tuple-alias fix in source; remove redundant packaging patch.
+- Synchronize Python version metadata; run 38 tests and compile checks.
+
 * Thu Sep 10 2026 Marc-A. Geronimo - 0.3.3-1
 - Update package and Python version metadata to 0.3.3.
 
