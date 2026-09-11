@@ -14,3 +14,4 @@ work-rpmroot-log/
 .dnf-cache/
 .dnf-log/
 work-rpm-spec/
+work-rpm-build/
