@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mouse-control"
+version = "0.5.0"
+description = "Headless mouse remapper with optional Libratbag and OpenRazer hardware support"
+authors = [
+    {name = "Marc-A. Geronimo"}
+]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "dbus-next>=0.2.3",
+    "evdev>=1.0.0"
+]
+
+[project.scripts]
+mouse-control = "mouse_control.cli:main"
+
+[tool.setuptools.package-data]
+mouse_control = ["udev/*.rules"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

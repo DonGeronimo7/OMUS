@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.0 — 2026-09-11
+
+### Validated Logitech G305 DPI notifications
+
+- Adds passive, read-only HID++ DPI-stage monitoring for the physically validated
+  Logitech G305 (`046d:4074`). The native firmware DPI button remains
+  `resolution-cycle-up`; setup does not rewrite mouse firmware or use a BTN_TASK
+  workaround.
+- Resolves the hidraw node dynamically, reconnects when the node changes, scopes
+  HID++ feature index `0x07` to the G305 profile, and maps stage indices through
+  configured DPI stages. Duplicate consecutive events are suppressed.
+- Sends a fresh Freedesktop notification for each real DPI transition. Notification
+  or HID++ failures remain nonfatal to normal remapping.
+
+### Reliability, permissions, and packaging
+
+- Preserves setup cancellation/failure configuration safety and restoration of a
+  previously running user service; shutdown handles SIGINT/SIGTERM cleanly.
+- Installs active-session uaccess rules for mouse input, uinput, and the correctly
+  parent-matched G305 HID++ interface (`KERNELS=="0003:046D:4074.*"` and
+  `DRIVERS=="logitech-hidpp-device"`).
+- Publishes the complete maintained source tree, including notifications, HID++
+  monitor, hardware backends, udev data, and 89 tests. OpenRazer remains optional.
+
 ## 0.4.2 — 2026-09-10
 
 Includes both changes developed since the published 0.3.3 package.

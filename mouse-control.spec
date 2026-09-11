@@ -1,22 +1,18 @@
-%global python_sitelib %(/usr/bin/python3 -c "import sysconfig; print(sysconfig.get_path('purelib', vars={'base': '/usr', 'platbase': '/usr'}))")
-%global python_version %(/usr/bin/python3 -c "import sys; print('%s.%s' % sys.version_info[:2])")
-
 Name:           mouse-control
-Version:        0.4.2
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
-# No license was declared in the supplied source; no redistribution grant is inferred.
-License:        LicenseRef-Proprietary
-Source0:        %{name}-%{version}.tar.gz
+License:        GPL-3.0-or-later
+Source0:        mouse_control-%{version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
-BuildRequires:  python3-setuptools
 BuildRequires:  python3-pytest
 BuildRequires:  python3-evdev
-Requires:       python3 >= 3.12
-Requires:       python(abi) = %{python_version}
-Requires:       python3-evdev >= 1.0.0
-Requires:       systemd
+BuildRequires:  python3-dbus-next
+BuildRequires:  pyproject-rpm-macros
+Requires:       python3-evdev
+Requires:       python3-dbus-next
+Requires:       systemd-udev
 Recommends:     libratbag-ratbagd
 
 %description
@@ -25,28 +21,43 @@ hardware DPI and polling-rate configuration through Libratbag or OpenRazer. Incl
 interactive setup wizard and commands for managing a systemd user service.
 
 %prep
-%setup -q
-# Compatibility shim: all package metadata remains in pyproject.toml.
-printf 'from setuptools import setup\nsetup()\n' > setup.py
+%autosetup -n mouse_control-%{version}
 
 %build
-/usr/bin/python3 setup.py build
+%pyproject_wheel
 
 %install
-/usr/bin/python3 setup.py install --skip-build --root=%{buildroot} --prefix=%{_prefix}
+%pyproject_install
+install -Dpm 0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
+  %{buildroot}%{_udevrulesdir}/71-mouse-control-uaccess.rules
+%pyproject_save_files mouse_control
 
 %check
 /usr/bin/python3 -m pytest -q tests
 /usr/bin/python3 -m compileall -q src tests
-PYTHONPATH=%{buildroot}%{python_sitelib} %{buildroot}%{_bindir}/mouse-control --help
+%{buildroot}%{_bindir}/mouse-control --help
 
 %files
+%license LICENSE
 %doc README.md CHANGELOG.md
-%{_bindir}/mouse-control
-%{python_sitelib}/mouse_control/
-%{python_sitelib}/mouse_control-*.egg-info/
+%{pyproject_files}
+%{_udevrulesdir}/71-mouse-control-uaccess.rules
 
 %changelog
+* Fri Sep 11 2026 Marc-A. Geronimo - 0.5.0-1
+- Synchronize the validated G305 HID++ DPI monitor and Freedesktop notifications.
+- Preserve safe setup/service recovery, configurable DPI stages and maximum polling.
+- Package the scoped G305 hidraw uaccess rule and current 89-test source tree.
+
+* Fri Sep 11 2026 Marc-A. Geronimo - 0.4.2-3
+- Notify through Freedesktop D-Bus when a hardware backend reports a DPI change.
+- Replace rapid DPI notifications and keep notification failures nonfatal.
+
+* Fri Sep 11 2026 Marc-A. Geronimo - 0.4.2-2
+- License the project under GPL-3.0-or-later.
+- Install active-session uaccess rules for mouse event devices and uinput.
+- Use the Fedora pyproject build macros.
+
 * Thu Sep 10 2026 Marc-A. Geronimo - 0.4.2-1
 - Add physical keyboard/media-key capture with manual-entry fallback.
 - Add extensible Ratbag/OpenRazer/Generic hardware backend selection.

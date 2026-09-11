@@ -1,0 +1,14 @@
+# Permit only the active local logind session to use physical mouse interfaces.
+# Interfaces classified as keyboards are deliberately excluded: direct keyboard
+# event access exposes keystrokes and is not needed for remapping a mouse.
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+
+# uinput is required to create mouse-control's virtual output device. uaccess
+# grants an ACL to the active local session rather than changing its mode/group.
+SUBSYSTEM=="misc", KERNEL=="uinput", TAG+="uaccess"
+
+# Read-only HID++ DPI notifications from the hardware-validated Logitech G305.
+# Match the parent HID device rather than HID_ID on the hidraw child; this does
+# not grant access to other Logitech receiver interfaces or hidraw devices.
+# Logitech G305 HID++ child interface used for passive DPI notifications.
+SUBSYSTEM=="hidraw", KERNEL=="hidraw*", KERNELS=="0003:046D:4074.*", DRIVERS=="logitech-hidpp-device", TAG+="uaccess"

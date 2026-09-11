@@ -1,16 +1,16 @@
 # Mouse Control
 
-## Download v0.4.2
+## Download v0.5.0
 
-Download the Fedora 44 / Python 3.14 packages from the [v0.4.2 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.4.2).
-See [CHANGELOG.md](CHANGELOG.md) for keyboard capture and hardware-backend changes since v0.3.3.
+Download the Fedora 44 / Python 3.14 packages from the [v0.5.0 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.5.0).
+See [CHANGELOG.md](CHANGELOG.md) for changes since v0.4.2.
 
 ```bash
-sudo dnf install ./mouse-control-0.4.2-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.5.0-1.fc44.noarch.rpm
 /usr/bin/mouse-control --help
 ```
 
-The unsigned RPM requires Python 3.14, evdev and systemd, and recommends Libratbag. OpenRazer remains optional. Installation does not activate remapping, enable a service or change input permissions. Use `/usr/bin/mouse-control` if an older pip installation shadows the command; existing user-service ExecStart paths remain unchanged.
+The unsigned RPM requires Python 3.14, evdev, dbus-next and systemd, and recommends Libratbag. OpenRazer remains optional. Installation does not activate remapping or enable the user service. It installs narrowly scoped logind/uaccess rules for mouse event devices and `/dev/uinput`; see [Device permissions](#device-permissions). Use `/usr/bin/mouse-control` if an older pip installation shadows the command.
 
 A small Linux mouse utility focused on two jobs:
 
@@ -134,13 +134,18 @@ To bind Ctrl itself, press and release it; Ctrl+C cancels capture and returns
 to the action menu. Option **5. Enter a keyboard key code manually** preserves
 manual `KEY_*` entry, including when keyboard devices cannot be opened.
 
+Setup does not rewrite firmware button actions. In particular, a G305 DPI
+button configured as `resolution-cycle-up` remains firmware-controlled, so
+normal mouse and keyboard assignment is independent of experimental DPI
+observation.
+
 Capture listens to readable keyboard and media-key interfaces simultaneously,
 prefers stable `/dev/input/by-id/...-event-kbd` paths, and avoids opening the
 same device twice. It ignores queued events, keys already held when capture
 starts, and autorepeat. Release a held key and press it again to assign it.
-Keyboard device access requires appropriate input permissions. Keyboards are
-not grabbed exclusively, so desktop shortcuts (including Super and volume
-keys) may still activate during capture.
+Keyboard device access requires explicit access granted by the local desktop
+environment. Keyboards are not grabbed exclusively, so desktop shortcuts
+(including Super and volume keys) may still activate during capture.
 
 ## Example configuration
 
@@ -159,6 +164,9 @@ stages = [800, 1500, 2000, 2500, 3000]
 [polling]
 rate_hz = 1000
 
+[notifications]
+dpi_changes = true
+
 [remap]
 'BTN_LEFT' = 'passthrough'
 'BTN_RIGHT' = 'passthrough'
@@ -175,6 +183,8 @@ Supported actions:
 - `key:KEY_*`
 
 The config can be edited by hand without rerunning the wizard.
+`notifications.dpi_changes` defaults to `true` when absent, so existing configs
+receive DPI-change popups. Set it to `false` to disable them.
 
 ## Apply the configuration
 
@@ -182,22 +192,103 @@ The config can be edited by hand without rerunning the wizard.
 mouse-control run
 ```
 
-The remapper grabs the selected physical mouse and creates a virtual input device. Depending on Fedora's device permissions, access to the source `/dev/input/event*` device and `/dev/uinput` may require elevated permissions during development.
+The remapper grabs the selected physical mouse and creates a virtual input device.
 
-For initial Libratbag hardware testing, using:
+## Device permissions
+
+The Fedora RPM installs `/usr/lib/udev/rules.d/71-mouse-control-uaccess.rules`.
+It gives the active local logind session an ACL for event devices that udev
+classifies as mice, excluding any interface also classified as a keyboard, plus
+`/dev/uinput`. It does not change device modes, add users to `input`, or grant
+access to every logged-in user. The ACL is tied to the active local seat, so
+`mouse-control setup` and the systemd user service can run as the desktop user.
+
+After installing or upgrading the RPM, log out and back in (or reconnect the
+mouse) and check the session with:
 
 ```bash
-sudo mouse-control setup
-sudo mouse-control run
+mouse-control check-permissions
+mouse-control setup
 ```
 
-is acceptable. We should later replace this with a least-privilege udev/systemd setup so the entire application does not need to run as root.
+Source installs can copy the same rule to `/etc/udev/rules.d/` and reload udev:
+
+```bash
+sudo install -Dm644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
+  /etc/udev/rules.d/71-mouse-control-uaccess.rules
+sudo udevadm control --reload-rules
+```
+
+Do not run `mouse-control run` as root. `uinput` can inject input events, so
+access is deliberately limited to the active local session. The supplied rule
+does not grant direct keyboard-event access: reading those events can expose
+keystrokes. The wizard's manual `KEY_*` entry remains available if the desktop
+does not already permit temporary keyboard capture. Administrators who require
+physical keyboard capture must provide their own, explicitly reviewed access
+policy for that device; this project intentionally does not install one.
 
 ## DPI behavior
 
 When Libratbag recognizes the mouse, the wizard initializes the preferred DPI stages (800, 1500, 2000, 2500, 3000) where the hardware exposes programmable resolution slots, makes 800 DPI the active/default resolution, queries the supported polling/report rates, selects the highest reported rate during initial setup, applies it immediately, and writes both settings to the configuration for future editing. The configured DPI stages, active DPI, and polling rate are applied when `mouse-control run` starts.
 
 Unsupported mice still get generic button remapping, but their hardware DPI is not changed by this application.
+
+The G305 uses a passive HID++ monitor because Libratbag's cached active-resolution
+state does not reliably follow firmware-owned DPI changes. The monitor resolves
+the selected `046d:4074` hidraw interface dynamically, opens it read-only, and
+accepts only the real-hardware-validated `0x11 0x01 0x07 0x10 STAGE` event shape.
+Feature index `0x07` is scoped to the G305 profile; it is not treated as a
+universal HID++ feature number. The stage byte indexes the configured `[dpi].stages`.
+Existing hand-written `dpi-cycle` mappings remain parseable for compatibility,
+but setup does not offer or require that action. OpenRazer retains its existing
+monitoring path; generic devices do not start a monitor.
+
+Changes are sent directly to `org.freedesktop.Notifications` on the user session
+D-Bus using the lightweight `dbus-next` library. Each real transition creates a
+fresh transient notification (`replaces_id = 0`) that expires after about 1500
+ms. A missing notification server, session-bus startup race or notification error
+never affects evdev/uinput remapping. An application-owned cycle notifies
+immediately after a successful hardware write and never notifies after a failed
+write.
+
+### Read-only Fedora G305 HID++ monitoring and diagnostic
+
+Run `mouse-control debug-dpi`, press the physical DPI button several times, then
+press Ctrl+C. The command resolves the hidraw node by exact `046d:4074` identity,
+opens it read-only, and prints every interrupt-IN report without sending a HID++
+command or changing a button mapping. On the current Fedora host sysfs identifies
+the node as `hidraw6`, but the command deliberately does not hardcode that name.
+
+The installed udev rule grants the active local logind session access only to the
+G305 HID++ child interface matched through its parent HID device
+(`KERNELS=="0003:046D:4074.*"`, `DRIVERS=="logitech-hidpp-device"`). It does
+not grant access to all hidraw devices or even all Logitech receiver interfaces.
+After installing the rule, reload it and reconnect the receiver (or reboot):
+
+```bash
+sudo install -Dm0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
+  /etc/udev/rules.d/71-mouse-control-uaccess.rules
+sudo udevadm control --reload-rules
+```
+
+If diagnostic access is still denied before reconnecting, it prints an exact
+temporary `setfacl` command for that one node. Do not broadly change
+`/dev/hidraw*` permissions.
+
+If an earlier experimental setup already persisted `button 8`, restore the
+native action once before testing:
+
+```bash
+ratbagctl chanting-squirrel profile 0 button 5 action set special resolution-cycle-up
+ratbagctl chanting-squirrel profile 0 button 5 action get
+```
+
+The second command must report `resolution-cycle-up`. Current setup runs never
+change this mapping again.
+
+For OpenRazer hardware, use the same procedure and its supported DPI readback
+tool/API in place of `ratbagctl`. Physical Ratbag/OpenRazer hardware and desktop
+notification-server behavior remain manual validation items.
 
 Libratbag itself supports many gaming mice and Fedora's current `libratbag-ratbagd` package includes Logitech device definitions, including several G-series models.
 
@@ -247,8 +338,9 @@ Before claiming physical Razer validation, test:
 - Polling enumeration, maximum selection and readback on the installed daemon.
 - Setup, remapping, unplug/reconnect and the existing user service in the user's
   session; test daemon unavailability and ensure remapping still starts.
-- No lighting/profile changes. Physical DPI buttons may still change the DPI;
-  this backend only applies active DPI at setup/run.
+- No lighting/profile/button-mapping changes. G305 DPI notification observes
+  the native firmware action passively; other Logitech models require their own
+  hardware-validated event profile before this monitor is enabled for them.
 
 The G305 flow retains USB `046d:4074` matching, enabled resolution-slot writes,
 800 DPI active/default, maximum reported polling during setup, saved TOML keys,
@@ -262,18 +354,21 @@ python3 -m pytest -q
 python3 -m compileall -q src tests
 ```
 
+## License
+
+Mouse Control is licensed under the GNU General Public License, version 3 or
+later. See [LICENSE](LICENSE). It does not bundle libratbag, OpenRazer, evdev,
+or systemd; those projects retain their own licenses.
+
 ## Rebuild the RPM
 
 ```bash
-sudo dnf install rpm-build python3-devel python3-setuptools python3-pytest python3-evdev
-rpmbuild --rebuild mouse-control-0.4.2-1.fc44.src.rpm
+sudo dnf install python3-build python3-devel python3-pytest python3-evdev python3-dbus-next \
+  pyproject-rpm-macros rpm-build systemd-rpm-macros
+python3 -m build --sdist
+rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist"
 ```
 
-The source RPM contains this source snapshot and the RPM spec. Release assets
-also include the source tarball and SHA256SUMS. The old standalone tuple-alias
-patch is retained in repository history for v0.3.3; 0.4.2 already includes that fix.
-
-## License status
-
-No software license has been selected. The RPM retains the existing
-`LicenseRef-Proprietary` placeholder; this release does not change licensing.
+The source RPM contains this source snapshot and the RPM spec. The old
+standalone tuple-alias patch is retained in repository history for v0.3.3;
+0.4.2 already includes that fix.

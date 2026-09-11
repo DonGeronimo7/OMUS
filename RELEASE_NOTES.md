@@ -1,41 +1,40 @@
-# Mouse Control v0.4.2
+# Mouse Control v0.5.0
 
-Fedora 44 / Python 3.14 release containing both changes since v0.3.3:
+This release synchronizes the current physically validated implementation into
+the published project and replaces the outdated v0.4.2 source artifacts.
 
-- **Keyboard capture:** bind a mouse button by physically pressing a keyboard or
-  media key. Manual key-code entry remains available; saved mapping syntax is unchanged.
-- **Hardware backends:** extensible Ratbag → OpenRazer → Generic selection, with
-  optional Razer DPI/polling support through OpenRazer. Preserves Logitech G305
-  stage configuration and maximum polling behavior. Hardware failures warn and
-  allow remapping to continue.
-
-See [CHANGELOG.md](https://github.com/DonGeronimo7/mouse-control/blob/main/CHANGELOG.md)
-for the complete history and [README](https://github.com/DonGeronimo7/mouse-control#readme)
-for optional Fedora OpenRazer packages and usage.
+- **Logitech G305 DPI notifications:** for the physically validated `046d:4074`
+  profile, Mouse Control passively reads native HID++ DPI-stage events and shows
+  transient Freedesktop notifications. It does not rewrite the firmware button,
+  poll `ratbagctl`, or treat the G305 HID++ feature index as universal.
+- **Reliable configuration and service behavior:** setup supports multiple mouse
+  buttons and physical keyboard capture, preserves configuration on cancel/failure,
+  temporarily stops a running user service, and restores it afterwards.
+- **Hardware and permissions:** Libratbag remains the preferred hardware backend;
+  OpenRazer is optional and Generic remains the safe fallback. Fedora/Nobara
+  installations include scoped uaccess rules for mouse input, uinput, and the
+  G305 HID++ parent interface.
 
 ## Install or upgrade
 
 ```bash
-sudo dnf install ./mouse-control-0.4.2-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.5.0-1.fc44.noarch.rpm
 /usr/bin/mouse-control --help
 ```
 
-The RPM is unsigned. OpenRazer is optional; Logitech users do not need it.
-Installing this package does not enable/start services or modify input permissions.
-Existing TOML configurations and service commands remain compatible.
+The RPM is unsigned. Installing it does not activate remapping or enable the
+user service. OpenRazer is not a required dependency.
 
-## Downloads
+## Release assets
 
-- `mouse-control-0.4.2-1.fc44.noarch.rpm` — installable Fedora 44 package.
-- `mouse-control-0.4.2-1.fc44.src.rpm` — source RPM with complete source and spec.
-- `mouse-control-0.4.2.tar.gz` — source snapshot.
-- `SHA256SUMS` — checksums for those three downloads.
+- `mouse-control-0.5.0-1.fc44.noarch.rpm` — installable Fedora package.
+- `mouse-control-0.5.0-1.fc44.src.rpm` — source RPM.
+- `mouse_control-0.5.0.tar.gz` — Python source distribution.
+- `mouse_control-0.5.0-py3-none-any.whl` — Python wheel.
+- `SHA256SUMS` — checksums for the published artifacts.
 
-## Validation and limits
+## Scope and limits
 
-38 tests and Python compile checks passed. RPM payload and dependency checks
-passed. System-wide installation and physical hardware testing were not performed.
-Razer wired/wireless identity, DPI/polling readback, reconnect and user-session
-service behavior still need real-hardware verification. OpenRazer applies active
-DPI only; programmable stages remain a Libratbag capability. Ambiguous VID/PID
-matches fall back safely. No lighting, profiles or macros were added.
+G305 HID++ DPI notification support is physically validated only for Logitech
+G305 `046d:4074`. Other Logitech devices are not claimed to support it. Hardware
+backend and notification failures warn and allow regular remapping to continue.
