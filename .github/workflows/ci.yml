@@ -37,8 +37,10 @@ jobs:
         run: |
           python3 -m build --sdist
           rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
+          test -f rpms/noarch/mouse-control-0.6.9-1.fc44.noarch.rpm
+          rpm -qp --info rpms/noarch/mouse-control-0.6.9-1.fc44.noarch.rpm
       - uses: actions/upload-artifact@v5
-        if: always()
         with:
           name: rpm-packages
           path: rpms/
+          if-no-files-found: error
