@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..discovery import MouseDevice
-from ..hidpp_debug import G305_DPI_PROFILE, watch_dpi_events
+from ..hidpp import (ADJUSTABLE_DPI_FEATURE_ID, HidppDevice,
+                     dpi_decoder_profile, load_cached_hidpp_device,
+                     watch_dpi_events)
 from .base import HardwareBackend, HardwareError
 import logging
 
@@ -232,9 +234,12 @@ class RatbagBackend(HardwareBackend):
     """Keep the existing ratbagctl stage semantics behind the capability contract."""
     name = "Libratbag"
 
-    def __init__(self, client: RatbagClient | None = None) -> None:
+    def __init__(self, client: RatbagClient | None = None,
+                 hidpp_loader: Callable[..., HidppDevice | None] = load_cached_hidpp_device) -> None:
         self.client = client if client is not None else RatbagClient()
         self._devices: dict[MouseDevice, RatbagDevice] = {}
+        self._hidpp_devices: dict[MouseDevice, HidppDevice | None] = {}
+        self._hidpp_loader = hidpp_loader
 
     def supports_device(self, device: MouseDevice) -> bool:
         if device in self._devices:
@@ -245,6 +250,11 @@ class RatbagBackend(HardwareBackend):
         if match is None:
             return False
         self._devices[device] = match
+        if device not in self._hidpp_devices and device.vendor is not None and device.product is not None:
+            # Normal startup is cache-only: ratbagd owns active HID++ traffic.
+            self._hidpp_devices[device] = self._hidpp_loader(
+                device.vendor, device.product, device.phys
+            )
         return True
 
     def _device(self, device: MouseDevice) -> RatbagDevice:
@@ -253,7 +263,11 @@ class RatbagBackend(HardwareBackend):
         return self._devices[device]
 
     def get_device_name(self, device: MouseDevice) -> str | None:
-        return self._device(device).name
+        ratbag = self._device(device)
+        hidpp = self._hidpp_devices.get(device)
+        if hidpp is not None and hidpp.name:
+            return hidpp.name
+        return ratbag.name or device.name
 
     def supports_dpi(self, device: MouseDevice) -> bool:
         return self.get_dpi(device) is not None
@@ -267,14 +281,30 @@ class RatbagBackend(HardwareBackend):
         return False
 
     def supports_dpi_events(self, device: MouseDevice) -> bool:
-        return (device.vendor, device.product) == (G305_DPI_PROFILE.vendor,
-                                                    G305_DPI_PROFILE.product)
+        if not self.supports_device(device):
+            return False
+        hidpp = self._hidpp_devices.get(device)
+        supported = hidpp is not None and dpi_decoder_profile(hidpp) is not None
+        if hidpp is None and device.vendor == 0x046D:
+            logging.getLogger(__name__).info(
+                "Logitech HID++ capabilities have not been discovered for this device. "
+                "Run mouse-control debug-dpi to enable supported passive monitoring."
+            )
+        if (hidpp is not None and
+                hidpp.feature(ADJUSTABLE_DPI_FEATURE_ID) is not None and not supported):
+            logging.getLogger(__name__).info(
+                "Adjustable DPI is present, but its event format is not validated; notifications disabled"
+            )
+        return supported
 
     def watch_dpi_events(self, device: MouseDevice, callback: Callable[[int], None],
                          shutdown_event: threading.Event) -> None:
-        if not self.supports_dpi_events(device):
+        self._device(device)
+        hidpp = self._hidpp_devices.get(device)
+        profile = dpi_decoder_profile(hidpp) if hidpp is not None else None
+        if hidpp is None or profile is None:
             raise RatbagError("Passive HID++ DPI events are not validated for this device")
-        watch_dpi_events(G305_DPI_PROFILE, device.phys, callback, shutdown_event)
+        watch_dpi_events(hidpp, profile, callback, shutdown_event)
 
     def get_dpi_values(self, device: MouseDevice) -> list[int]:
         return self.client.get_dpi_values(self._device(device))

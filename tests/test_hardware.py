@@ -13,6 +13,8 @@ from mouse_control.hardware import HardwareBackend, HardwareError, get_backend
 from mouse_control.hardware.generic import GenericBackend
 from mouse_control.hardware.openrazer import OpenRazerBackend
 from mouse_control.hardware.ratbag import RatbagBackend, RatbagClient, RatbagDevice, RatbagError
+from mouse_control.hidpp import (ADJUSTABLE_DPI_FEATURE_ID, DEVICE_NAME_FEATURE_ID,
+                                 DpiEventMetadata, HidppDevice, HidppFeature)
 
 G305 = MouseDevice('misleading name', '/dev/input/test', vendor=0x046d, product=0x4074)
 RAZER = MouseDevice('generic name', '/dev/input/test', vendor=0x1532, product=0x0099)
@@ -40,7 +42,16 @@ def ratbag_backend():
         return {('dpi', 'get'): '800', ('dpi', 'get-all'): '800 1600',
                 ('rate', 'get'): '500', ('rate', 'get-all'): '125 500 1000'}.get(args[1:], '')
     client._run = Mock(side_effect=run)
-    return RatbagBackend(client)
+    hidpp = HidppDevice(
+        0x046d, 0x4074, 1, 'G305', Path('/dev/hidraw6'), (2, 0),
+        {
+            DEVICE_NAME_FEATURE_ID: HidppFeature(DEVICE_NAME_FEATURE_ID, 5, 0, 0),
+            ADJUSTABLE_DPI_FEATURE_ID: HidppFeature(ADJUSTABLE_DPI_FEATURE_ID, 7, 0, 1),
+        }, "", DpiEventMetadata(7, 0x11, 1),
+    )
+    return RatbagBackend(client, hidpp_loader=lambda vendor, product, phys: (
+        hidpp if (vendor, product) == (0x046d, 0x4074) else None
+    ))
 
 
 def test_logitech_selects_ratbag_first_and_usb_identity():
@@ -48,8 +59,24 @@ def test_logitech_selects_ratbag_first_and_usb_identity():
     later = Mock()
     assert get_backend(G305, [lambda: backend, later]) is backend
     later.assert_not_called()
-    assert backend.get_device_name(G305) == 'Logitech G305'
+    assert backend.get_device_name(G305) == 'G305'
     assert not backend.supports_device(RAZER)
+
+
+def test_ratbag_name_falls_back_when_hidpp_name_is_missing():
+    backend = ratbag_backend()
+    backend._hidpp_devices[G305] = None
+    assert backend.get_device_name(G305) == 'Logitech G305'
+
+
+def test_normal_ratbag_startup_only_loads_cached_hidpp_metadata():
+    client = ratbag_backend().client
+    loader = Mock(return_value=None)
+    backend = RatbagBackend(client, hidpp_loader=loader)
+    assert backend.supports_device(G305)
+    assert backend.supports_dpi(G305)
+    assert not backend.supports_dpi_events(G305)
+    loader.assert_called_once_with(0x046d, 0x4074, '')
 
 
 def test_razer_selects_openrazer_after_ratbag_miss():

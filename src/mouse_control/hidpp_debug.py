@@ -1,162 +1,105 @@
-"""Read-only HID++ report capture for validating native G305 DPI events."""
+"""Interactive Logitech HID++ discovery and passive report capture."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import logging
 import os
+from dataclasses import replace
 from pathlib import Path
 import select
+import subprocess
 import sys
-import threading
 from typing import Callable
 
-
-G305_HID_ID = "0003:0000046D:00004074"
-HIDPP_REPORT_IDS = {0x10, 0x11, 0x12}
-LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class HidppReport:
-    report_id: int
-    device_index: int
-    feature_index: int
-    function_or_event: int
-    software_id: int
-    parameters: bytes
+from .hidpp import (ADJUSTABLE_DPI_FEATURE_ID, DEVICE_NAME_FEATURE_ID,
+                    DpiEventMetadata, discover_hidpp_device,
+                    dpi_event_candidate, parse_hidpp_report,
+                    save_hidpp_device, validated_dpi_decoder_profile,
+                    HidppDevice)
 
 
-@dataclass(frozen=True)
-class DpiEventProfile:
-    """Hardware-validated, device-specific meaning of a HID++ feature index."""
-    vendor: int
-    product: int
-    device_index: int
-    feature_index: int
-    event: int
-
-
-# Feature indices are assigned by each device, not global HID++ feature IDs.
-# This value is intentionally scoped to the real-hardware-validated G305 only.
-G305_DPI_PROFILE = DpiEventProfile(0x046D, 0x4074, 0x01, 0x07, 0x01)
-
-
-def parse_hidpp_report(data: bytes) -> HidppReport | None:
-    """Decode the common HID++ header while retaining raw parameters."""
-    if len(data) < 4 or data[0] not in HIDPP_REPORT_IDS:
-        return None
-    return HidppReport(
-        report_id=data[0],
-        device_index=data[1],
-        feature_index=data[2],
-        function_or_event=data[3] >> 4,
-        software_id=data[3] & 0x0F,
-        parameters=data[4:],
-    )
-
-
-def find_hidraw(vendor: int, product: int, phys: str = "",
-                sysfs: Path = Path("/sys/class/hidraw"),
-                dev_root: Path = Path("/dev")) -> list[Path]:
-    """Resolve hidraw nodes by exact HID identity, never by node number."""
-    matches = []
-    for entry in sorted(sysfs.glob("hidraw*")):
+def _candidate_identities(sysfs: Path = Path("/sys/class/hidraw")) -> list[tuple[int, int]]:
+    identities: set[tuple[int, int]] = set()
+    for entry in sysfs.glob("hidraw*"):
         try:
             fields = dict(line.split("=", 1) for line in
-                          (entry / "device/uevent").read_text().splitlines()
-                          if "=" in line)
-        except OSError:
+                          (entry / "device/uevent").read_text().splitlines() if "=" in line)
+            _bus, vendor, product = fields.get("HID_ID", "").split(":")
+            identity = int(vendor, 16), int(product, 16)
+        except (OSError, ValueError):
             continue
-        expected = f"0003:0000{vendor:04X}:0000{product:04X}"
-        if fields.get("HID_ID") == expected and (not phys or fields.get("HID_PHYS") == phys):
-            matches.append(dev_root / entry.name)
-    return matches
+        if identity[0] == 0x046D:
+            identities.add(identity)
+    return sorted(identities)
 
 
-def find_g305_hidraw(sysfs: Path = Path("/sys/class/hidraw"),
-                      dev_root: Path = Path("/dev")) -> list[Path]:
-    return find_hidraw(0x046D, 0x4074, sysfs=sysfs, dev_root=dev_root)
-
-
-def dpi_stage_event(data: bytes, profile: DpiEventProfile) -> int | None:
-    """Return a stage index only for the hardware-validated DPI notification."""
-    report = parse_hidpp_report(data)
-    if (report is None or report.report_id != 0x11 or
-            report.device_index != profile.device_index or
-            report.feature_index != profile.feature_index or
-            report.function_or_event != profile.event or
-            report.software_id != 0 or not report.parameters):
-        return None
-    return report.parameters[0]
-
-
-def watch_dpi_events(profile: DpiEventProfile, phys: str,
-                     callback: Callable[[int], None], shutdown_event: threading.Event,
-                     *, retry_interval: float = 1.0) -> None:
-    """Passively watch DPI events, re-resolving hidraw after sleep/reconnect."""
-    warned: str | None = None
-    while not shutdown_event.is_set():
-        nodes = find_hidraw(profile.vendor, profile.product, phys)
-        if len(nodes) != 1:
-            message = ("no matching hidraw node" if not nodes else
-                       "multiple matching hidraw nodes; refusing an ambiguous capture")
-            if warned != message:
-                LOG.warning("HID++ DPI monitoring unavailable: %s", message)
-                warned = message
-            shutdown_event.wait(retry_interval)
-            continue
-        try:
-            fd = os.open(nodes[0], os.O_RDONLY | os.O_NONBLOCK)
-        except OSError as exc:
-            message = f"cannot open {nodes[0]} read-only: {exc}"
-            if warned != message:
-                LOG.warning("HID++ DPI monitoring unavailable: %s", message)
-                warned = message
-            shutdown_event.wait(retry_interval)
-            continue
-
-        warned = None
-        try:
-            while not shutdown_event.is_set():
-                readable, _, _ = select.select([fd], [], [], 0.25)
-                if not readable:
-                    continue
-                data = os.read(fd, 64)
-                if not data:
-                    raise OSError("hidraw device closed")
-                stage = dpi_stage_event(data, profile)
-                if stage is not None:
-                    callback(stage)
-        except OSError as exc:
-            LOG.warning("HID++ DPI monitor disconnected; retrying: %s", exc)
-        except Exception:
-            LOG.exception("HID++ DPI monitor failed; retrying")
-        finally:
-            os.close(fd)
-        shutdown_event.wait(retry_interval)
+def coordinated_discovery(
+    *,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    discover: Callable[..., HidppDevice | None] = discover_hidpp_device,
+    save: Callable[[HidppDevice], Path] = save_hidpp_device,
+) -> list[HidppDevice]:
+    """Temporarily coordinate with ratbagd for an explicit discovery run."""
+    status = runner(["systemctl", "is-active", "--quiet", "ratbagd.service"],
+                    check=False)
+    was_active = status.returncode == 0
+    if was_active:
+        print("Temporarily stopping ratbagd for HID++ capability discovery; "
+              "system authorization may be requested.")
+        runner(["systemctl", "stop", "ratbagd.service"], check=True)
+    try:
+        devices = [device for vendor, product in _candidate_identities()
+                   if (device := discover(vendor, product)) is not None]
+        for device in devices:
+            path = save(device)
+            print(f"Saved HID++ capability metadata to {path}")
+        return devices
+    finally:
+        if was_active:
+            print("Restarting ratbagd.")
+            runner(["systemctl", "start", "ratbagd.service"], check=True)
 
 
 def debug_dpi() -> int:
-    """Passively print interrupt-IN reports without sending HID++ commands."""
-    nodes = find_g305_hidraw()
-    if not nodes:
-        print("No Logitech G305 hidraw node found (expected USB 046d:4074).", file=sys.stderr)
-        return 1
-    node = nodes[0]
     try:
-        fd = os.open(node, os.O_RDONLY | os.O_NONBLOCK)
-    except PermissionError:
-        print(f"Cannot read {node}.", file=sys.stderr)
-        print(f"Temporary test only: sudo setfacl -m u:$USER:r {node}", file=sys.stderr)
+        devices = coordinated_discovery()
+    except KeyboardInterrupt:
+        print("\nHID++ discovery interrupted; ratbagd restoration attempted.", file=sys.stderr)
+        return 130
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"Could not coordinate HID++ discovery with ratbagd: {exc}", file=sys.stderr)
         return 1
+    if not devices:
+        print("No unambiguous Logitech HID++ device could be discovered.", file=sys.stderr)
+        return 1
+    if len(devices) > 1:
+        print("Multiple Logitech HID++ devices found; refusing ambiguous capture.", file=sys.stderr)
+        return 1
+    device = devices[0]
+    name_feature = device.feature(DEVICE_NAME_FEATURE_ID)
+    dpi_feature = device.feature(ADJUSTABLE_DPI_FEATURE_ID)
+    profile = validated_dpi_decoder_profile(device)
+    protocol = (f"{device.protocol_version[0]}.{device.protocol_version[1]}"
+                if device.protocol_version else "unknown")
+    print(f"Logitech HID++ device: {device.name or 'name unavailable'}")
+    print(f"VID:PID: {device.vendor_id:04x}:{device.product_id:04x}")
+    print(f"HID++ protocol: {protocol}")
+    print("Device Name feature: " +
+          (f"0x0005 -> index 0x{name_feature.index:02x}, version {name_feature.version}"
+           if name_feature else "0x0005 -> unavailable"))
+    print("Adjustable DPI feature: " +
+          (f"0x2201 -> index 0x{dpi_feature.index:02x}, version {dpi_feature.version}"
+           if dpi_feature else "0x2201 -> unavailable"))
+    print(f"DPI event decoder: {'validated' if profile else 'unsupported/unvalidated'}")
+    try:
+        fd = os.open(device.hidraw_path, os.O_RDONLY | os.O_NONBLOCK)
     except OSError as exc:
-        print(f"Cannot open {node}: {exc}", file=sys.stderr)
+        print(f"Cannot open {device.hidraw_path} read-only: {exc}", file=sys.stderr)
         return 1
-
-    print(f"Passive HID++ capture from {node} ({G305_HID_ID})")
-    print("No reports are written and the firmware button mapping is not changed.")
-    print("Press the physical DPI button several times; press Ctrl+C to finish.")
+    print(f"Passive HID++ capture from {device.hidraw_path}; no reports will be written.")
+    if profile is not None:
+        print("Press the physical DPI button several times to learn the passive event index.")
+    print("Press Ctrl+C to finish.")
+    candidate_indexes: set[int] = set()
     try:
         while True:
             readable, _, _ = select.select([fd], [], [], 1.0)
@@ -164,12 +107,15 @@ def debug_dpi() -> int:
                 continue
             data = os.read(fd, 64)
             report = parse_hidpp_report(data)
-            stage = dpi_stage_event(data, G305_DPI_PROFILE)
+            if report is None:
+                continue
+            candidate = dpi_event_candidate(data, device, profile) if profile else None
+            if candidate is not None:
+                candidate_indexes.add(candidate)
+            stage = report.parameters[0] if candidate is not None else None
             raw = data.hex(" ")
             if stage is not None:
-                print(f"G305 DPI stage event: {stage} | {raw}")
-            elif report is None:
-                continue
+                print(f"DPI stage event: {stage} | {raw}")
             else:
                 kind = "notification candidate" if report.software_id == 0 else "response/request"
                 print(f"HID++ {kind}: report=0x{report.report_id:02x} "
@@ -180,4 +126,18 @@ def debug_dpi() -> int:
         print("\nCapture finished.")
     finally:
         os.close(fd)
+    if len(candidate_indexes) == 1 and profile is not None:
+        event_index = next(iter(candidate_indexes))
+        device = replace(device, dpi_event=DpiEventMetadata(
+            event_index, profile.report_id, profile.event
+        ))
+        path = save_hidpp_device(device)
+        print(f"Learned passive DPI event feature index 0x{event_index:02x}; saved to {path}")
+    elif len(candidate_indexes) > 1:
+        indexes = ", ".join(f"0x{index:02x}" for index in sorted(candidate_indexes))
+        print(f"Conflicting passive DPI event indexes observed ({indexes}); none was saved.",
+              file=sys.stderr)
+    elif profile is not None:
+        print("No validated passive DPI event was observed; no event index was saved.",
+              file=sys.stderr)
     return 0

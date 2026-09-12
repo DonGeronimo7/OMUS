@@ -1,12 +1,12 @@
 # Mouse Control
 
-## Download v0.5.0
+## Download v0.6.3
 
-Download the Fedora 44 / Python 3.14 packages from the [v0.5.0 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.5.0).
-See [CHANGELOG.md](CHANGELOG.md) for changes since v0.4.2.
+Release artifacts are prepared for the intended [v0.6.3 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.6.3).
+See [CHANGELOG.md](CHANGELOG.md) for the complete history.
 
 ```bash
-sudo dnf install ./mouse-control-0.5.0-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.6.3-1.fc44.noarch.rpm
 /usr/bin/mouse-control --help
 ```
 
@@ -235,32 +235,53 @@ Unsupported mice still get generic button remapping, but their hardware DPI is n
 
 The G305 uses a passive HID++ monitor because Libratbag's cached active-resolution
 state does not reliably follow firmware-owned DPI changes. The monitor resolves
-the selected `046d:4074` hidraw interface dynamically, opens it read-only, and
-accepts only the real-hardware-validated `0x11 0x01 0x07 0x10 STAGE` event shape.
-Feature index `0x07` is scoped to the G305 profile; it is not treated as a
-universal HID++ feature number. The stage byte indexes the configured `[dpi].stages`.
+the selected hidraw interface dynamically by exact USB identity and physical path.
+During explicit diagnostic discovery, HID++ ROOT queries discover the protocol
+version, DEVICE NAME (`0x0005`), and ADJUSTABLE DPI (`0x2201`) feature indexes.
+Runtime monitoring then opens the node read-only and sends no commands. On the
+physically validated G305, DEVICE NAME is index `0x03`, ONBOARD PROFILES
+(`0x8100`) is index `0x07`, and ADJUSTABLE DPI is index `0x1a`. The native
+`0x11 0x01 0x07 0x10 STAGE` packet is an ONBOARD PROFILES resolution-slot
+notification; its passive event index remains independent of the dynamically
+discovered ADJUSTABLE DPI query index. These indexes are device-specific, not
+universal Logitech values. The stage byte indexes the configured `[dpi].stages`.
+
+Normal `mouse-control run` startup does not issue ROOT queries because ratbagd
+owns the active HID++ request/reply path. It loads metadata from
+`~/.cache/mouse-control/hidpp-capabilities.json` (or `$XDG_CACHE_HOME`). An
+uncached or stale device keeps Libratbag configuration and ordinary remapping;
+only passive DPI notifications remain disabled until the diagnostic is run.
+Entries are isolated by VID/PID, validated structurally, rebound to the current
+exact hidraw identity, and expire after 30 days.
 Existing hand-written `dpi-cycle` mappings remain parseable for compatibility,
 but setup does not offer or require that action. OpenRazer retains its existing
 monitoring path; generic devices do not start a monitor.
 
 Changes are sent directly to `org.freedesktop.Notifications` on the user session
-D-Bus using the lightweight `dbus-next` library. Each real transition creates a
-fresh transient notification (`replaces_id = 0`) that expires after about 1500
-ms. A missing notification server, session-bus startup race or notification error
-never affects evdev/uinput remapping. An application-owned cycle notifies
-immediately after a successful hardware write and never notifies after a failed
-write.
+D-Bus using the lightweight `dbus-next` library. Each call supplies the previous
+notification ID as the replacement ID, so rapid hardware DPI cycling updates one
+popup instead of stacking several. A missing notification server, session-bus
+startup race or notification error never affects evdev/uinput remapping. An
+application-owned cycle notifies immediately after a successful hardware write
+and never notifies after a failed write.
 
-### Read-only Fedora G305 HID++ monitoring and diagnostic
+### Logitech HID++ discovery and read-only DPI diagnostic
 
 Run `mouse-control debug-dpi`, press the physical DPI button several times, then
-press Ctrl+C. The command resolves the hidraw node by exact `046d:4074` identity,
-opens it read-only, and prints every interrupt-IN report without sending a HID++
-command or changing a button mapping. On the current Fedora host sysfs identifies
-the node as `hidraw6`, but the command deliberately does not hardcode that name.
+press Ctrl+C. If ratbagd is active, the command temporarily stops it (system
+authorization may be requested), finds unambiguous Logitech HID++ devices,
+performs the short initialization exchange, saves the resulting capability
+metadata, and restores ratbagd in an exception-safe cleanup path. It then opens
+the selected node read-only and prints interrupt-IN reports. For a validated
+decoder, pressing the physical DPI button teaches the diagnostic the separate
+unsolicited-event feature index; that observed index is persisted independently
+from the ROOT-discovered `0x2201` query index. Conflicting candidate indexes are
+not saved. It never changes a
+firmware button mapping or polls HID++ continuously. Hidraw node numbers are
+deliberately not hardcoded.
 
-The installed udev rule grants the active local logind session access only to the
-G305 HID++ child interface matched through its parent HID device
+The installed udev rule grants the active local logind session access only to
+the G305 HID++ child interface matched through its parent HID device
 (`KERNELS=="0003:046D:4074.*"`, `DRIVERS=="logitech-hidpp-device"`). It does
 not grant access to all hidraw devices or even all Logitech receiver interfaces.
 After installing the rule, reload it and reconnect the receiver (or reboot):
@@ -371,4 +392,4 @@ rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist"
 
 The source RPM contains this source snapshot and the RPM spec. The old
 standalone tuple-alias patch is retained in repository history for v0.3.3;
-0.4.2 already includes that fix.
+v0.4.2 already included that fix.

@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.5.0
+Version:        0.6.3
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -35,15 +35,20 @@ install -Dpm 0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
 %check
 /usr/bin/python3 -m pytest -q tests
 /usr/bin/python3 -m compileall -q src tests
-%{buildroot}%{_bindir}/mouse-control --help
+PYTHONPATH=%{buildroot}%{python3_sitelib} %{buildroot}%{_bindir}/mouse-control --help
 
-%files
+%files -f %{pyproject_files}
 %license LICENSE
 %doc README.md CHANGELOG.md
-%{pyproject_files}
+%{_bindir}/mouse-control
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 
 %changelog
+* Fri Sep 11 2026 Marc-A. Geronimo - 0.6.3-1
+- Add controlled generic Logitech HID++ capability and device-name discovery.
+- Keep normal runtime passive and preserve independent G305 DPI query/event routes.
+- Validate notifications on Logitech G305 046d:4074 without changing firmware mappings.
+
 * Fri Sep 11 2026 Marc-A. Geronimo - 0.5.0-1
 - Synchronize the validated G305 HID++ DPI monitor and Freedesktop notifications.
 - Preserve safe setup/service recovery, configurable DPI stages and maximum polling.

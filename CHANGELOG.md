@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.3 — 2026-09-11
+
+### Controlled HID++ discovery and passive runtime
+
+- Adds controlled Logitech HID++ capability discovery using dynamic ROOT feature
+  lookup, including the HID++ Device Name (`0x0005`) and Adjustable DPI
+  (`0x2201`) features. Explicit discovery temporarily coordinates with ratbagd,
+  stores selected schema-versioned metadata, and restores ratbagd afterward.
+- Keeps normal runtime read-only and passive: it loads cached metadata, performs
+  no active ROOT discovery, and leaves ordinary Libratbag configuration and
+  input remapping available when notification metadata is absent or invalid.
+- Keeps the G305 Adjustable DPI query route (feature index `0x1a`) independent
+  from the learned Onboard Profiles notification route (feature index `0x07`).
+  Conflicting passive indexes fail safely and unknown devices never guess one.
+- Restores reliable native DPI-cycle notifications for the physically validated
+  Logitech G305 (`046d:4074`), including the sequence 800, 1500, 2000, 2500,
+  3000, then 800 DPI. The firmware button remains `resolution-cycle-up`.
+- Preserves the existing Ratbag/OpenRazer/Generic backend architecture, optional
+  OpenRazer integration, setup/service hardening, keyboard capture, remapping,
+  polling, and clean shutdown behavior. No Solaar dependency is introduced.
+
+Only the Logitech G305 `046d:4074` is physically validated for HID++ DPI
+notifications in this release. Other compatible Logitech devices may be
+discoverable, but their notification behavior is not claimed as validated.
+
 ## 0.5.0 — 2026-09-11
 
 ### Validated Logitech G305 DPI notifications

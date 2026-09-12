@@ -30,7 +30,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("run", help="apply the saved configuration")
     sub.add_parser("show-config", help="print the active configuration path")
     sub.add_parser("check-permissions", help="check mouse and uinput access for this session")
-    sub.add_parser("debug-dpi", help="passively capture G305 HID++ reports")
+    sub.add_parser("debug-dpi", help="discover Logitech HID++ capabilities and capture reports")
 
     sub.add_parser("install-service", help="install and enable the systemd user service")
     sub.add_parser("start", help="start the background service")
@@ -128,6 +128,14 @@ def run_setup_wizard() -> int:
 
         print(f"\nSelected: {selected.name}")
         backend = get_backend(selected)
+        try:
+            hardware_name = backend.get_device_name(selected)
+            if hardware_name and hardware_name != selected.name:
+                identity = (f" [{selected.vendor:04x}:{selected.product:04x}]"
+                            if selected.vendor is not None and selected.product is not None else "")
+                print(f"Hardware name: {hardware_name}{identity}")
+        except HardwareError as exc:
+            logging.info("Hardware name lookup unavailable: %s", exc)
         mappings = _default_mappings()
         mappings.update(map_mouse_buttons(selected.path))
         dpi_stages = DEFAULT_DPI_STAGES
