@@ -67,6 +67,11 @@ class HardwareBackend(ABC):
         return None
 
     def supports_polling_rate(self, device: MouseDevice) -> bool:
+        """Return whether polling/report-rate reads are supported."""
+        return False
+
+    def supports_polling_rate_writes(self, device: MouseDevice) -> bool:
+        """Return whether polling/report-rate writes are supported."""
         return False
 
     def get_polling_rate(self, device: MouseDevice) -> int | None:

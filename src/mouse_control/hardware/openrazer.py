@@ -92,6 +92,9 @@ class OpenRazerBackend(HardwareBackend):
     def supports_polling_rate(self, device: MouseDevice) -> bool:
         return bool(self._device(device).has("poll_rate"))
 
+    def supports_polling_rate_writes(self, device: MouseDevice) -> bool:
+        return self.supports_polling_rate(device)
+
     @_library_errors
     def get_polling_rate(self, device: MouseDevice) -> int | None:
         return int(self._device(device).poll_rate) if self.supports_polling_rate(device) else None

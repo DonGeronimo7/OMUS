@@ -77,10 +77,11 @@ def test_supported_dpi_decodes_explicit_and_range_step_values():
 
 
 class FakeSession:
-    def __init__(self, *, mismatch=False):
+    def __init__(self, *, mismatch=False, profile_mode=0x02):
         self.dpi = 800
         self.rate_ms = 2
         self.mismatch = mismatch
+        self.profile_mode = profile_mode
         self.calls = []
         self.callbacks = []
 
@@ -106,6 +107,8 @@ class FakeSession:
             result = b"\0"
         elif feature == 0x17 and function == 0:
             result = b"\x8b"  # 1, 2, 4 and 8 ms
+        elif feature == 0x12 and function == 2:
+            result = bytes((self.profile_mode,))
         elif feature == 0x17 and function == 1:
             result = bytes((self.rate_ms,))
         elif feature == 0x17 and function == 2:
@@ -129,6 +132,26 @@ def test_driver_discovers_dynamic_indexes_reads_writes_and_verifies():
     assert driver.set_dpi(1500).x_dpi == 1500
     assert any(call[1:3] == (0x19, 3) for call in session.calls)
     assert driver.capabilities.report_rate.values == (1000, 500, 250, 125)
+    assert driver.set_report_rate(1000) == 1000
+
+
+def test_report_rate_remains_readable_but_not_writable_in_onboard_mode():
+    session = FakeSession(profile_mode=0x01)
+    driver = Hidpp20Driver(session, 1)
+    caps = driver.capabilities.report_rate
+    assert caps.readable
+    assert not caps.writable
+    assert caps.values == (1000, 500, 250, 125)
+    assert driver.get_report_rate() == 500
+    calls_before_write = list(session.calls)
+    with pytest.raises(HidppError, match="unsupported report rate"):
+        driver.set_report_rate(1000)
+    assert session.calls == calls_before_write
+
+
+def test_report_rate_is_writable_in_host_mode():
+    driver = Hidpp20Driver(FakeSession(profile_mode=0x02), 1)
+    assert driver.capabilities.report_rate.writable
     assert driver.set_report_rate(1000) == 1000
 
 

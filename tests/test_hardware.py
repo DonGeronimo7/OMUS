@@ -8,6 +8,8 @@ import pytest
 from mouse_control import cli
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware import HardwareBackend, HardwareError, get_backend
+from mouse_control.hardware.capabilities import (HardwareCapabilities,
+                                                 ReportRateCapabilities)
 from mouse_control.hardware.generic import GenericBackend
 from mouse_control.hardware.native_hid import NativeHidBackend
 from mouse_control.hardware.openrazer import OpenRazerBackend
@@ -61,6 +63,34 @@ def test_native_hid_refuses_ambiguous_interfaces_and_keeps_devices_distinct():
     assert len(backend._bound) == 2
 
 
+def test_native_hid_exposes_report_rate_read_and_write_separately():
+    capabilities = HardwareCapabilities(
+        report_rate=ReportRateCapabilities(
+            readable=True, writable=False, values=(1000, 500, 250, 125)))
+    driver = SimpleNamespace(name="G305", capabilities=capabilities,
+                             get_report_rate=Mock(return_value=1000),
+                             set_report_rate=Mock())
+    backend = NativeHidBackend(
+        discovery=lambda _device: [SimpleNamespace(path="/dev/fake")],
+        session_factory=lambda _path: SimpleNamespace(closed=False, close=lambda: None),
+        connectors=(lambda _session: driver,))
+    assert backend.supports_polling_rate(G305)
+    assert not backend.supports_polling_rate_writes(G305)
+    assert backend.get_polling_rates(G305) == [1000, 500, 250, 125]
+    assert backend.get_polling_rate(G305) == 1000
+    with pytest.raises(HardwareError, match="writes are unsupported"):
+        backend.set_polling_rate(G305, 500)
+    driver.set_report_rate.assert_not_called()
+
+
+def test_hardware_apply_skips_nonwritable_report_rate():
+    backend = Mock(spec=HardwareBackend)
+    backend.supports_dpi.return_value = False
+    backend.supports_polling_rate_writes.return_value = False
+    cli._apply_hardware(backend, G305, [], 0, 1000)
+    backend.set_polling_rate.assert_not_called()
+
+
 def test_razer_backend_remains_available():
     backend = razer_backend(razer_device())
     assert get_backend(RAZER, [lambda: backend]) is backend
@@ -103,6 +133,7 @@ def test_startup_remaps_despite_hardware_failure(unavailable, caplog):
     backend.name = "Test"
     backend.supports_dpi.side_effect = HardwareError("disconnected")
     backend.supports_polling_rate.return_value = True
+    backend.supports_polling_rate_writes.return_value = True
     config = {"device": {"event_path": RAZER.path}, "dpi": {"active": 800},
               "polling": {"rate_hz": 1000}, "remap": {"BTN_SIDE": "key:KEY_F13"}}
     with patch.object(cli, "load_config", return_value=config), \

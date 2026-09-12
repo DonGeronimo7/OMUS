@@ -111,7 +111,14 @@ class Hidpp20Driver:
         flags = response.parameters[0]
         values = tuple(1000 // milliseconds for milliseconds in range(1, 9)
                        if flags & (1 << (milliseconds - 1)))
-        return ReportRateCapabilities(readable=True, writable=True, values=values)
+        profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
+        writable = True
+        if profiles is not None:
+            mode = self.session.request(self.device_index, profiles.index, 0x02)
+            if not mode.parameters or mode.parameters[0] not in (0x01, 0x02):
+                raise HidppError("malformed onboard-profiles mode response")
+            writable = mode.parameters[0] == 0x02
+        return ReportRateCapabilities(readable=True, writable=writable, values=values)
 
     def get_dpi_state(self, *, active_stage: int | None = None) -> DpiState:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)

@@ -277,7 +277,7 @@ def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
         logging.warning("Could not apply %s DPI settings: %s", backend.name, exc)
 
     try:
-        if polling_rate_hz is not None and backend.supports_polling_rate(device):
+        if polling_rate_hz is not None and backend.supports_polling_rate_writes(device):
             backend.set_polling_rate(device, int(polling_rate_hz))
             print(f"Hardware polling rate set to {polling_rate_hz} Hz through {backend.name}.")
     except (HardwareError, ValueError, TypeError) as exc:

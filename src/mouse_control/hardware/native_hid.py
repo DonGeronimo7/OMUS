@@ -109,8 +109,10 @@ class NativeHidBackend(HardwareBackend):
             raise HardwareError(f"Native HID: {exc}") from exc
 
     def supports_polling_rate(self, device: MouseDevice) -> bool:
-        caps = self.get_capabilities(device).report_rate
-        return caps.readable and caps.writable
+        return self.get_capabilities(device).report_rate.readable
+
+    def supports_polling_rate_writes(self, device: MouseDevice) -> bool:
+        return self.get_capabilities(device).report_rate.writable
 
     def get_polling_rates(self, device: MouseDevice) -> list[int]:
         return list(self.get_capabilities(device).report_rate.values or ())
@@ -122,6 +124,8 @@ class NativeHidBackend(HardwareBackend):
             raise HardwareError(f"Native HID: {exc}") from exc
 
     def set_polling_rate(self, device: MouseDevice, hz: int) -> None:
+        if not self.supports_polling_rate_writes(device):
+            raise HardwareError("Native HID: polling-rate writes are unsupported")
         try:
             self._driver(device).set_report_rate(hz)
         except HidppError as exc:
