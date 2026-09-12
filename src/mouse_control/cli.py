@@ -15,6 +15,7 @@ from .hardware import HardwareBackend, HardwareError, get_backend
 from .remapper import DpiCycler, MouseRemapper
 from .notifications import create_dpi_monitor
 from .hidpp_debug import debug_dpi
+from .generic_hid import capture_input_reports, discover_hid_devices
 from .wizard import ButtonCaptureError, map_mouse_buttons
 
 from .service import (install_service, is_service_active, start_service, stop_service,
@@ -32,6 +33,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("show-config", help="print the active configuration path")
     sub.add_parser("check-permissions", help="check mouse and uinput access for this session")
     sub.add_parser("debug-dpi", help="discover Logitech HID++ capabilities and capture reports")
+    debug_hid = sub.add_parser(
+        "debug-hid", help="read-only generic HID discovery and report capture"
+    )
+    debug_hid.add_argument(
+        "--seconds", type=float, default=10.0,
+        help="seconds to capture each matching hidraw interface (default: 10)",
+    )
     doctor = sub.add_parser("doctor", help="read-only environment and hardware diagnostics")
     doctor.add_argument("--report", action="store_true", help="format a privacy-safe compatibility report")
     doctor.add_argument("--fix", action="store_true", help="offer safe dependency-installation guidance")
@@ -51,6 +59,52 @@ def _default_mappings() -> dict[str, str]:
         "BTN_RIGHT": "passthrough",
         "BTN_MIDDLE": "passthrough",
     }
+
+
+def debug_hid(seconds: float = 10.0) -> int:
+    """Identify matching HID interfaces and capture reports without writes."""
+    if seconds <= 0:
+        print("--seconds must be greater than zero", file=sys.stderr)
+        return 2
+    mice = get_mouse_devices()
+    if not mice:
+        print("No mouse devices found. Check input permissions.", file=sys.stderr)
+        return 1
+    selected = select_mouse_device(mice)
+    if selected is None:
+        return 0
+    identity = (f"{selected.vendor:04x}:{selected.product:04x}"
+                if selected.vendor is not None and selected.product is not None
+                else "unavailable")
+    print(f"Selected: {selected.name} [{identity}]")
+    interfaces = discover_hid_devices(selected)
+    if not interfaces:
+        print("No matching hidraw interfaces were found.", file=sys.stderr)
+        return 1
+    print(f"Matching hidraw interfaces: {len(interfaces)}")
+    for interface in interfaces:
+        print(f"\n{interface.path}: {interface.name}")
+        print(f"  physical path: {interface.phys or 'unavailable'}")
+        print(f"  report descriptor ({len(interface.report_descriptor)} bytes): "
+              f"{interface.report_descriptor.hex(' ')}")
+        print(f"  capturing input reports read-only for {seconds:g} seconds; "
+              "press the DPI and extra buttons now")
+        seen: set[bytes] = set()
+        try:
+            capture_input_reports(interface, seconds, lambda report: seen.add(report))
+        except PermissionError as exc:
+            print(f"  permission denied: {exc}", file=sys.stderr)
+            continue
+        except OSError as exc:
+            print(f"  capture unavailable: {exc}", file=sys.stderr)
+            continue
+        if seen:
+            for report in sorted(seen):
+                print(f"  input: {report.hex(' ')}")
+        else:
+            print("  no input reports observed")
+    print("\nNo HID feature or output reports were sent.")
+    return 0
 
 
 def _choose_default_dpi(backend: HardwareBackend, device: MouseDevice) -> tuple[list[int], int]:
@@ -305,6 +359,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "debug-dpi":
         return debug_dpi()
+
+    if args.command == "debug-hid":
+        return debug_hid(args.seconds)
 
     if args.command == "doctor":
         if args.fix:

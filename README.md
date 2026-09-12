@@ -110,7 +110,7 @@ that needs community testing. The detailed, evidence-based record is in
 | Logitech HID++ | Experimental / needs testing | Capability discovery and fallback behavior exist; notification behavior is only validated for the G305. |
 | Libratbag-supported mice | Needs broader validation | Hardware DPI and polling are available only where Libratbag recognizes and exposes them. |
 | OpenRazer-supported mice | Needs broader validation | Optional backend; physical Razer validation is still needed. |
-| Generic evdev mice | Needs broader validation | Software remapping fallback, without a claim of hardware DPI or polling support. |
+| Generic HID / evdev mice | Needs broader validation | Exact HID identity and read-only diagnostics plus software remapping; no unvalidated DPI or polling writes. |
 
 ## Help test your mouse
 
@@ -138,12 +138,19 @@ falls back gracefully when vendor-specific functionality is unavailable:
 
 1. Libratbag where it confidently recognizes the device.
 2. OpenRazer where its optional daemon/client can confidently recognize it.
-3. Generic evdev/software remapping when no hardware backend is available.
+3. Generic HID identity with evdev/software remapping when no validated hardware backend is available.
 4. HID++ capability handling where applicable, with the validated G305 runtime
    path kept passive so it coexists with ratbagd.
 
 Hardware configuration failures are reported independently and do not prevent
 ordinary software remapping from starting.
+
+`mouse-control debug-hid --seconds 10` is the vendor-neutral, read-only
+development path. It matches hidraw interfaces to the selected evdev mouse by
+bus type and exact VID:PID, prints their report descriptors, and captures input
+reports while buttons are pressed. It never sends feature or output reports.
+USB HID does not standardize mouse DPI or polling-rate configuration, so a
+vendor protocol must be validated before those writes are enabled.
 
 ## Optional hardware integrations
 
