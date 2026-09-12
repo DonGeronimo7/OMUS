@@ -1,9 +1,26 @@
 name: Bug report
 description: Report a reproducible Mouse Control problem
+title: "[Bug]: "
+labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: "Please do not include credentials, usernames, home-directory paths, serial numbers, or unrelated private information."
   - type: textarea
-    attributes: {label: What happened?}
+    id: happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
   - type: textarea
-    attributes: {label: Steps to reproduce}
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
   - type: textarea
-    attributes: {label: "mouse-control doctor --report output (remove anything you do not want to share)"}
+    id: doctor
+    attributes:
+      label: Sanitized mouse-control doctor --report output
+      description: "Review before submitting; remove anything you do not want to share."
+      render: text

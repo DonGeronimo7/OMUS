@@ -44,7 +44,7 @@ sudo dnf install ./mouse-control-0.6.9-1.fc44.noarch.rpm
 The RPM is unsigned. Installing it does not activate remapping or enable the
 user service. OpenRazer remains optional.
 
-## Proposed release assets
+## Release assets
 
 - `mouse-control-0.6.9-1.fc44.noarch.rpm` — installable Fedora package.
 - `mouse-control_0.6.9_all.deb` — installable Debian package.

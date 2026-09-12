@@ -1,26 +1,68 @@
 name: Hardware compatibility
-description: Report Mouse Control behavior with a mouse model
+description: Report a successful or unsuccessful Mouse Control test with a mouse model
+title: "[Hardware]: "
 body:
   - type: markdown
     attributes:
-      value: "Do not include credentials, usernames, serial numbers, or unrelated private system information."
+      value: |
+        Successful reports are as valuable as failures. Do not include credentials,
+        usernames, home-directory paths, serial numbers, or unrelated private information.
   - type: input
-    attributes: {label: Mouse brand and model}
-  - type: input
-    attributes: {label: Distribution and version}
-  - type: input
-    attributes: {label: Installation method}
-  - type: checkboxes
+    id: mouse
     attributes:
-      label: Results
+      label: Manufacturer and model
+      placeholder: "Example: Logitech G305"
+    validations: {required: true}
+  - type: input
+    id: connection
+    attributes:
+      label: Connection type
+      placeholder: "USB wired, 2.4 GHz receiver, Bluetooth, etc."
+  - type: input
+    id: distribution
+    attributes: {label: Distribution and version, placeholder: "Example: Fedora 44"}
+    validations: {required: true}
+  - type: input
+    id: desktop
+    attributes: {label: Desktop environment or compositor, placeholder: "Example: GNOME on Wayland"}
+  - type: input
+    id: version
+    attributes: {label: Mouse Control version, placeholder: "Example: 0.6.9"}
+    validations: {required: true}
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation method
+      options: [RPM, DEB, AppImage, PKGBUILD, source, other]
+    validations: {required: true}
+  - type: dropdown
+    id: result
+    attributes:
+      label: Overall result
+      options: [Fully working, Mostly working, Partially working, Detected but unusable, Not detected]
+    validations: {required: true}
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: What did you test?
       options:
-        - {label: Everything works}
-        - {label: Remapping works}
-        - {label: DPI switching works}
-        - {label: DPI notifications work}
-        - {label: Polling control works}
-        - {label: Device recognized by Libratbag}
-        - {label: Generic fallback used}
-        - {label: Setup failed}
+        - {label: Device detected}
+        - {label: Setup completed}
+        - {label: Button remapping works}
+        - {label: Configuration persists after restart}
+        - {label: DPI control works}
+        - {label: DPI notification works, if applicable}
+        - {label: Polling-rate configuration works, if applicable}
+        - {label: Background service works}
   - type: textarea
-    attributes: {label: "mouse-control doctor --report output"}
+    id: details
+    attributes:
+      label: What worked, what failed, and any useful observations
+      placeholder: "Please mention whether normal mouse operation continued to work."
+    validations: {required: true}
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Sanitized mouse-control doctor --report output
+      description: "Review before submitting; remove anything you do not want to share."
+      render: text
