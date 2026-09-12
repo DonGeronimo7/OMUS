@@ -10,6 +10,7 @@ BuildRequires:  python3-pytest
 BuildRequires:  python3-evdev
 BuildRequires:  python3-dbus-next
 BuildRequires:  pyproject-rpm-macros
+BuildRequires:  systemd-rpm-macros
 # The wheel installer is kept from writing bytecode below; avoid recreating it
 # during RPM's post-install processing so build-time caches are not shipped.
 %undefine py_auto_byte_compile

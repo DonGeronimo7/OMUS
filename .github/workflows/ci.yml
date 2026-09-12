@@ -14,8 +14,8 @@ jobs:
       matrix:
         python-version: ['3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -28,17 +28,16 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:44
     steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: >-
-          dnf -y install
-          python3-build python3-devel python3-evdev python3-pytest
-          pyproject-rpm-macros rpm-build systemd-rpm-macros
+      - uses: actions/checkout@v5
+      - name: Install RPM build tooling
+        run: dnf -y install dnf-plugins-core rpm-build rpmdevtools
+      - name: Install spec build requirements
+        run: dnf -y builddep mouse-control.spec
       - name: Build RPMs
         run: |
           python3 -m build --sdist
           rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: rpm-packages
