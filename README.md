@@ -1,12 +1,12 @@
 # Mouse Control
 
-## Download v0.6.3
+## Download v0.6.9
 
-Release artifacts are prepared for the intended [v0.6.3 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.6.3).
+Release artifacts are prepared for the intended v0.6.9 release.
 See [CHANGELOG.md](CHANGELOG.md) for the complete history.
 
 ```bash
-sudo dnf install ./mouse-control-0.6.3-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.6.9-1.fc44.noarch.rpm
 /usr/bin/mouse-control --help
 ```
 
@@ -185,6 +185,31 @@ Supported actions:
 The config can be edited by hand without rerunning the wizard.
 `notifications.dpi_changes` defaults to `true` when absent, so existing configs
 receive DPI-change popups. Set it to `false` to disable them.
+
+## Hardware Compatibility Testing
+
+Mouse Control needs community testing across manufacturers and models. Logitech
+HID++ devices receive enhanced capabilities only when they have been safely
+discovered and cached; Libratbag and OpenRazer support is optional. Other Linux
+mice use the generic evdev remapping fallback where technically possible.
+Results are community-tested, reported working, experimental, or not yet tested
+rather than universal compatibility claims. See [the compatibility matrix](docs/COMPATIBILITY.md).
+
+1. Install the native package for your distribution and run `mouse-control setup`.
+2. Verify remapping and test the native DPI button if present.
+3. Verify DPI notifications and polling control if supported.
+4. Run `mouse-control doctor --report` and submit the result using the hardware template.
+
+`mouse-control doctor` is read-only: it reports only relevant mouse names and
+VID:PID values, selected backends, safe HID++ cache status, and runtime
+readiness. It excludes user names, home paths, serial numbers, cache contents,
+and unrelated USB devices. `mouse-control doctor --fix` merely proposes the
+native package-manager command and requires confirmation; it never runs a
+privileged command, changes repositories, or enables optional backends.
+
+For normal users, native packages are recommended. `pip` may need Python
+development headers when it must compile `evdev`, particularly on a new Python
+version without a compatible wheel.
 
 ## Apply the configuration
 

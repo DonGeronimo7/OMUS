@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.6.3
+Version:        0.6.9
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -10,6 +10,9 @@ BuildRequires:  python3-pytest
 BuildRequires:  python3-evdev
 BuildRequires:  python3-dbus-next
 BuildRequires:  pyproject-rpm-macros
+# The wheel installer is kept from writing bytecode below; avoid recreating it
+# during RPM's post-install processing so build-time caches are not shipped.
+%undefine py_auto_byte_compile
 Requires:       python3-evdev
 Requires:       python3-dbus-next
 Requires:       systemd-udev
@@ -27,23 +30,38 @@ interactive setup wizard and commands for managing a systemd user service.
 %pyproject_wheel
 
 %install
+export PYTHONDONTWRITEBYTECODE=1
+export PIP_NO_COMPILE=1
 %pyproject_install
 install -Dpm 0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
   %{buildroot}%{_udevrulesdir}/71-mouse-control-uaccess.rules
 %pyproject_save_files mouse_control
+# pip records bytecode even when it is not a distributable source file.  Remove
+# it only after the generated file manifest has been created, then omit it from
+# that manifest as well.
+find %{buildroot}%{python3_sitelib} -type d -name __pycache__ -prune -exec rm -rf {} +
+sed -i '\|__pycache__|d' %{pyproject_files}
 
 %check
 /usr/bin/python3 -m pytest -q tests
 /usr/bin/python3 -m compileall -q src tests
-PYTHONPATH=%{buildroot}%{python3_sitelib} %{buildroot}%{_bindir}/mouse-control --help
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
+  %{buildroot}%{_bindir}/mouse-control --help
 
 %files -f %{pyproject_files}
 %license LICENSE
 %doc README.md CHANGELOG.md
+%doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 
 %changelog
+* Sat Sep 12 2026 Marc-A. Geronimo - 0.6.9-1
+- Prepare Linux-wide community hardware testing with doctor diagnostics,
+  privacy-safe reports, Debian/Arch/AppImage packaging definitions, issue
+  templates, and a compatibility matrix.
+- Preserve the validated passive G305 HID++ implementation unchanged.
+
 * Fri Sep 11 2026 Marc-A. Geronimo - 0.6.3-1
 - Add controlled generic Logitech HID++ capability and device-name discovery.
 - Keep normal runtime passive and preserve independent G305 DPI query/event routes.

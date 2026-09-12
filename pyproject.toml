@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mouse-control"
-version = "0.6.3"
+version = "0.6.9"
 description = "Headless mouse remapper with optional Libratbag and OpenRazer hardware support"
 authors = [
     {name = "Marc-A. Geronimo"}
@@ -25,3 +25,6 @@ mouse_control = ["udev/*.rules"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

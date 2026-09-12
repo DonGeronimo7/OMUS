@@ -20,6 +20,7 @@ from .wizard import ButtonCaptureError, map_mouse_buttons
 from .service import (install_service, is_service_active, start_service, stop_service,
                       restart_service, status_service,)
 from .permissions import permission_report
+from .doctor import doctor_fix, print_doctor
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -31,6 +32,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("show-config", help="print the active configuration path")
     sub.add_parser("check-permissions", help="check mouse and uinput access for this session")
     sub.add_parser("debug-dpi", help="discover Logitech HID++ capabilities and capture reports")
+    doctor = sub.add_parser("doctor", help="read-only environment and hardware diagnostics")
+    doctor.add_argument("--report", action="store_true", help="format a privacy-safe compatibility report")
+    doctor.add_argument("--fix", action="store_true", help="offer safe dependency-installation guidance")
 
     sub.add_parser("install-service", help="install and enable the systemd user service")
     sub.add_parser("start", help="start the background service")
@@ -104,6 +108,12 @@ def _ask_enable_service() -> bool:
 
 def run_setup_wizard() -> int:
     print("=== Mouse Control Setup Wizard ===")
+    # Read-only readiness information: optional backends never block remapping.
+    if not __import__("shutil").which("ratbagctl"):
+        print("Libratbag is not installed. Generic mouse remapping remains available.")
+        print("DPI/polling hardware controls may be unavailable.")
+    else:
+        print("System requirements: OK (optional hardware backend available)")
     was_active = is_service_active()
     service_restored = False
     if was_active:
@@ -295,6 +305,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "debug-dpi":
         return debug_dpi()
+
+    if args.command == "doctor":
+        if args.fix:
+            return doctor_fix()
+        return print_doctor(report=args.report)
 
     if args.command == "install-service":
         install_service()

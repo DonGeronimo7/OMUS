@@ -1,0 +1,9 @@
+name: Bug report
+description: Report a reproducible Mouse Control problem
+body:
+  - type: textarea
+    attributes: {label: What happened?}
+  - type: textarea
+    attributes: {label: Steps to reproduce}
+  - type: textarea
+    attributes: {label: "mouse-control doctor --report output (remove anything you do not want to share)"}

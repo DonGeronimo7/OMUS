@@ -1,7 +1,17 @@
-# Mouse Control v0.6.3
+# Mouse Control v0.6.9
 
-This release synchronizes the current physically validated implementation while
-preserving the existing input-remapping, service, and hardware-backend behavior.
+This release prepares the physically validated implementation for broad Linux
+community hardware testing while preserving existing remapping, service, and
+hardware-backend behavior.
+
+- **Community testing infrastructure:** adds a compatibility matrix and GitHub
+  hardware/bug report templates, with a privacy-safe report suitable for issues.
+- **Read-only diagnostics:** `mouse-control doctor` reports dependency, service,
+  permission, backend, and safely obtainable mouse status. `doctor --fix` only
+  proposes a native package command and never executes privileged operations.
+- **Linux packaging preparation:** adds Debian metadata, Arch/AUR PKGBUILD, and
+  AppImage build preparation. Host udev, systemd, ratbagd, and OpenRazer remain
+  host-managed rather than bundled.
 
 - **Controlled Logitech HID++ discovery:** explicit `debug-dpi` discovery uses
   dynamic ROOT feature lookup, discovers Device Name and Adjustable DPI metadata,
@@ -27,7 +37,7 @@ their notification behavior is not claimed as physically validated.
 ## Install or upgrade
 
 ```bash
-sudo dnf install ./mouse-control-0.6.3-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.6.9-1.fc44.noarch.rpm
 /usr/bin/mouse-control --help
 ```
 
@@ -36,9 +46,10 @@ user service. OpenRazer remains optional.
 
 ## Proposed release assets
 
-- `mouse-control-0.6.3-1.fc44.noarch.rpm` — installable Fedora package.
-- `mouse_control-0.6.3.tar.gz` — Python source distribution.
-- `mouse_control-0.6.3-py3-none-any.whl` — Python wheel.
+- `mouse-control-0.6.9-1.fc44.noarch.rpm` — installable Fedora package.
+- `mouse-control_0.6.9_all.deb` — installable Debian package.
+- `mouse_control-0.6.9.tar.gz` — Python source distribution.
+- `mouse_control-0.6.9-py3-none-any.whl` — Python wheel.
 - `SHA256SUMS` — checksums for the published artifacts above.
 
 Any source RPM built during validation is internal and is not included in the

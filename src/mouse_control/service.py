@@ -34,6 +34,8 @@ WantedBy=default.target
 def is_service_active() -> bool:
     result = subprocess.run(
         ["systemctl", "--user", "is-active", "--quiet", SERVICE_NAME],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     return result.returncode == 0
 

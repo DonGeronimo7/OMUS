@@ -1,0 +1,15 @@
+Source: mouse-control
+Section: utils
+Priority: optional
+Maintainer: Marc-A. Geronimo
+Build-Depends: debhelper-compat (= 13), dh-python, python3-all, python3-setuptools
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: mouse-control
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, python3-evdev, python3-dbus-next, udev
+Recommends: ratbagd
+Description: mouse remapping with optional hardware backends
+ Headless evdev/uinput mouse remapping with optional Libratbag and OpenRazer
+ hardware controls. Generic remapping remains available without optional backends.

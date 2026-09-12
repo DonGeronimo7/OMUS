@@ -1,0 +1,17 @@
+pkgbase = mouse-control
+	pkgdesc = Headless evdev/uinput mouse remapping with optional hardware backends
+	pkgver = 0.6.9
+	pkgrel = 1
+	url = https://github.com/DonGeronimo7/mouse-control
+	arch = any
+	license = GPL-3.0-or-later
+	depends = python
+	depends = python-evdev
+	depends = python-dbus-next
+	depends = systemd
+	optdepends = libratbag: DPI and polling controls for supported mice
+	optdepends = openrazer: optional Razer hardware integration
+	source = mouse-control-0.6.9.tar.gz
+	sha256sums = SKIP
+
+pkgname = mouse-control

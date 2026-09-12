@@ -1,0 +1,26 @@
+name: Hardware compatibility
+description: Report Mouse Control behavior with a mouse model
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include credentials, usernames, serial numbers, or unrelated private system information."
+  - type: input
+    attributes: {label: Mouse brand and model}
+  - type: input
+    attributes: {label: Distribution and version}
+  - type: input
+    attributes: {label: Installation method}
+  - type: checkboxes
+    attributes:
+      label: Results
+      options:
+        - {label: Everything works}
+        - {label: Remapping works}
+        - {label: DPI switching works}
+        - {label: DPI notifications work}
+        - {label: Polling control works}
+        - {label: Device recognized by Libratbag}
+        - {label: Generic fallback used}
+        - {label: Setup failed}
+  - type: textarea
+    attributes: {label: "mouse-control doctor --report output"}

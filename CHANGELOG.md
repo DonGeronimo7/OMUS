@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.9 — 2026-09-12
+
+### Community hardware-testing preparation
+
+- Adds read-only `mouse-control doctor` diagnostics, a privacy-safe
+  `doctor --report` format, and conservative `doctor --fix` package guidance.
+- Adds Debian packaging metadata, a clean Arch/AUR `PKGBUILD`, and AppImage
+  build preparation. Native packages remain the recommended path for host udev,
+  systemd, input permissions, and optional hardware daemons.
+- Adds a hardware compatibility matrix and GitHub hardware/bug issue templates
+  for community reports. Generic evdev remapping remains the fallback when
+  optional Libratbag, OpenRazer, or HID++ capabilities are unavailable.
+- Carries forward the physically validated Logitech G305 HID++ behavior
+  unchanged: dynamic Adjustable DPI discovery and independent, cached passive
+  Onboard Profiles DPI-event metadata; normal runtime remains passive/read-only.
+
 ## 0.6.3 — 2026-09-11
 
 ### Controlled HID++ discovery and passive runtime

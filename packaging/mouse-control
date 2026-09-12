@@ -1,0 +1,3 @@
+#!/usr/bin/python3
+from mouse_control.cli import main
+raise SystemExit(main())

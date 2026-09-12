@@ -1,0 +1,11 @@
+Package: mouse-control
+Version: 0.6.9-1
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Marc-A. Geronimo
+Depends: python3-evdev, python3-dbus-next, udev
+Recommends: ratbagd
+Description: mouse remapping with optional hardware backends
+ Headless evdev/uinput mouse remapping with optional Libratbag and OpenRazer
+ hardware controls. Generic remapping remains available without optional backends.
