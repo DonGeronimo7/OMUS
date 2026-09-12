@@ -318,12 +318,12 @@ def run_from_config(path: Path | None = None) -> int:
         else:
             logging.warning("Invalid notifications.dpi_changes; using enabled default")
             notifications_enabled = True
+        monitor = create_dpi_monitor(backend, mouse, notifications_enabled,
+                                     shutdown_event, dpi_stages, active_dpi)
         if "dpi-cycle" in mappings.values():
+            notifier = monitor if hasattr(monitor, "notify_dpi") else None
             dpi_cycler = DpiCycler(backend, mouse, dpi_stages, active_dpi,
-                                   notifications_enabled)
-        else:
-            monitor = create_dpi_monitor(backend, mouse, notifications_enabled,
-                                         shutdown_event, dpi_stages, active_dpi)
+                                   notifications_enabled, notifier)
 
     if monitor is not None:
         monitor.start()

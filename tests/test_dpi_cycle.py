@@ -1,12 +1,14 @@
 from pathlib import Path
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from evdev import ecodes
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware import HardwareBackend, HardwareError
+from mouse_control.hardware.capabilities import DpiState
+from mouse_control.notifications import DpiEventMonitor
 from mouse_control.remapper import DpiCycler, MouseRemapper
 from mouse_control import cli
 
@@ -73,23 +75,74 @@ def test_remapper_consumes_dpi_action_on_press_only_and_key_mapping_still_emits(
     remapper.ui.write.assert_called_once_with(ecodes.EV_KEY, ecodes.KEY_LEFTMETA, 1)
 
 
-def test_application_owned_cycle_does_not_start_polling_monitor():
+def run_config(mappings, backend):
     config = {
         'device': {'event_path': MOUSE.path},
         'dpi': {'active': 800, 'stages': [800, 1500]},
         'notifications': {'dpi_changes': True},
-        'remap': {'BTN_TASK': 'dpi-cycle'},
+        'remap': mappings,
     }
+    monitor_instance = MagicMock()
+    with patch.object(cli, 'load_config', return_value=config), \
+         patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
+         patch.object(cli, 'get_backend', return_value=backend), \
+         patch.object(cli, 'create_dpi_monitor', return_value=monitor_instance) as factory, \
+         patch.object(cli, 'MouseRemapper') as remapper:
+        assert cli.run_from_config() == 0
+    return factory, monitor_instance, remapper
+
+
+def runtime_backend():
     backend = MagicMock(spec=HardwareBackend)
     backend.name = 'Test'
     backend.supports_dpi.return_value = True
     backend.supports_dpi_stages.return_value = False
     backend.supports_polling_rate.return_value = False
-    with __import__('unittest.mock', fromlist=['patch']).patch.object(cli, 'load_config', return_value=config), \
-         __import__('unittest.mock', fromlist=['patch']).patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
-         __import__('unittest.mock', fromlist=['patch']).patch.object(cli, 'get_backend', return_value=backend), \
-         __import__('unittest.mock', fromlist=['patch']).patch.object(cli, 'create_dpi_monitor') as monitor, \
-         __import__('unittest.mock', fromlist=['patch']).patch.object(cli, 'MouseRemapper') as remapper:
+    return backend
+
+
+def test_runtime_without_dpi_cycle_creates_monitor_only():
+    factory, monitor, remapper = run_config({'BTN_LEFT': 'passthrough'}, runtime_backend())
+    factory.assert_called_once()
+    monitor.start.assert_called_once()
+    monitor.stop.assert_called_once()
+    assert remapper.call_args.args[3] is None
+
+
+def test_runtime_with_dpi_cycle_creates_cycler_and_monitor():
+    factory, monitor, remapper = run_config({'BTN_TASK': 'dpi-cycle'}, runtime_backend())
+    factory.assert_called_once()
+    monitor.start.assert_called_once()
+    monitor.stop.assert_called_once()
+    target = remapper.call_args.args[3]
+    assert isinstance(target, DpiCycler)
+    assert target.notifier is monitor
+    assert factory.call_args.args[3] is remapper.call_args.args[2]
+
+
+def test_cycler_and_event_monitor_suppress_same_value_hardware_echo():
+    target, backend, _ = cycler(stages=(800, 1500))
+    notifier = MagicMock()
+    monitor = DpiEventMonitor(backend, MOUSE, [800, 1500], 800, notifier)
+    target.notifier = monitor
+    backend.set_dpi.return_value = DpiState(1500, confirmed=True)
+    assert target.cycle()
+    monitor.handle_state(DpiState(1500, active_stage=1, confirmed=True))
+    notifier.notify_dpi.assert_called_once_with(1500)
+
+
+def test_runtime_with_dpi_cycle_tolerates_backend_without_monitoring():
+    config = {
+        'device': {'event_path': MOUSE.path},
+        'dpi': {'active': 800, 'stages': [800, 1500]},
+        'remap': {'BTN_TASK': 'dpi-cycle'},
+    }
+    backend = runtime_backend()
+    with patch.object(cli, 'load_config', return_value=config), \
+         patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
+         patch.object(cli, 'get_backend', return_value=backend), \
+         patch.object(cli, 'create_dpi_monitor', return_value=None) as factory, \
+         patch.object(cli, 'MouseRemapper') as remapper:
         assert cli.run_from_config() == 0
-    monitor.assert_not_called()
-    assert remapper.call_args.args[3].current_dpi == 800
+    factory.assert_called_once()
+    assert isinstance(remapper.call_args.args[3], DpiCycler)

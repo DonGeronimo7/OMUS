@@ -195,21 +195,28 @@ class DpiEventMonitor:
         self.notifier = notifier if notifier is not None else FreedesktopNotifier()
         self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
         self._last_dpi: int | tuple[int, int] | None = active_dpi or None
+        self._state_lock = threading.Lock()
         self._thread: threading.Thread | None = None
+
+    def notify_dpi(self, dpi: int | tuple[int, int]) -> bool:
+        """Publish one DPI value and remember it for hardware-event deduplication."""
+        with self._state_lock:
+            if dpi == self._last_dpi:
+                return False
+            self._last_dpi = dpi
+        try:
+            self.notifier.notify_dpi(dpi)
+        except Exception as exc:
+            LOG.warning("Desktop DPI notification failed: %s", exc)
+        return True
 
     def handle_state(self, state: DpiState) -> None:
         if not state.confirmed or state.x_dpi <= 0:
             LOG.warning("Ignoring unconfirmed hardware DPI state")
             return
-        dpi = state.display_value
-        if dpi == self._last_dpi:
-            return
-        self._last_dpi = dpi
-        try:
-            self.notifier.notify_dpi(dpi)
-            LOG.info("Hardware DPI changed to %s (stage %s)", dpi, state.active_stage)
-        except Exception as exc:
-            LOG.warning("Desktop DPI notification failed: %s", exc)
+        if self.notify_dpi(state.display_value):
+            LOG.info("Hardware DPI changed to %s (stage %s)",
+                     state.display_value, state.active_stage)
 
     def _run(self) -> None:
         try:

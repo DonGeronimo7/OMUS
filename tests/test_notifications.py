@@ -169,6 +169,22 @@ def test_event_monitor_suppresses_only_duplicate_dpi_and_unconfirmed_state():
     assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [1500, 2000]
 
 
+def test_application_cycle_and_hardware_echo_share_duplicate_state():
+    notifier = Mock()
+    monitor = DpiEventMonitor(Mock(), MOUSE, [800, 1500], 800, notifier)
+    monitor.notify_dpi(1500)
+    monitor.handle_state(DpiState(1500, confirmed=True))
+    notifier.notify_dpi.assert_called_once_with(1500)
+
+
+def test_hardware_event_before_application_confirmation_is_also_deduplicated():
+    notifier = Mock()
+    monitor = DpiEventMonitor(Mock(), MOUSE, [800, 1500], 800, notifier)
+    monitor.handle_state(DpiState(1500, confirmed=True))
+    monitor.notify_dpi(1500)
+    notifier.notify_dpi.assert_called_once_with(1500)
+
+
 def test_event_monitor_continues_after_notification_failure():
     backend = Mock()
     notifier = Mock()
