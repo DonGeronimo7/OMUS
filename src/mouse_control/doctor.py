@@ -12,8 +12,6 @@ from typing import Callable
 
 from . import __version__
 from .discovery import MouseDevice, get_mouse_devices
-from .hardware import HardwareError, get_backend
-from .hidpp import LOGITECH_VENDOR_ID, get_hidpp_cache_path
 from .permissions import UINPUT_PATH
 from .service import SERVICE_NAME, is_service_active, service_path
 
@@ -49,19 +47,11 @@ def _command_ok(command: list[str]) -> bool:
 
 def _mouse_lines(mice: list[MouseDevice]) -> list[str]:
     lines: list[str] = []
-    cache_exists = get_hidpp_cache_path().is_file()
     for mouse in mice:
         identity = (f"{mouse.vendor:04x}:{mouse.product:04x}"
                     if mouse.vendor is not None and mouse.product is not None else "unknown")
         lines.append(f"- {mouse.name} (VID:PID {identity})")
-        try:
-            backend = get_backend(mouse)
-            lines.append(f"  backend: {backend.name}")
-        except HardwareError:
-            lines.append("  backend: Generic")
-        if mouse.vendor == LOGITECH_VENDOR_ID:
-            lines.append(f"  HID++ cache: {'present' if cache_exists else 'missing'}")
-            lines.append("  passive DPI monitoring: cache-dependent / unsupported if no validated metadata")
+        lines.append("  hardware backend: not probed (doctor is read-only)")
     return lines
 
 
@@ -73,8 +63,6 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
     systemd = shutil.which("systemctl") is not None
     udev = shutil.which("udevadm") is not None or Path("/run/udev").exists()
     input_ok = bool(mice) and UINPUT_PATH.exists() and os.access(UINPUT_PATH, os.R_OK | os.W_OK)
-    ratbag_installed = shutil.which("ratbagctl") is not None or shutil.which("ratbagd") is not None
-    ratbag_running = _command_ok(["systemctl", "is-active", "--quiet", "ratbagd"]) if systemd else False
     razer_installed = importlib.util.find_spec("openrazer") is not None
     service_installed = service_path().is_file()
     service_running = is_service_active() if service_installed and systemd else False
@@ -93,8 +81,7 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
         _status("udev", "PASS" if udev else "WARNING", "available" if udev else "unavailable"),
         _status("input permissions", "PASS" if input_ok else "WARNING",
                 "usable" if input_ok else "no readable mouse and writable /dev/uinput combination"),
-        _status("Libratbag/ratbagd", "PASS" if ratbag_running else ("OPTIONAL" if ratbag_installed else "MISSING"),
-                "running" if ratbag_running else ("installed, not running" if ratbag_installed else "not installed")),
+        _status("Native HID", "PASS", "protocol drivers enabled"),
         _status("OpenRazer", "OPTIONAL", "installed" if razer_installed else "not installed"),
         _status("mouse-control user service", "PASS" if service_running else ("WARNING" if service_installed else "MISSING"),
                 "running" if service_running else ("stopped" if service_installed else "not installed")),
@@ -123,13 +110,12 @@ def doctor_fix(confirm: Callable[[str], str] = input) -> int:
         print("WARNING  No supported package manager detected; no changes made.")
         return 0
     commands = {
-        "dnf": "sudo dnf install python3-evdev python3-dbus-next libratbag-ratbagd",
-        "apt": "sudo apt install python3-evdev python3-dbus-next ratbagd",
-        "pacman": "sudo pacman -S python-evdev python-dbus-next libratbag",
+        "dnf": "sudo dnf install python3-evdev python3-dbus-next",
+        "apt": "sudo apt install python3-evdev python3-dbus-next",
+        "pacman": "sudo pacman -S python-evdev python-dbus-next",
     }
     command = commands[manager]
-    print("Optional enhanced hardware support may require Libratbag/ratbagd.")
-    print("Generic remapping remains available without it.")
+    print("These packages provide remapping and desktop notifications.")
     print(f"Proposed command ({manager}): {command}")
     answer = confirm("Run this command yourself? [y/N]: ").strip().lower()
     if answer not in ("y", "yes"):

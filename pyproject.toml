@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mouse-control"
 version = "0.6.9"
-description = "Headless mouse remapper with optional Libratbag and OpenRazer hardware support"
+description = "Headless mouse remapper with native HID and optional OpenRazer hardware support"
 authors = [
     {name = "Marc-A. Geronimo"}
 ]

@@ -1,7 +1,8 @@
-"""Minimal Logitech HID++ 2.0 discovery and passive event monitoring.
+"""Logitech HID++ packet primitives and diagnostic discovery helpers.
 
-Feature indexes are assigned by each device. Initialization resolves feature
-IDs through ROOT; normal monitoring only reads interrupt reports.
+Feature indexes are assigned by each device and resolved through ROOT. Runtime
+ownership and capability behavior live in :mod:`hid_session` and
+:mod:`hidpp_driver`; the cache here is diagnostic metadata, never write authority.
 """
 
 from __future__ import annotations

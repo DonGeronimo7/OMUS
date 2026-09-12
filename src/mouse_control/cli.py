@@ -163,11 +163,7 @@ def _ask_enable_service() -> bool:
 def run_setup_wizard() -> int:
     print("=== Mouse Control Setup Wizard ===")
     # Read-only readiness information: optional backends never block remapping.
-    if not __import__("shutil").which("ratbagctl"):
-        print("Libratbag is not installed. Generic mouse remapping remains available.")
-        print("DPI/polling hardware controls may be unavailable.")
-    else:
-        print("System requirements: OK (optional hardware backend available)")
+    print("Native HID discovery enabled; unsupported mice retain generic remapping.")
     was_active = is_service_active()
     service_restored = False
     if was_active:

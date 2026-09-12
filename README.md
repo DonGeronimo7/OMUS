@@ -29,7 +29,7 @@ sudo dnf install ./mouse-control-0.6.9-1.fc44.noarch.rpm
 ```
 
 This unsigned Fedora 44 package declares Python, evdev, dbus-next, and systemd
-dependencies and recommends Libratbag. OpenRazer is optional. If an older pip
+dependencies and native HID integration. OpenRazer is optional. If an older pip
 installation shadows the command, use `/usr/bin/mouse-control`.
 
 ### Debian, Ubuntu, Mint, and other DEB-based distributions
@@ -51,7 +51,7 @@ chmod +x Mouse-Control-0.6.9-x86_64.AppImage
 
 The AppImage can contain the Python application and user-space libraries such
 as Python, evdev, and dbus-next as provided by its build. It does not bundle
-host system components: systemd, udev rules, ratbagd, kernel input support, or
+host system components: systemd, udev rules, kernel input support, or
 the OpenRazer daemon/driver remain distribution-managed. Do not install a
 permanent user service from an arbitrary AppImage download location. Use the
 native package when you need the packaged udev and service integration.
@@ -60,7 +60,7 @@ native package when you need the packaged udev and service integration.
 
 The repository includes a [PKGBUILD](PKGBUILD) for v0.6.9, but this project does
 not currently claim to publish an AUR package. Review and build it locally, or
-install from source. Libratbag and OpenRazer remain optional dependencies.
+install from source. OpenRazer remains an optional dependency.
 
 ### Source installation
 
@@ -106,9 +106,8 @@ that needs community testing. The detailed, evidence-based record is in
 
 | Hardware / backend | Status | Notes |
 | --- | --- | --- |
-| Logitech G305 | Validated | Current reference hardware: remapping, Libratbag DPI/polling, and passive DPI notifications are physically validated. |
-| Logitech HID++ | Experimental / needs testing | Capability discovery and fallback behavior exist; notification behavior is only validated for the G305. |
-| Libratbag-supported mice | Needs broader validation | Hardware DPI and polling are available only where Libratbag recognizes and exposes them. |
+| Logitech G305 | Needs native revalidation | Native HID++ DPI enumeration/read/write/verification and actual-DPI events are fixture-tested. |
+| Logitech HID++ | Experimental / needs testing | Capability discovery and fallback behavior exist; feature indexes are discovered live. |
 | OpenRazer-supported mice | Needs broader validation | Optional backend; physical Razer validation is still needed. |
 | Generic HID / evdev mice | Needs broader validation | Exact HID identity and read-only diagnostics plus software remapping; no unvalidated DPI or polling writes. |
 
@@ -136,11 +135,9 @@ posting it and remove anything you do not want to share.
 Mouse Control uses the best available integration for the selected device and
 falls back gracefully when vendor-specific functionality is unavailable:
 
-1. Libratbag where it confidently recognizes the device.
+1. Native HID where a validated protocol driver confidently claims one interface.
 2. OpenRazer where its optional daemon/client can confidently recognize it.
 3. Generic HID identity with evdev/software remapping when no validated hardware backend is available.
-4. HID++ capability handling where applicable, with the validated G305 runtime
-   path kept passive so it coexists with ratbagd.
 
 Hardware configuration failures are reported independently and do not prevent
 ordinary software remapping from starting.
@@ -154,20 +151,9 @@ vendor protocol must be validated before those writes are enabled.
 
 ## Optional hardware integrations
 
-### Libratbag on Fedora/RPM systems
-
-Fedora 44 provides `libratbag-ratbagd`, which contains `ratbagd` and
-`ratbagctl`:
-
-```bash
-sudo dnf install python3-evdev libratbag-ratbagd
-systemctl status ratbagd
-ratbagctl list
-```
-
 ### OpenRazer
 
-Logitech/Libratbag users do not need OpenRazer. For Razer hardware, follow the
+Logitech users do not need OpenRazer. For Razer hardware, follow the
 [upstream installation instructions](https://openrazer.github.io/#download) for
 your distribution. OpenRazer is intentionally optional; a missing client,
 daemon, or supported capability leaves generic remapping available. Run Mouse
@@ -209,14 +195,13 @@ behavior. Its two routes are deliberately distinct:
 - Physically observed passive DPI notification: Onboard Profiles event index `0x07` on the G305.
 
 These indexes are device-specific and must not be collapsed into one mapping.
-Normal `mouse-control run` loads cached metadata, performs no active HID++ ROOT
-discovery, and opens the selected hidraw node read-only for passive monitoring.
-This preserves the existing ratbagd coexistence design. An uncached, stale, or
-ambiguous device retains Libratbag configuration and ordinary remapping; only
-passive DPI notifications remain unavailable until explicit diagnostics are run.
+Normal `mouse-control run` owns one selected hidraw interface, performs live
+HID++ ROOT discovery, and multiplexes replies with unsolicited events. Live
+feature discovery is authoritative. An unsupported or ambiguous device retains
+ordinary remapping without hardware writes.
 
 `mouse-control debug-dpi` is the explicit diagnostic workflow. It can
-temporarily coordinate with ratbagd, discover HID++ features, and observe the
+discover HID++ features and observe the
 physical DPI button. It does not change firmware button mappings, and normal
 runtime does not import Solaar or add it as a dependency. For full diagnostic
 details, see [RELEASE_NOTES.md](RELEASE_NOTES.md).
@@ -227,7 +212,7 @@ The configuration is saved at `~/.config/mouse-control/config.toml`. Supported
 mapping actions are `passthrough`, `disable`, `mouse:BTN_*`, and `key:KEY_*`.
 The configuration can be edited by hand.
 
-When supported by Libratbag, setup uses project defaults of 800, 1500, 2000,
+When supported by a native driver, setup uses project defaults of 800, 1500, 2000,
 2500, and 3000 DPI, selects 800 DPI as active/default, and chooses the highest
 reported polling rate. Hardware that lacks enough programmable slots or rejects
 values reports the limitation rather than pretending that settings were applied.

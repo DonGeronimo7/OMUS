@@ -3,7 +3,6 @@ from mouse_control.discovery import MouseDevice
 
 
 def test_report_is_privacy_safe(monkeypatch, capsys):
-    monkeypatch.setattr(doctor, "get_hidpp_cache_path", lambda: __import__("pathlib").Path("/not/home/cache"))
     mouse = MouseDevice("Test Mouse", "/dev/input/event9", vendor=0x046D, product=0x4074)
     assert doctor.print_doctor(report=True, mice=[mouse]) == 0
     output = capsys.readouterr().out
@@ -29,7 +28,6 @@ def test_declined_fix_causes_no_mutation(monkeypatch, capsys):
     assert "No changes made." in capsys.readouterr().out
 
 
-def test_generic_fallback_is_reported(monkeypatch):
+def test_hardware_backend_is_not_probed_by_read_only_doctor(monkeypatch):
     mouse = MouseDevice("Unknown mouse", "/ignored", vendor=1, product=2)
-    monkeypatch.setattr(doctor, "get_backend", lambda _: type("B", (), {"name": "Generic"})())
-    assert "backend: Generic" in "\n".join(doctor._mouse_lines([mouse]))
+    assert "not probed" in "\n".join(doctor._mouse_lines([mouse]))

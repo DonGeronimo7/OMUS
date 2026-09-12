@@ -1,9 +1,6 @@
 from pathlib import Path
-from types import SimpleNamespace
 import sys
 from unittest.mock import Mock, patch
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
@@ -15,40 +12,13 @@ DEVICE = HidppDevice(0x046D, 0x4074, 1, "G305", Path("/dev/hidraw6"),
                      (4, 2), {})
 
 
-def runner(active=True):
-    calls = []
-    def run(args, check):
-        calls.append((args, check))
-        return SimpleNamespace(returncode=0 if active else 3)
-    return run, calls
-
-
-def test_controlled_discovery_stops_saves_and_restores_active_ratbagd():
-    run, calls = runner(active=True)
+def test_controlled_discovery_saves_live_metadata():
     save = Mock(return_value=Path("/tmp/cache.json"))
     with patch("mouse_control.hidpp_debug._candidate_identities",
                return_value=[(0x046D, 0x4074)]):
-        assert coordinated_discovery(runner=run, discover=Mock(return_value=DEVICE),
+        assert coordinated_discovery(discover=Mock(return_value=DEVICE),
                                      save=save) == [DEVICE]
-    assert [call[0][1] for call in calls] == ["is-active", "stop", "start"]
     save.assert_called_once_with(DEVICE)
-
-
-@pytest.mark.parametrize("failure", [RuntimeError("failed"), KeyboardInterrupt()])
-def test_controlled_discovery_restores_ratbagd_on_failure_or_interrupt(failure):
-    run, calls = runner(active=True)
-    with patch("mouse_control.hidpp_debug._candidate_identities",
-               return_value=[(0x046D, 0x4074)]):
-        with pytest.raises(type(failure)):
-            coordinated_discovery(runner=run, discover=Mock(side_effect=failure))
-    assert [call[0][1] for call in calls] == ["is-active", "stop", "start"]
-
-
-def test_controlled_discovery_leaves_inactive_ratbagd_inactive():
-    run, calls = runner(active=False)
-    with patch("mouse_control.hidpp_debug._candidate_identities", return_value=[]):
-        assert coordinated_discovery(runner=run) == []
-    assert [call[0][1] for call in calls] == ["is-active"]
 
 
 def test_debug_capture_learns_and_saves_observed_event_index():

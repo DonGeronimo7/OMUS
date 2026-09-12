@@ -6,8 +6,7 @@ arch=('any')
 url='https://github.com/DonGeronimo7/mouse-control'
 license=('GPL-3.0-or-later')
 depends=('python' 'python-evdev' 'python-dbus-next' 'systemd')
-optdepends=('libratbag: DPI and polling controls for supported mice'
-            'openrazer: optional Razer hardware integration')
+optdepends=('openrazer: optional Razer hardware integration')
 source=("${pkgname}-${pkgver}.tar.gz")
 sha256sums=('SKIP')
 

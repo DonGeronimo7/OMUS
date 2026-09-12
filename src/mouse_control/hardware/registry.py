@@ -3,11 +3,11 @@ import logging
 from collections.abc import Callable, Iterable
 from .base import HardwareBackend, HardwareError
 from .generic import GenericBackend
-from .ratbag import RatbagBackend
 from .openrazer import OpenRazerBackend
+from .native_hid import NativeHidBackend
 from ..discovery import MouseDevice
 
-BACKEND_FACTORIES = (RatbagBackend, OpenRazerBackend)
+BACKEND_FACTORIES = (NativeHidBackend, OpenRazerBackend)
 
 
 def get_backend(device: MouseDevice, factories: Iterable[Callable[[], HardwareBackend]] | None = None) -> HardwareBackend:

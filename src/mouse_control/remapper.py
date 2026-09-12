@@ -12,7 +12,7 @@ import logging
 from evdev import InputDevice, UInput, ecodes
 
 from .discovery import MouseDevice
-from .hardware import HardwareBackend
+from .hardware import DpiState, HardwareBackend
 from .notifications import FreedesktopNotifier, Notifier
 
 
@@ -74,15 +74,20 @@ class DpiCycler:
             if not self.backend.supports_dpi(self.device):
                 LOG.warning("DPI cycle ignored: %s does not support DPI control", self.backend.name)
                 return False
-            self.backend.set_dpi(self.device, next_dpi)
+            confirmed = self.backend.set_dpi(self.device, next_dpi)
         except Exception as exc:
             LOG.warning("Could not set DPI to %s through %s: %s",
                         next_dpi, self.backend.name, exc)
             return False
-        self.current_dpi = next_dpi
+        actual_dpi = (confirmed.display_value
+                      if isinstance(confirmed, DpiState) else next_dpi)
+        if not isinstance(actual_dpi, int):
+            LOG.warning("DPI cycle produced independent X/Y DPI; using X axis")
+            actual_dpi = actual_dpi[0]
+        self.current_dpi = actual_dpi
         if self.notifications_enabled:
             try:
-                self.notifier.notify_dpi(next_dpi)
+                self.notifier.notify_dpi(actual_dpi)
             except Exception as exc:
                 LOG.warning("Desktop DPI notification failed: %s", exc)
         return True

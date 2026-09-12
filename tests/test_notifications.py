@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware.generic import GenericBackend
+from mouse_control.hardware.capabilities import DpiState
 from mouse_control.notifications import DpiEventMonitor, DpiMonitor, FreedesktopNotifier, create_dpi_monitor
 
 
@@ -34,7 +35,7 @@ def test_notification_emitted_only_when_dpi_changes():
     notifier.notify_dpi.assert_called_once_with(1500)
 
 
-def test_every_dpi_update_creates_a_fresh_notification():
+def test_every_dpi_update_reuses_one_notification():
     notifier = FreedesktopNotifier()
     calls = []
 
@@ -53,6 +54,7 @@ def test_every_dpi_update_creates_a_fresh_notification():
     notifier.wait_idle()
     notifier.close()
     assert calls == values
+    assert notifier._notification_id == len(values) * 10
 
 
 def test_notification_uses_transient_silent_hints_and_short_timeout():
@@ -76,6 +78,10 @@ def test_notification_uses_transient_silent_hints_and_short_timeout():
     assert body[6]["transient"].value is True
     assert body[6]["suppress-sound"].value is True
     assert body[7] == 1500
+
+    notifier._notification_id = 11
+    assert asyncio.run(notifier._notify(bus, 2000)) == 11
+    assert bus.message.body[1] == 11
 
 
 def test_one_dbus_failure_does_not_disable_future_notifications(caplog):
@@ -145,41 +151,22 @@ def test_backend_read_failure_does_not_stop_monitor(caplog):
     assert "disconnected" in caplog.text
 
 
-def test_event_monitor_notifies_every_transition_across_wraparound():
-    backend = Mock()
+def test_event_monitor_uses_confirmed_hardware_dpi_not_configured_stage_array():
     notifier = Mock()
-    monitor = DpiEventMonitor(backend, MOUSE, [800, 1500, 2000, 2500, 3000],
+    monitor = DpiEventMonitor(Mock(), MOUSE, [800, 1500, 2000, 2500, 3000],
                               800, notifier)
-    for stage in (0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0):
-        monitor.handle_stage(stage)
-    monitor.handle_stage(5)
-    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [
-        1500, 2000, 2500, 3000, 800,
-        1500, 2000, 2500, 3000, 800,
-    ]
+    monitor.handle_state(DpiState(1750, 1750, active_stage=4, confirmed=True))
+    notifier.notify_dpi.assert_called_once_with(1750)
 
 
-def test_event_monitor_suppresses_only_consecutive_duplicate_stages():
+def test_event_monitor_suppresses_only_duplicate_dpi_and_unconfirmed_state():
     notifier = Mock()
     monitor = DpiEventMonitor(Mock(), MOUSE, [800, 1500, 2000], 800, notifier)
-    for stage in (0, 0, 0, 1, 1, 2, 2, 0):
-        monitor.handle_stage(stage)
-    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [
-        1500, 2000, 800,
-    ]
-
-
-def test_event_monitor_continues_notifying_for_three_complete_cycles():
-    stages = [800, 1500, 2000, 2500, 3000]
-    notifier = Mock()
-    monitor = DpiEventMonitor(Mock(), MOUSE, stages, 800, notifier)
-    for stage in (0, 1, 2, 3, 4, 0) * 3:
-        monitor.handle_stage(stage)
-    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [
-        1500, 2000, 2500, 3000, 800,
-        1500, 2000, 2500, 3000, 800,
-        1500, 2000, 2500, 3000, 800,
-    ]
+    for state in (DpiState(800, confirmed=True), DpiState(1500),
+                  DpiState(1500, confirmed=True), DpiState(1500, confirmed=True),
+                  DpiState(2000, confirmed=True)):
+        monitor.handle_state(state)
+    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [1500, 2000]
 
 
 def test_event_monitor_continues_after_notification_failure():
@@ -187,10 +174,10 @@ def test_event_monitor_continues_after_notification_failure():
     notifier = Mock()
     notifier.notify_dpi.side_effect = [RuntimeError('relay failed'), None]
     monitor = DpiEventMonitor(backend, MOUSE, [800, 1500, 2000], 800, notifier)
-    monitor.handle_stage(1)
-    monitor.handle_stage(2)
+    monitor.handle_state(DpiState(1500, confirmed=True))
+    monitor.handle_state(DpiState(2000, confirmed=True))
     assert notifier.notify_dpi.call_count == 2
-    assert monitor._last_stage == 2
+    assert monitor._last_dpi == 2000
 
 
 def test_event_monitor_is_selected_and_disabled_monitor_never_probes():

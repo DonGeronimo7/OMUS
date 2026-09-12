@@ -20,11 +20,10 @@ BuildRequires:  systemd-rpm-macros
 Requires:       python3-evdev
 Requires:       python3-dbus-next
 Requires:       systemd-udev
-Recommends:     libratbag-ratbagd
 
 %description
 A command-line mouse button remapper using evdev and uinput, with optional
-hardware DPI and polling-rate configuration through Libratbag or OpenRazer. Includes an
+hardware DPI configuration through native HID or OpenRazer. Includes an
 interactive setup wizard and commands for managing a systemd user service.
 
 %prep
@@ -87,7 +86,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 
 * Thu Sep 10 2026 Marc-A. Geronimo - 0.4.2-1
 - Add physical keyboard/media-key capture with manual-entry fallback.
-- Add extensible Ratbag/OpenRazer/Generic hardware backend selection.
+- Add extensible hardware backend selection.
 - Preserve G305 DPI stages, polling defaults, config and service behavior.
 - Keep OpenRazer optional and hardware failures nonfatal to remapping.
 - Include tuple-alias fix in source; remove redundant packaging patch.

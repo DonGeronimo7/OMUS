@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 import threading
 from typing import Callable
 from ..discovery import MouseDevice
+from .capabilities import DpiState, HardwareCapabilities
 
 
 class HardwareError(RuntimeError):
@@ -24,6 +25,17 @@ class HardwareBackend(ABC):
     def get_device_name(self, device: MouseDevice) -> str | None:
         return device.name
 
+    def get_capabilities(self, device: MouseDevice) -> HardwareCapabilities:
+        return HardwareCapabilities()
+
+    def get_dpi_state(self, device: MouseDevice) -> DpiState | None:
+        dpi = self.get_dpi(device)
+        if dpi is None:
+            return None
+        if isinstance(dpi, tuple):
+            return DpiState(int(dpi[0]), int(dpi[1]), confirmed=True)
+        return DpiState(int(dpi), int(dpi), confirmed=True)
+
     def supports_dpi(self, device: MouseDevice) -> bool:
         return False
 
@@ -37,14 +49,14 @@ class HardwareBackend(ABC):
     def supports_dpi_events(self, device: MouseDevice) -> bool:
         return False
 
-    def watch_dpi_events(self, device: MouseDevice, callback: Callable[[int], None],
+    def watch_dpi_events(self, device: MouseDevice, callback: Callable[[DpiState], None],
                          shutdown_event: threading.Event) -> None:
         raise HardwareError(f"{self.name}: DPI events are unsupported")
 
     def get_dpi_values(self, device: MouseDevice) -> list[int]:
         return []
 
-    def set_dpi(self, device: MouseDevice, dpi: int) -> None:
+    def set_dpi(self, device: MouseDevice, dpi: int) -> DpiState | None:
         raise HardwareError(f"{self.name}: DPI is unsupported")
 
     def supports_dpi_stages(self, device: MouseDevice) -> bool:

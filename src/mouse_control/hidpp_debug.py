@@ -6,7 +6,6 @@ import os
 from dataclasses import replace
 from pathlib import Path
 import select
-import subprocess
 import sys
 from typing import Callable
 
@@ -34,39 +33,26 @@ def _candidate_identities(sysfs: Path = Path("/sys/class/hidraw")) -> list[tuple
 
 def coordinated_discovery(
     *,
-    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     discover: Callable[..., HidppDevice | None] = discover_hidpp_device,
     save: Callable[[HidppDevice], Path] = save_hidpp_device,
 ) -> list[HidppDevice]:
-    """Temporarily coordinate with ratbagd for an explicit discovery run."""
-    status = runner(["systemctl", "is-active", "--quiet", "ratbagd.service"],
-                    check=False)
-    was_active = status.returncode == 0
-    if was_active:
-        print("Temporarily stopping ratbagd for HID++ capability discovery; "
-              "system authorization may be requested.")
-        runner(["systemctl", "stop", "ratbagd.service"], check=True)
-    try:
-        devices = [device for vendor, product in _candidate_identities()
-                   if (device := discover(vendor, product)) is not None]
-        for device in devices:
-            path = save(device)
-            print(f"Saved HID++ capability metadata to {path}")
-        return devices
-    finally:
-        if was_active:
-            print("Restarting ratbagd.")
-            runner(["systemctl", "start", "ratbagd.service"], check=True)
+    """Perform explicit live discovery; mouse-control owns HID++ traffic."""
+    devices = [device for vendor, product in _candidate_identities()
+               if (device := discover(vendor, product)) is not None]
+    for device in devices:
+        path = save(device)
+        print(f"Saved HID++ capability metadata to {path}")
+    return devices
 
 
 def debug_dpi() -> int:
     try:
         devices = coordinated_discovery()
     except KeyboardInterrupt:
-        print("\nHID++ discovery interrupted; ratbagd restoration attempted.", file=sys.stderr)
+        print("\nHID++ discovery interrupted.", file=sys.stderr)
         return 130
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"Could not coordinate HID++ discovery with ratbagd: {exc}", file=sys.stderr)
+    except OSError as exc:
+        print(f"Could not perform HID++ discovery: {exc}", file=sys.stderr)
         return 1
     if not devices:
         print("No unambiguous Logitech HID++ device could be discovered.", file=sys.stderr)

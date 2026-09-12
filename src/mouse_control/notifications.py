@@ -10,6 +10,7 @@ from typing import Protocol
 
 from .discovery import MouseDevice
 from .hardware import HardwareBackend
+from .hardware.capabilities import DpiState
 
 
 LOG = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class FreedesktopNotifier:
         self._queue: queue.Queue[int | tuple[int, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._start_lock = threading.Lock()
+        self._notification_id = 0
 
     @staticmethod
     def _body(dpi: int | tuple[int, int]) -> str:
@@ -52,7 +54,7 @@ class FreedesktopNotifier:
             interface="org.freedesktop.Notifications",
             member="Notify",
             signature="susssasa{sv}i",
-            body=["mouse-control", 0, "", "Mouse DPI", self._body(dpi), [], {
+            body=["mouse-control", self._notification_id, "", "Mouse DPI", self._body(dpi), [], {
                 "urgency": Variant("y", 1),
                 "transient": Variant("b", True),
                 "suppress-sound": Variant("b", True),
@@ -85,8 +87,10 @@ class FreedesktopNotifier:
                         return
                     if bus is None:
                         bus = await self._connect()
-                    LOG.info("DPI Notify: %s replaces_id=0", self._body(dpi))
+                    LOG.info("DPI Notify: %s replaces_id=%s", self._body(dpi),
+                             self._notification_id)
                     notification_id = await self._notify(bus, dpi)
+                    self._notification_id = notification_id
                     LOG.info("DPI Notify result: id=%s", notification_id)
                 except Exception as exc:
                     LOG.warning("DPI notification failed: %s", exc)
@@ -180,7 +184,7 @@ class DpiMonitor:
 
 
 class DpiEventMonitor:
-    """Translate backend stage events into configured DPI notifications."""
+    """Display canonical, hardware-confirmed DPI states from a backend."""
 
     def __init__(self, backend: HardwareBackend, device: MouseDevice,
                  stages: list[int], active_dpi: int,
@@ -188,31 +192,28 @@ class DpiEventMonitor:
                  shutdown_event: threading.Event | None = None) -> None:
         self.backend = backend
         self.device = device
-        self.stages = stages
         self.notifier = notifier if notifier is not None else FreedesktopNotifier()
         self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
-        self._last_stage: int | None = (
-            stages.index(active_dpi) if active_dpi in stages else None
-        )
+        self._last_dpi: int | tuple[int, int] | None = active_dpi or None
         self._thread: threading.Thread | None = None
 
-    def handle_stage(self, stage: int) -> None:
-        if stage < 0 or stage >= len(self.stages):
-            LOG.warning("Ignoring out-of-range HID++ DPI stage: %s", stage)
+    def handle_state(self, state: DpiState) -> None:
+        if not state.confirmed or state.x_dpi <= 0:
+            LOG.warning("Ignoring unconfirmed hardware DPI state")
             return
-        if stage == self._last_stage:
+        dpi = state.display_value
+        if dpi == self._last_dpi:
             return
-        self._last_stage = stage
-        dpi = self.stages[stage]
+        self._last_dpi = dpi
         try:
             self.notifier.notify_dpi(dpi)
-            LOG.info("HID++ DPI changed to %s (stage %s)", dpi, stage)
+            LOG.info("Hardware DPI changed to %s (stage %s)", dpi, state.active_stage)
         except Exception as exc:
             LOG.warning("Desktop DPI notification failed: %s", exc)
 
     def _run(self) -> None:
         try:
-            self.backend.watch_dpi_events(self.device, self.handle_stage,
+            self.backend.watch_dpi_events(self.device, self.handle_state,
                                           self.shutdown_event)
         except Exception as exc:
             LOG.warning("HID++ DPI monitoring stopped: %s", exc)

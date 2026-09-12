@@ -26,14 +26,14 @@ failed hardware backend must never prevent ordinary remapping from starting.
 
 ## Current backend policy
 
-- Retain Libratbag as a legacy backend while it still provides the validated
-  G305 DPI-stage and polling-rate operations.
+- Use the native HID session and protocol drivers for validated hardware
+  control. Do not reintroduce daemon ownership of HID protocol traffic.
 - Keep OpenRazer optional.
 - The final fallback is Generic HID identity/diagnostics plus evdev remapping;
   it must not claim standardized DPI or polling controls because USB HID does
   not define them.
-- Prefer a validated native protocol backend before the legacy backend only
-  after its read/write behavior is covered by tests and physical validation.
+- Prefer a validated native protocol backend only after its read/write behavior
+  is covered by tests and physical validation.
 
 ## Development workflow
 

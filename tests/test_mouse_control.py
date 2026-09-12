@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from evdev import ecodes
 from mouse_control.config import DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_config
 from mouse_control.discovery import MouseDevice, has_mouse_capabilities
-from mouse_control.ratbag import RatbagClient, RatbagDevice
 from mouse_control.remapper import parse_action
 from mouse_control.wizard import get_button_name
 from mouse_control.permissions import UINPUT_PATH, permission_report
@@ -49,28 +48,6 @@ def test_config_contains_executable_actions():
     assert "stages = [800, 1500, 2000, 2500, 3000]" in generate_config(
         mouse, {}, dpi_stages=DEFAULT_DPI_STAGES, active_dpi=DEFAULT_DPI
     )
-
-
-def test_ratbag_matches_exact_usb_identity_not_name():
-    client = RatbagClient()
-    mouse = MouseDevice("Logitech G502", "/dev/input/test", vendor=0x046D, product=0x4074)
-    g305 = RatbagDevice("chanting-squirrel", "Logitech G305", "usb:046d:4074:0")
-    g502 = RatbagDevice("other-device", "Logitech G502", "usb:046d:c332:0")
-
-    with patch.object(client, "list_devices", return_value=[g502, g305]), \
-         patch.object(client, "_model_for", side_effect=[g502.model, g305.model]):
-        found = client.find_for_mouse(mouse)
-
-    assert found is not None
-    assert found.alias == "chanting-squirrel"
-    assert found.name == "Logitech G305"
-
-
-def test_ratbag_list_parses_colon_separator():
-    client = RatbagClient()
-    with patch.object(client, "_run", return_value="chanting-squirrel:   Logitech G305\n"):
-        devices = client.list_devices()
-    assert devices == [RatbagDevice("chanting-squirrel", "Logitech G305")]
 
 
 def test_service_quotes_the_resolved_executable_path():
