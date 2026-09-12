@@ -6,6 +6,7 @@ License:        GPL-3.0-or-later
 Source0:        mouse_control-%{version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
+BuildRequires:  python3-build
 BuildRequires:  python3-pytest
 BuildRequires:  python3-evdev
 BuildRequires:  python3-dbus-next
