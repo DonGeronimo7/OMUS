@@ -11,7 +11,8 @@ import threading
 import logging
 from collections.abc import Callable
 
-from .hardware.capabilities import (DpiCapabilities, DpiRange, DpiState,
+from .hardware.capabilities import (BatteryCapabilities, BatteryState,
+                                    DpiCapabilities, DpiRange, DpiState,
                                     HardwareCapabilities, ReportRateCapabilities)
 from .hid_session import HidSession
 from .hidpp import (ADJUSTABLE_DPI_FEATURE_ID, DEVICE_NAME_FEATURE_ID,
@@ -25,6 +26,31 @@ ONBOARD_PROFILES_FEATURE_ID = 0x8100
 REPORT_RATE_FEATURE_ID = 0x8060
 MOUSE_BUTTON_SPY_FEATURE_ID = 0x8110
 MODE_STATUS_FEATURE_ID = 0x8090
+UNIFIED_BATTERY_FEATURE_ID = 0x1004
+BATTERY_STATUS_FEATURE_ID = 0x1000
+BATTERY_VOLTAGE_FEATURE_ID = 0x1001
+
+
+def decode_unified_battery(parameters: bytes) -> BatteryState:
+    """Decode HID++ Unified Battery getStatus response for the validated layout.
+
+    Byte zero is the percentage.  The following bytes are status/routing data
+    and are not exposed until their semantics are independently validated.
+    """
+    if not parameters:
+        raise HidppError("malformed unified-battery response")
+    percentage = parameters[0]
+    if not 0 <= percentage <= 100:
+        raise HidppError("unified-battery percentage is outside 0..100")
+    return BatteryState(percentage=percentage)
+
+
+def decode_battery_status(parameters: bytes) -> BatteryState:
+    """Decode 0x1000 getBatteryLevelStatus: level, next level, status."""
+    if len(parameters) < 3 or not 0 <= parameters[0] <= 100:
+        raise HidppError("invalid battery-status response")
+    statuses = {0: "discharging", 1: "recharging", 2: "almost full", 3: "full"}
+    return BatteryState(percentage=parameters[0], status=statuses.get(parameters[2]))
 
 
 def decode_supported_dpi(parameters: bytes) -> tuple[tuple[int, ...], tuple[DpiRange, ...]]:
@@ -72,7 +98,9 @@ class Hidpp20Driver:
         for feature_id in (DEVICE_NAME_FEATURE_ID, ADJUSTABLE_DPI_FEATURE_ID,
                            EXTENDED_ADJUSTABLE_DPI_FEATURE_ID,
                            ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID,
-                           MODE_STATUS_FEATURE_ID, MOUSE_BUTTON_SPY_FEATURE_ID):
+                           MODE_STATUS_FEATURE_ID, MOUSE_BUTTON_SPY_FEATURE_ID,
+                           UNIFIED_BATTERY_FEATURE_ID, BATTERY_STATUS_FEATURE_ID,
+                           BATTERY_VOLTAGE_FEATURE_ID):
             try:
                 feature = lookup_feature(session, device_index, feature_id)
             except HidppError:
@@ -92,6 +120,10 @@ class Hidpp20Driver:
             self._report_rate_capabilities = self._discover_report_rate()
         except HidppError:
             self._report_rate_capabilities = ReportRateCapabilities()
+        try:
+            self._battery_capabilities = self._discover_battery()
+        except HidppError:
+            self._battery_capabilities = BatteryCapabilities()
 
     def _discover_dpi(self) -> DpiCapabilities:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
@@ -113,7 +145,46 @@ class Hidpp20Driver:
     @property
     def capabilities(self) -> HardwareCapabilities:
         return HardwareCapabilities(dpi=self._dpi_capabilities,
-                                    report_rate=self._report_rate_capabilities)
+                                    report_rate=self._report_rate_capabilities,
+                                    battery=self._battery_capabilities)
+
+    def _discover_battery(self) -> BatteryCapabilities:
+        # A ROOT-discovered but unknown battery feature is not support.  This
+        # protects us from treating similar-looking HID++ generations alike.
+        feature = self.features.get(UNIFIED_BATTERY_FEATURE_ID)
+        if feature is None:
+            feature = self.features.get(BATTERY_STATUS_FEATURE_ID)
+            if feature is None:
+                return BatteryCapabilities()
+            state = self._read_battery_status(feature)
+        else:
+            state = self._read_unified_battery(feature)
+        return BatteryCapabilities(readable=state.percentage is not None, percentage=True)
+
+    def _read_battery_status(self, feature: HidppFeature) -> BatteryState:
+        parameters = self.session.request(self.device_index, feature.index, 0x00).parameters
+        state = decode_battery_status(parameters)
+        LOG.debug("HID++ 0x1000 raw battery parameters=%s decoded percentage=%s status=%s",
+                  parameters.hex(" "), state.percentage, state.status)
+        return state
+
+    def _read_unified_battery(self, feature: HidppFeature | None = None) -> BatteryState:
+        feature = feature or self.features.get(UNIFIED_BATTERY_FEATURE_ID)
+        if feature is None:
+            raise HidppError("unified battery is unsupported")
+        parameters = self.session.request(self.device_index, feature.index, 0x00).parameters
+        state = decode_unified_battery(parameters)
+        LOG.debug("HID++ 0x1004 raw battery parameters=%s decoded percentage=%s status=%s",
+                  parameters.hex(" "), state.percentage, state.status)
+        return state
+
+    def get_battery_state(self) -> BatteryState:
+        if not self._battery_capabilities.readable:
+            raise HidppError("battery status is unsupported")
+        feature = self.features.get(UNIFIED_BATTERY_FEATURE_ID)
+        if feature is not None:
+            return self._read_unified_battery(feature)
+        return self._read_battery_status(self.features[BATTERY_STATUS_FEATURE_ID])
 
     def _discover_report_rate(self) -> ReportRateCapabilities:
         feature = self.features.get(REPORT_RATE_FEATURE_ID)

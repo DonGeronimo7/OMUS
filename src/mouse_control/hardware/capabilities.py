@@ -47,9 +47,19 @@ class ReportRateCapabilities:
 
 
 @dataclass(frozen=True)
+class BatteryCapabilities:
+    """A protocol-neutral, read-only battery contract."""
+    readable: bool = False
+    percentage: bool = False
+    voltage: bool = False
+    events: bool = False
+
+
+@dataclass(frozen=True)
 class HardwareCapabilities:
     dpi: DpiCapabilities = DpiCapabilities()
     report_rate: ReportRateCapabilities = ReportRateCapabilities()
+    battery: BatteryCapabilities = BatteryCapabilities()
 
 
 @dataclass(frozen=True)
@@ -65,3 +75,10 @@ class DpiState:
         if self.y_dpi in (None, 0, self.x_dpi):
             return self.x_dpi
         return self.x_dpi, self.y_dpi
+
+
+@dataclass(frozen=True)
+class BatteryState:
+    percentage: int | None = None
+    voltage_mv: int | None = None
+    status: str | None = None

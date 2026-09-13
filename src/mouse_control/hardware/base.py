@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import threading
 from typing import Callable
 from ..discovery import MouseDevice
-from .capabilities import DpiState, HardwareCapabilities
+from .capabilities import BatteryState, DpiState, HardwareCapabilities
 
 
 class HardwareError(RuntimeError):
@@ -27,6 +27,12 @@ class HardwareBackend(ABC):
 
     def get_capabilities(self, device: MouseDevice) -> HardwareCapabilities:
         return HardwareCapabilities()
+
+    def supports_battery(self, device: MouseDevice) -> bool:
+        return self.get_capabilities(device).battery.readable
+
+    def get_battery_state(self, device: MouseDevice) -> BatteryState | None:
+        return None
 
     def get_dpi_state(self, device: MouseDevice) -> DpiState | None:
         dpi = self.get_dpi(device)

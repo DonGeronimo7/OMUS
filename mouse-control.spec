@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.2
+Version:        0.7.3
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -59,6 +59,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 
 %changelog
+* Sun Sep 13 2026 Marc-A. Geronimo - 0.7.3-1
+- Add the optional StatusNotifierItem battery monitor with a live icon,
+  tooltip, and standards-based DBusMenu battery details.
+
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.2-1
 - Release the native Logitech HID++ stabilization milestone.
 - Add reconnect-safe backend rediscovery and service control commands.

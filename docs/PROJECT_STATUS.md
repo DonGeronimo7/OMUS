@@ -23,6 +23,16 @@ Report Rate (`0x8060`) list/read/write and readback verification are implemented
 Persistent profile programming is deliberately not claimed yet. Its complete
 record format needs additional protocol fixtures and physical write validation
 so unrelated profile fields are never damaged.
+
+Native HID exposes protocol-neutral read-only battery state when a validated
+HID++ battery feature is available. ROOT discovery selects Unified Battery
+(`0x1004`) or Battery Status (`0x1000`) with separate decoders. The physically
+observed G305 exposes `0x1000` at a dynamically resolved index of `0x05`; its
+observed `5a 32 00` payload decodes to 90% discharging. The optional SNI tray
+item draws a compact monochrome battery with proportional ARGB fill (without
+percentage text), and supplies the exact percentage and status through its
+tooltip and standard DBusMenu. Icon, tooltip, and menu derive from the same
+BatteryState and refresh together.
 Extended Adjustable DPI (`0x2202`) is discoverable but independent-axis packet
 handling is likewise deferred.
 

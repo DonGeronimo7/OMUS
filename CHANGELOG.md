@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.3 — 2026-09-13
+
+### Added
+
+- Optional battery monitoring tray integration with a programmatically drawn
+  StatusNotifierItem battery icon and proportional live fill.
+- Live StatusNotifierItem tooltip and standard `com.canonical.dbusmenu`
+  right-click menu with device name, exact battery percentage, and status when
+  available.
+- Synchronized icon, tooltip, and menu updates from one `BatteryState`.
+
+### Fixed
+
+- `dbus-next` `IconPixmap` marshalling: struct bodies are Python lists and
+  pixel payloads are immutable bytes.
+- Battery menu refreshes now emit the standard property and layout updates.
+
+### Included stabilized v0.7.x work
+
+- Native Logitech HID++, reconnect and late receiver-insertion recovery,
+  physical DPI event monitoring, and service CLI controls.
+- Removal of the active Libratbag dependency for Logitech control; OpenRazer
+  remains optional.
+
 ## 0.7.2 — 2026-09-13
 
 ### Added

@@ -1,9 +1,21 @@
-# Mouse Control v0.7.2
+# Mouse Control v0.7.3
 
-Mouse Control v0.7.2 is a major backend modernization release despite its 0.x
-version. It makes native Logitech HID++ 2 control a first-class backend while
-preserving the project's central promise: ordinary evdev remapping continues
-when vendor-specific hardware control is unavailable.
+Mouse Control v0.7.3 adds an optional live battery indicator while retaining
+the native Logitech HID++ modernization introduced across the v0.7.x feature
+set. Ordinary evdev remapping remains available when vendor-specific hardware
+control is unavailable.
+
+## Battery tray integration
+
+- A standard StatusNotifierItem tray icon draws a clean monochrome battery
+  with proportional live fill and no embedded percentage text.
+- The tooltip and right-click `com.canonical.dbusmenu` show the live device
+  name, exact battery percentage, and battery status when the device provides
+  it.
+- Icon, tooltip, and menu update from the same battery state, so their values
+  remain in agreement.
+- The integration is desktop-independent and uses standard SNI/DBusMenu
+  interfaces; desktop-specific menu styling is outside Mouse Control.
 
 ## Native Logitech HID++
 
@@ -62,21 +74,5 @@ affecting the Logitech HID++ backend.
 
 ## Install or upgrade
 
-```bash
-sudo dnf install ./mouse-control-0.7.2-1.fc44.noarch.rpm
-/usr/bin/mouse-control --help
-```
-
-The RPM is unsigned and does not enable remapping or start the user service.
-For installation and device-access diagnostics, use `mouse-control
-check-permissions` followed by `mouse-control setup` as your logged-in desktop
-user.
-
-## Release assets
-
-- `mouse-control-0.7.2-1.fc44.noarch.rpm`
-- `mouse-control_0.7.2_all.deb`
-- `Mouse-Control-0.7.2-x86_64.AppImage`
-- `mouse_control-0.7.2.tar.gz`
-- `mouse_control-0.7.2-py3-none-any.whl`
-- `SHA256SUMS`
+Packaging artifacts are intentionally not part of this source checkpoint.
+The v0.7.3 source is ready for the separate packaging and release workflow.

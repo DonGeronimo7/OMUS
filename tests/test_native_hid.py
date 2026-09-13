@@ -5,13 +5,15 @@ import time
 
 import pytest
 
-from mouse_control.hardware.capabilities import DpiState
+from mouse_control.hardware.capabilities import BatteryState, DpiState
 from mouse_control.hid_session import HidSession
 from mouse_control.hidpp import HidppError, HidppReport
 from mouse_control.hidpp_driver import (ADJUSTABLE_DPI_FEATURE_ID,
-    ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID, Hidpp20Driver,
+    ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID, BATTERY_STATUS_FEATURE_ID, Hidpp20Driver,
     connect_hidpp20,
     decode_supported_dpi)
+from mouse_control.hidpp_driver import (UNIFIED_BATTERY_FEATURE_ID,
+                                        decode_unified_battery, decode_battery_status)
 
 
 def packet(device, feature, function, swid, parameters=b""):
@@ -77,6 +79,23 @@ def test_supported_dpi_decodes_explicit_and_range_step_values():
     assert ranges[0].step == 50
 
 
+def test_unified_battery_rejects_empty_and_out_of_range_payloads():
+    with pytest.raises(HidppError, match="malformed"):
+        decode_unified_battery(b"")
+    with pytest.raises(HidppError, match="outside"):
+        decode_unified_battery(bytes((101,)))
+    assert decode_unified_battery(bytes((83, 0, 0))) == BatteryState(percentage=83)
+
+
+def test_g305_battery_status_decodes_validated_0x1000_payload():
+    assert decode_battery_status(bytes.fromhex("5a 32 00")) == BatteryState(
+        percentage=90, status="discharging")
+    with pytest.raises(HidppError):
+        decode_battery_status(bytes((101, 50, 0)))
+    with pytest.raises(HidppError):
+        decode_battery_status(bytes((90,)))
+
+
 class FakeSession:
     def __init__(self, *, mismatch=False, profile_mode=0x02):
         self.dpi = 800
@@ -134,6 +153,38 @@ def test_driver_discovers_dynamic_indexes_reads_writes_and_verifies():
     assert any(call[1:3] == (0x19, 3) for call in session.calls)
     assert driver.capabilities.report_rate.values == (1000, 500, 250, 125)
     assert driver.set_report_rate(1000) == 1000
+
+
+def test_driver_discovers_unified_battery_through_root_and_reads_percentage():
+    class BatterySession(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0 and int.from_bytes(parameters[:2], "big") == UNIFIED_BATTERY_FEATURE_ID:
+                return HidppReport(0x11, device, feature, function, 0x0a, bytes((0x2A, 0, 1)))
+            if feature == 0x2A and function == 0:
+                return HidppReport(0x11, device, feature, function, 0x0a, bytes((83, 0, 0)))
+            return super().request(device, feature, function, parameters)
+    session = BatterySession()
+    driver = Hidpp20Driver(session, 1)
+    assert driver.features[UNIFIED_BATTERY_FEATURE_ID].index == 0x2A
+    assert driver.capabilities.battery.percentage
+    assert driver.get_battery_state() == BatteryState(percentage=83)
+
+
+def test_g305_dynamic_battery_status_runtime_path():
+    class BatterySession(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0 and int.from_bytes(parameters[:2], "big") == BATTERY_STATUS_FEATURE_ID:
+                return HidppReport(0x11, device, feature, function, 0x0a, bytes((0x05, 0, 1)))
+            if feature == 0x05 and function == 0:
+                return HidppReport(0x11, device, feature, function, 0x0a,
+                                   bytes.fromhex("5a 32 00"))
+            return super().request(device, feature, function, parameters)
+    session = BatterySession()
+    driver = Hidpp20Driver(session, 1)
+    assert UNIFIED_BATTERY_FEATURE_ID not in driver.features
+    assert driver.features[BATTERY_STATUS_FEATURE_ID].index == 0x05
+    assert driver.get_battery_state() == BatteryState(percentage=90, status="discharging")
+    assert driver.capabilities.battery.readable
 
 
 def test_report_rate_remains_readable_but_not_writable_in_onboard_mode():

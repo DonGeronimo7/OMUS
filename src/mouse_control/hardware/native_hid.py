@@ -11,7 +11,7 @@ from ..hid_session import HidSession
 from ..hidpp import HidppError, LOGITECH_VENDOR_ID
 from ..hidpp_driver import Hidpp20Driver, connect_hidpp20
 from .base import HardwareBackend, HardwareError
-from .capabilities import DpiState, HardwareCapabilities
+from .capabilities import BatteryState, DpiState, HardwareCapabilities
 
 LOG = logging.getLogger(__name__)
 
@@ -78,6 +78,15 @@ class NativeHidBackend(HardwareBackend):
     def supports_dpi(self, device: MouseDevice) -> bool:
         caps = self.get_capabilities(device).dpi
         return caps.readable and caps.writable
+
+    def supports_battery(self, device: MouseDevice) -> bool:
+        return self.get_capabilities(device).battery.readable
+
+    def get_battery_state(self, device: MouseDevice) -> BatteryState | None:
+        try:
+            return self._driver(device).get_battery_state()
+        except HidppError as exc:
+            raise HardwareError(f"Native HID: {exc}") from exc
 
     def supports_dpi_monitoring(self, device: MouseDevice) -> bool:
         return self.get_capabilities(device).dpi.readable

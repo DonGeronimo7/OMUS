@@ -12,7 +12,8 @@ evdev/uinput and uses available hardware integrations for DPI and polling-rate
 configuration. When a vendor-specific feature is unavailable, ordinary
 software remapping can still be available.
 
-The current release is [v0.7.2](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.2).
+The current source checkpoint is v0.7.3. Published package assets remain on
+the prior release until the separate packaging workflow completes.
 
 ## Install
 

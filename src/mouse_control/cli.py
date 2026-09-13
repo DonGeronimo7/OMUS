@@ -15,6 +15,7 @@ from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
 from .hardware import HardwareBackend, HardwareError, get_backend
 from .remapper import DpiCycler, MouseRemapper
 from .notifications import DpiMonitorSupervisor
+from .battery import BatteryMonitorSupervisor
 from .hidpp_debug import debug_dpi
 from .generic_hid import capture_input_reports, discover_hid_devices
 from .wizard import ButtonCaptureError, map_mouse_buttons
@@ -318,6 +319,7 @@ def run_from_config(path: Path | None = None) -> int:
         bustype=device.get("bustype") if isinstance(device.get("bustype"), int) else None,
     )
     monitor = None
+    battery_monitor = None
     dpi_cycler = None
     shutdown_event = threading.Event()
     enabled = config.get("notifications", {}).get("dpi_changes", True)
@@ -352,15 +354,25 @@ def run_from_config(path: Path | None = None) -> int:
     else:
         LOG.info("DPI notification monitor: disabled")
 
+    # Battery is a separate optional capability.  Its failures must remain
+    # invisible to the evdev/uinput remapper.
+    battery_device = mouse or configured_mouse
+    battery_backend = backend if mouse is not None else get_backend(battery_device, log_failures=False)
+    battery_monitor = BatteryMonitorSupervisor(
+        battery_backend, battery_device,
+        lambda selected: get_backend(selected, log_failures=False), shutdown_event)
+
     if monitor is not None:
         LOG.info("Starting DPI notification monitor")
         monitor.start()
+    battery_monitor.start()
     try:
         MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
                       target_device=mouse or configured_mouse).run()
     finally:
         if monitor is not None:
             monitor.stop()
+        battery_monitor.stop()
     return 0
 
 
