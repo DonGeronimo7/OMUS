@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import errno
 import select
 import signal
 import threading
@@ -11,7 +12,7 @@ import logging
 
 from evdev import InputDevice, UInput, ecodes
 
-from .discovery import MouseDevice
+from .discovery import MouseDevice, get_mouse_devices
 from .hardware import DpiState, HardwareBackend
 from .notifications import FreedesktopNotifier, Notifier
 
@@ -98,9 +99,14 @@ class MouseRemapper:
 
     def __init__(self, device_path: str, mappings: dict[str, str],
                  shutdown_event: threading.Event | None = None,
-                 dpi_cycler: DpiCycler | None = None) -> None:
+                 dpi_cycler: DpiCycler | None = None,
+                 target_device: MouseDevice | None = None,
+                 retry_interval: float = 0.5) -> None:
         self.device_path = device_path
-        self.device = InputDevice(device_path)
+        # An evdev event node is disposable.  Keep the selected mouse's
+        # discovery identity separately so a changed eventN can be rebound.
+        self.target_device = target_device or MouseDevice("", device_path)
+        self.device: InputDevice | None = None
         parsed: dict[int, Action] = {}
         for name, action in mappings.items():
             code = getattr(ecodes, name, None)
@@ -111,8 +117,12 @@ class MouseRemapper:
         self.ui: UInput | None = None
         self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
         self.dpi_cycler = dpi_cycler
+        self.retry_interval = retry_interval
+        self._pressed_keys: set[int] = set()
+        self._ambiguity_logged = False
 
     def _capabilities(self) -> dict[int, list[int]]:
+        assert self.device is not None
         caps = self.device.capabilities(verbose=False)
         capabilities: dict[int, list[int]] = {}
         for event_type, codes in caps.items():
@@ -135,6 +145,79 @@ class MouseRemapper:
     def _emit(self, event_type: int, code: int, value: int) -> None:
         assert self.ui is not None
         self.ui.write(event_type, code, value)
+        if event_type == ecodes.EV_KEY:
+            pressed_keys = getattr(self, "_pressed_keys", None)
+            if pressed_keys is None:
+                pressed_keys = self._pressed_keys = set()
+            if value:
+                pressed_keys.add(code)
+            else:
+                pressed_keys.discard(code)
+
+    @staticmethod
+    def _is_disconnect(exc: OSError) -> bool:
+        return exc.errno in {errno.ENODEV, errno.ENOENT, errno.EIO, errno.ENXIO}
+
+    def _matching_devices(self) -> list[MouseDevice]:
+        """Return unambiguous discovery candidates for a non-stable path."""
+        target = self.target_device
+        if target.vendor is None or target.product is None:
+            return []
+        matches = [mouse for mouse in get_mouse_devices()
+                   if mouse.vendor == target.vendor and mouse.product == target.product
+                   and (target.bustype is None or mouse.bustype == target.bustype)]
+        if target.phys:
+            same_phys = [mouse for mouse in matches if mouse.phys == target.phys]
+            if same_phys:
+                return same_phys
+        # USB topology may change on reconnect. A unique exact device identity
+        # is still usable; multiple candidates remain ambiguous.
+        return matches
+
+    def _acquire_device(self) -> InputDevice | None:
+        # A by-id symlink is the strongest identity we have.  Opening it also
+        # follows it when the receiver returns on a different event node.
+        if "/dev/input/by-id/" in self.device_path:
+            try:
+                return InputDevice(self.device_path)
+            except OSError as exc:
+                if not self._is_disconnect(exc):
+                    raise
+                return None
+
+        candidates = self._matching_devices()
+        if len(candidates) > 1:
+            if not self._ambiguity_logged:
+                LOG.warning("Mouse reconnect is ambiguous; waiting for the selected device")
+                self._ambiguity_logged = True
+            return None
+        self._ambiguity_logged = False
+        path = candidates[0].path if candidates else self.device_path
+        try:
+            return InputDevice(path)
+        except OSError as exc:
+            if not self._is_disconnect(exc):
+                raise
+            return None
+
+    def _release_pressed_keys(self) -> None:
+        if self.ui is None:
+            return
+        for code in tuple(self._pressed_keys):
+            self.ui.write(ecodes.EV_KEY, code, 0)
+        if self._pressed_keys:
+            self.ui.syn()
+        self._pressed_keys.clear()
+
+    def _close_device(self) -> None:
+        if self.device is None:
+            return
+        try:
+            self.device.ungrab()
+        except OSError:
+            pass
+        self.device.close()
+        self.device = None
 
     def _handle(self, event_type: int, code: int, value: int) -> None:
         if event_type == ecodes.EV_SYN:
@@ -163,12 +246,35 @@ class MouseRemapper:
         signal.signal(signal.SIGTERM, self.stop)
 
         try:
-            self.device.grab()
-            with UInput(self._capabilities(), name=f"mouse-control: {self.device.name}") as ui:
-                self.ui = ui
-                print(f"Remapping: {self.device.name}")
-                print("Press Ctrl+C to stop.")
-                while not self.shutdown_event.is_set():
+            announced = False
+            disconnected = False
+            while not self.shutdown_event.is_set():
+                if self.device is None:
+                    self.device = self._acquire_device()
+                    if self.device is None:
+                        if not disconnected:
+                            LOG.warning("Mouse disconnected; waiting for reconnect")
+                            disconnected = True
+                        self.shutdown_event.wait(self.retry_interval)
+                        continue
+                    try:
+                        self.device.grab()
+                    except OSError as exc:
+                        self._close_device()
+                        if not self._is_disconnect(exc):
+                            raise
+                        continue
+                    if self.ui is None:
+                        self.ui = UInput(self._capabilities(),
+                                        name=f"mouse-control: {self.device.name}")
+                    if disconnected:
+                        LOG.info("Mouse reconnected at %s", self.device.path)
+                    if not announced:
+                        print(f"Remapping: {self.device.name}")
+                        print("Press Ctrl+C to stop.")
+                        announced = True
+                    disconnected = False
+                try:
                     readable, _, _ = select.select([self.device.fd], [], [], 0.25)
                     if not readable:
                         continue
@@ -176,9 +282,16 @@ class MouseRemapper:
                         self._handle(event.type, event.code, event.value)
                         if event.type != ecodes.EV_SYN:
                             self.ui.syn()
+                except OSError as exc:
+                    if not self._is_disconnect(exc):
+                        raise
+                    self._release_pressed_keys()
+                    self._close_device()
+                    disconnected = True
+                    LOG.warning("Mouse disconnected; waiting for reconnect")
         finally:
-            try:
-                self.device.ungrab()
-            except OSError:
-                pass
-            self.device.close()
+            self._release_pressed_keys()
+            self._close_device()
+            if self.ui is not None:
+                self.ui.close()
+                self.ui = None

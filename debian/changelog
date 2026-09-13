@@ -1,5 +1,5 @@
-mouse-control (0.6.9-1) unstable; urgency=medium
+mouse-control (0.7.2-1) unstable; urgency=medium
 
-  * Community-testing packaging and diagnostics release.
+  * Native Logitech HID++ stabilization release.
 
  -- Marc-A. Geronimo  Fri, 11 Sep 2026 12:00:00 +0000

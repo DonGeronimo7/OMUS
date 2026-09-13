@@ -10,6 +10,7 @@ from mouse_control.hid_session import HidSession
 from mouse_control.hidpp import HidppError, HidppReport
 from mouse_control.hidpp_driver import (ADJUSTABLE_DPI_FEATURE_ID,
     ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID, Hidpp20Driver,
+    connect_hidpp20,
     decode_supported_dpi)
 
 
@@ -164,6 +165,23 @@ def test_driver_rejects_invalid_dpi_and_verification_mismatch():
         driver.set_dpi(1500)
 
 
+def test_onboard_profiles_v0_supports_dpi_events():
+    class VersionZeroProfiles(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            response = super().request(device, feature, function, parameters)
+            if (feature == 0 and function == 0 and
+                    int.from_bytes(parameters[:2], "big") == ONBOARD_PROFILES_FEATURE_ID):
+                return HidppReport(response.report_id, device, feature, function,
+                                   response.software_id,
+                                   bytes((response.parameters[0], 0, 0)))
+            return response
+
+    driver = Hidpp20Driver(VersionZeroProfiles(profile_mode=0x01), 1)
+    assert driver.features[ONBOARD_PROFILES_FEATURE_ID].version == 0
+    assert driver.capabilities.dpi.events
+    assert not driver.capabilities.report_rate.writable
+
+
 def test_profile_event_is_resolved_by_live_dpi_query():
     session = FakeSession()
     driver = Hidpp20Driver(session, 1)
@@ -178,3 +196,57 @@ def test_profile_event_is_resolved_by_live_dpi_query():
         time.sleep(0.001)
     stop.set(); thread.join(timeout=1)
     assert states == [DpiState(2000, 2000, active_stage=4, confirmed=True)]
+
+
+def test_optional_dpi_discovery_failure_keeps_report_rate():
+    class BrokenDpi(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0x19 and function == 1:
+                raise HidppError("DPI list unavailable")
+            return super().request(device, feature, function, parameters)
+
+    driver = Hidpp20Driver(BrokenDpi(), 1)
+    assert not driver.capabilities.dpi.readable
+    assert driver.capabilities.report_rate.readable
+
+
+def test_report_rate_does_not_claim_writes_without_mode_evidence():
+    class NoProfiles(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0 and int.from_bytes(parameters[:2], "big") == ONBOARD_PROFILES_FEATURE_ID:
+                return HidppReport(0x11, device, feature, function, 0x0a, b"\0")
+            return super().request(device, feature, function, parameters)
+
+    session = NoProfiles()
+    driver = Hidpp20Driver(session, 1)
+    assert driver.capabilities.report_rate.readable
+    assert not driver.capabilities.report_rate.writable
+    before = list(session.calls)
+    with pytest.raises(HidppError):
+        driver.set_report_rate(1000)
+    assert session.calls == before
+
+
+def test_multiple_receiver_children_are_ambiguous():
+    with pytest.raises(HidppError, match="ambiguous"):
+        connect_hidpp20(FakeSession())
+
+
+@pytest.mark.parametrize("responding_index", [1, 4, 0xFF])
+def test_single_responder_is_selected_without_fixed_g305_index(responding_index):
+    class SingleResponder(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            if device != responding_index:
+                raise HidppError("no response")
+            return super().request(device, feature, function, parameters)
+
+    assert connect_hidpp20(SingleResponder()).device_index == responding_index
+
+
+def test_zero_responders_are_rejected():
+    class NoResponders(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            raise HidppError("no response")
+
+    with pytest.raises(HidppError, match=r"no HID\+\+ 2 device index responded"):
+        connect_hidpp20(NoResponders())

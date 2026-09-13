@@ -10,12 +10,14 @@ from ..discovery import MouseDevice
 BACKEND_FACTORIES = (NativeHidBackend, OpenRazerBackend)
 
 
-def get_backend(device: MouseDevice, factories: Iterable[Callable[[], HardwareBackend]] | None = None) -> HardwareBackend:
+def get_backend(device: MouseDevice, factories: Iterable[Callable[[], HardwareBackend]] | None = None,
+                *, log_failures: bool = True) -> HardwareBackend:
     for factory in BACKEND_FACTORIES if factories is None else factories:
         try:
             backend = factory()
             if backend.supports_device(device):
                 return backend
-        except HardwareError as exc:
-            logging.getLogger(__name__).warning("Hardware discovery failed: %s", exc)
+        except (HardwareError, OSError) as exc:
+            if log_failures:
+                logging.getLogger(__name__).warning("Hardware discovery failed: %s", exc)
     return GenericBackend()

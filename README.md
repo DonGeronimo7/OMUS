@@ -12,7 +12,7 @@ evdev/uinput and uses available hardware integrations for DPI and polling-rate
 configuration. When a vendor-specific feature is unavailable, ordinary
 software remapping can still be available.
 
-The current release is [v0.6.9](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.6.9).
+The current release is [v0.7.2](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.2).
 
 ## Install
 
@@ -22,10 +22,10 @@ needed by the host system.
 
 ### Fedora, Nobara, and other RPM-based distributions
 
-Download the v0.6.9 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.6.9), then install it with DNF:
+Download the v0.7.2 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.2), then install it with DNF:
 
 ```bash
-sudo dnf install ./mouse-control-0.6.9-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.7.2-1.fc44.noarch.rpm
 ```
 
 This unsigned Fedora 44 package declares Python, evdev, dbus-next, and systemd
@@ -34,19 +34,19 @@ installation shadows the command, use `/usr/bin/mouse-control`.
 
 ### Debian, Ubuntu, Mint, and other DEB-based distributions
 
-Download `mouse-control_0.6.9_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.6.9), then let APT resolve its declared dependencies:
+Download `mouse-control_0.7.2_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.2), then let APT resolve its declared dependencies:
 
 ```bash
-sudo apt install ./mouse-control_0.6.9_all.deb
+sudo apt install ./mouse-control_0.7.2_all.deb
 ```
 
 ### AppImage and other distributions
 
-Download [Mouse-Control-0.6.9-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.6.9/Mouse-Control-0.6.9-x86_64.AppImage), make it executable, and run it:
+Download [Mouse-Control-0.7.2-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.7.2/Mouse-Control-0.7.2-x86_64.AppImage), make it executable, and run it:
 
 ```bash
-chmod +x Mouse-Control-0.6.9-x86_64.AppImage
-./Mouse-Control-0.6.9-x86_64.AppImage setup
+chmod +x Mouse-Control-0.7.2-x86_64.AppImage
+./Mouse-Control-0.7.2-x86_64.AppImage setup
 ```
 
 The AppImage can contain the Python application and user-space libraries such
@@ -58,14 +58,14 @@ native package when you need the packaged udev and service integration.
 
 ### Arch Linux
 
-The repository includes a [PKGBUILD](PKGBUILD) for v0.6.9, but this project does
+The repository includes a [PKGBUILD](PKGBUILD) for v0.7.2, but this project does
 not currently claim to publish an AUR package. Review and build it locally, or
 install from source. OpenRazer remains an optional dependency.
 
 ### Source installation
 
 For developers and advanced users, download the source distribution from the
-[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.6.9), or clone this repository:
+[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.2), or clone this repository:
 
 ```bash
 git clone https://github.com/DonGeronimo7/mouse-control.git
@@ -88,14 +88,17 @@ mouse-control setup
 ```
 
 The wizard detects or selects a mouse, records buttons, configures mappings,
-and saves a configuration. Start the configured remapper with:
+and saves a configuration. For the normal background service workflow:
 
 ```bash
-mouse-control run
+mouse-control start
+mouse-control status
+mouse-control restart
+mouse-control stop
 ```
 
-Use the service command shown by `mouse-control --help` when you want the
-configured background service; installation alone does not enable it.
+Run `mouse-control install-service` once before `start`. `mouse-control run`
+remains the explicit foreground/debug command; it does not start the service.
 
 ## Hardware support
 
@@ -106,8 +109,8 @@ that needs community testing. The detailed, evidence-based record is in
 
 | Hardware / backend | Status | Notes |
 | --- | --- | --- |
-| Logitech G305 | Needs native revalidation | Native HID++ DPI enumeration/read/write/verification and actual-DPI events are fixture-tested. |
-| Logitech HID++ | Experimental / needs testing | Capability discovery and fallback behavior exist; feature indexes are discovered live. |
+| Logitech G305 | Physically validated | Native HID++ automatic detection; 200–12000 DPI in 50-DPI steps; configured 800/1500/2000/2500/3000 stages; physical DPI events/OSD; 1000/500/250/125 Hz discovery; reconnect, late insertion, and side-button remapping. |
+| Logitech HID++ | Architecture available; device testing needed | Feature indexes are discovered live. The G305 is the primary physical reference; other Logitech mice are not claimed as validated. |
 | OpenRazer-supported mice | Needs broader validation | Optional backend; physical Razer validation is still needed. |
 | Generic HID / evdev mice | Needs broader validation | Exact HID identity and read-only diagnostics plus software remapping; no unvalidated DPI or polling writes. |
 

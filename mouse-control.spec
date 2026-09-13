@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.6.9
+Version:        0.7.2
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -59,6 +59,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 
 %changelog
+* Sun Sep 13 2026 Marc-A. Geronimo - 0.7.2-1
+- Release the native Logitech HID++ stabilization milestone.
+- Add reconnect-safe backend rediscovery and service control commands.
+
 * Sat Sep 12 2026 Marc-A. Geronimo - 0.6.9-1
 - Prepare Linux-wide community hardware testing with doctor diagnostics,
   privacy-safe reports, Debian/Arch/AppImage packaging definitions, issue
@@ -77,7 +81,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 
 * Fri Sep 11 2026 Marc-A. Geronimo - 0.4.2-3
 - Notify through Freedesktop D-Bus when a hardware backend reports a DPI change.
-- Replace rapid DPI notifications and keep notification failures nonfatal.
+- Submit one independent DPI notification per physical press and keep notification failures nonfatal.
 
 * Fri Sep 11 2026 Marc-A. Geronimo - 0.4.2-2
 - License the project under GPL-3.0-or-later.

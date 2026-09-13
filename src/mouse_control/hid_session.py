@@ -82,7 +82,10 @@ class HidSession:
                             (function << 4) | DISCOVERY_SOFTWARE_ID))
             packet += parameters[:16].ljust(16, b"\0")
             try:
-                self._io.write(packet)
+                try:
+                    self._io.write(packet)
+                except OSError as exc:
+                    raise HidppError(f"HID session write failed: {exc}") from exc
                 if not waiter.event.wait(self.timeout):
                     raise HidppError("timed out waiting for a matching HID++ response")
                 if waiter.error:
@@ -147,6 +150,10 @@ class HidSession:
                 if self._waiter:
                     self._waiter[1].error = HidppError(f"HID session disconnected: {failure}")
                     self._waiter[1].event.set()
+            with self._state_lock:
+                if not self._io_closed:
+                    self._io_closed = True
+                    self._io.close()
 
     def close(self) -> None:
         self._stop.set()

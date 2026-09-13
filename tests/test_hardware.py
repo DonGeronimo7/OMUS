@@ -38,6 +38,27 @@ def test_native_hid_is_first_backend_and_unknown_falls_back():
     assert isinstance(get_backend(unknown, [NativeHidBackend]), GenericBackend)
 
 
+def test_transient_backend_enumeration_failure_falls_back_without_retry_log_spam(caplog):
+    backend = Mock(spec=HardwareBackend)
+    backend.supports_device.side_effect = OSError("hidraw not ready")
+    assert isinstance(get_backend(G305, [lambda: backend]), GenericBackend)
+    assert caplog.text.count("Hardware discovery failed") == 1
+    caplog.clear()
+    assert isinstance(get_backend(G305, [lambda: backend], log_failures=False), GenericBackend)
+    assert "Hardware discovery failed" not in caplog.text
+
+
+def test_native_hid_watcher_failure_propagates_to_supervisor():
+    from mouse_control.hidpp import HidppError
+
+    backend = NativeHidBackend()
+    backend._driver = Mock(side_effect=HidppError("receiver absent"))
+
+    with pytest.raises(HidppError, match="receiver absent"):
+        backend.watch_dpi_events(G305, Mock(), Mock())
+    backend._driver.assert_called_once_with(G305)
+
+
 def test_native_hid_refuses_ambiguous_interfaces_and_keeps_devices_distinct():
     interfaces = [SimpleNamespace(path="/dev/hidraw1"),
                   SimpleNamespace(path="/dev/hidraw2")]

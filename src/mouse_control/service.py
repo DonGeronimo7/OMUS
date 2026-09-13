@@ -6,6 +6,10 @@ import subprocess
 SERVICE_NAME = "mouse-control.service"
 
 
+class ServiceNotInstalled(RuntimeError):
+    pass
+
+
 def service_path() -> Path:
     return Path.home() / ".config/systemd/user" / SERVICE_NAME
 
@@ -61,6 +65,7 @@ def install_service() -> None:
 
 
 def start_service() -> None:
+    _require_installed()
     subprocess.run(
         ["systemctl", "--user", "start", SERVICE_NAME],
         check=True,
@@ -75,14 +80,28 @@ def stop_service() -> None:
 
 
 def restart_service() -> None:
+    _require_installed()
     subprocess.run(
         ["systemctl", "--user", "restart", SERVICE_NAME],
         check=True,
     )
 
 
+def _require_installed() -> None:
+    if not service_path().is_file():
+        raise ServiceNotInstalled("mouse-control service is not installed. Run: mouse-control install-service")
+
+
 def status_service() -> int:
-    result = subprocess.run(
-        ["systemctl", "--user", "status", SERVICE_NAME],
-    )
-    return result.returncode
+    """Print the small, stable status summary appropriate for a CLI command."""
+    if not service_path().is_file():
+        print("mouse-control service is not installed. Run: mouse-control install-service")
+        return 1
+    active = subprocess.run(["systemctl", "--user", "is-active", SERVICE_NAME],
+                            capture_output=True, text=True)
+    enabled = subprocess.run(["systemctl", "--user", "is-enabled", SERVICE_NAME],
+                             capture_output=True, text=True)
+    active_text = active.stdout.strip() or ("failed" if active.returncode else "unknown")
+    enabled_text = enabled.stdout.strip() or "disabled"
+    print(f"mouse-control service: installed, {active_text}, {enabled_text}")
+    return 0 if active.returncode == 0 else active.returncode or 1

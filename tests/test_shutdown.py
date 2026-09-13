@@ -26,6 +26,7 @@ def make_remapper(shutdown_event=None):
         remapper = remapper_module.MouseRemapper(
             "/dev/input/test", {}, shutdown_event=shutdown_event
         )
+        remapper.device = device
         remapper._test_ui_context = ui_context
     return remapper, device, ui_context
 
@@ -37,7 +38,9 @@ def test_no_input_loop_observes_shutdown_and_releases_resources():
         remapper.stop()
         return [], [], []
 
-    with patch.object(remapper_module.select, "select", side_effect=request_shutdown), \
+    remapper.device = None
+    with patch.object(remapper_module, "InputDevice", return_value=device), \
+         patch.object(remapper_module.select, "select", side_effect=request_shutdown), \
          patch.object(remapper_module, "UInput", return_value=ui_context), \
          patch.object(remapper_module.signal, "signal") as install_signal:
         remapper.run()
@@ -47,19 +50,21 @@ def test_no_input_loop_observes_shutdown_and_releases_resources():
     device.grab.assert_called_once()
     device.ungrab.assert_called_once()
     device.close.assert_called_once()
-    ui_context.__exit__.assert_called_once()
+    ui_context.close.assert_called_once()
 
 
 def test_runtime_exception_still_releases_grab_and_uinput():
     remapper, device, ui_context = make_remapper()
-    with patch.object(remapper_module.select, "select", side_effect=RuntimeError("select failed")), \
+    remapper.device = None
+    with patch.object(remapper_module, "InputDevice", return_value=device), \
+         patch.object(remapper_module.select, "select", side_effect=RuntimeError("select failed")), \
          patch.object(remapper_module, "UInput", return_value=ui_context), \
          patch.object(remapper_module.signal, "signal"), \
          pytest.raises(RuntimeError, match="select failed"):
         remapper.run()
     device.ungrab.assert_called_once()
     device.close.assert_called_once()
-    ui_context.__exit__.assert_called_once()
+    ui_context.close.assert_called_once()
 
 
 def test_notification_monitor_uses_shared_shutdown_event():
@@ -83,7 +88,7 @@ def test_notification_monitor_uses_shared_shutdown_event():
 def test_hidpp_event_monitor_shutdown_is_prompt():
     shutdown_event = threading.Event()
     backend = MagicMock()
-    backend.watch_dpi_events.side_effect = lambda device, callback, stop: stop.wait(10)
+    backend.watch_dpi_events.side_effect = lambda device, callback, stop, ready: (ready(), stop.wait(10))
     monitor = DpiEventMonitor(backend, MouseDevice("G305", "/dev/input/test"),
                               [800, 1500], 800, notifier=MagicMock(),
                               shutdown_event=shutdown_event)

@@ -27,7 +27,7 @@ body:
     attributes: {label: Desktop environment or compositor, placeholder: "Example: GNOME on Wayland"}
   - type: input
     id: version
-    attributes: {label: Mouse Control version, placeholder: "Example: 0.6.9"}
+    attributes: {label: Mouse Control version, placeholder: "Example: 0.7.2"}
     validations: {required: true}
   - type: dropdown
     id: install

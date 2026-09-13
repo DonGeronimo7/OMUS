@@ -132,17 +132,10 @@ class NativeHidBackend(HardwareBackend):
             raise HardwareError(f"Native HID: {exc}") from exc
 
     def watch_dpi_events(self, device: MouseDevice, callback,
-                         shutdown_event) -> None:
-        while not shutdown_event.is_set():
-            try:
-                self._driver(device).watch_dpi(callback, shutdown_event)
-                return
-            except (HidppError, HardwareError) as exc:
-                LOG.warning("Native HID DPI session disconnected; retrying: %s", exc)
-                bound = self._bound.pop(device, None)
-                if bound is not None:
-                    bound[0].close()
-                shutdown_event.wait(1.0)
+                         shutdown_event, ready_callback=None) -> None:
+        # The supervisor owns retries. A failed subscription must discard this
+        # session and trigger fresh backend discovery instead of becoming sticky.
+        self._driver(device).watch_dpi(callback, shutdown_event, ready_callback)
 
     def close(self) -> None:
         for session, _driver in self._bound.values():

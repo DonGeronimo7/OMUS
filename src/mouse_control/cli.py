@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import subprocess
 import sys
 import threading
 
@@ -13,15 +14,18 @@ from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_config, get_config
 from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
 from .hardware import HardwareBackend, HardwareError, get_backend
 from .remapper import DpiCycler, MouseRemapper
-from .notifications import create_dpi_monitor
+from .notifications import DpiMonitorSupervisor
 from .hidpp_debug import debug_dpi
 from .generic_hid import capture_input_reports, discover_hid_devices
 from .wizard import ButtonCaptureError, map_mouse_buttons
 
 from .service import (install_service, is_service_active, start_service, stop_service,
-                      restart_service, status_service,)
+                      restart_service, status_service, ServiceNotInstalled)
 from .permissions import permission_report
 from .doctor import doctor_fix, print_doctor
+
+
+LOG = logging.getLogger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -306,29 +310,54 @@ def run_from_config(path: Path | None = None) -> int:
 
     mouse = next((m for m in get_mouse_devices()
                   if os.path.realpath(m.path) == os.path.realpath(event_path)), None)
+    configured_mouse = MouseDevice(
+        str(device.get("name", "")), event_path,
+        phys=str(device.get("phys", "") or ""),
+        vendor=device.get("vendor") if isinstance(device.get("vendor"), int) else None,
+        product=device.get("product") if isinstance(device.get("product"), int) else None,
+        bustype=device.get("bustype") if isinstance(device.get("bustype"), int) else None,
+    )
     monitor = None
     dpi_cycler = None
     shutdown_event = threading.Event()
+    enabled = config.get("notifications", {}).get("dpi_changes", True)
+    if isinstance(enabled, bool):
+        notifications_enabled = enabled
+    else:
+        logging.warning("Invalid notifications.dpi_changes; using enabled default")
+        notifications_enabled = True
     if mouse is not None:
         backend = get_backend(mouse)
+        identity = (f"{mouse.vendor:04x}:{mouse.product:04x}"
+                    if mouse.vendor is not None and mouse.product is not None
+                    else "identity unavailable")
+        LOG.info("Selected mouse: %s (%s, %s)", mouse.name, mouse.path, identity)
+        LOG.info("Selected hardware backend: %s (%s)", backend.name,
+                 type(backend).__name__)
         _apply_hardware(backend, mouse, dpi_stages, active_dpi, polling_rate_hz)
-        enabled = config.get("notifications", {}).get("dpi_changes", True)
-        if isinstance(enabled, bool):
-            notifications_enabled = enabled
-        else:
-            logging.warning("Invalid notifications.dpi_changes; using enabled default")
-            notifications_enabled = True
-        monitor = create_dpi_monitor(backend, mouse, notifications_enabled,
-                                     shutdown_event, dpi_stages, active_dpi)
         if "dpi-cycle" in mappings.values():
-            notifier = monitor if hasattr(monitor, "notify_dpi") else None
             dpi_cycler = DpiCycler(backend, mouse, dpi_stages, active_dpi,
-                                   notifications_enabled, notifier)
+                                   notifications_enabled)
+
+    if notifications_enabled:
+        monitor_device = mouse or configured_mouse
+        if mouse is None:
+            backend = get_backend(monitor_device)
+        monitor = DpiMonitorSupervisor(backend, monitor_device,
+                                       lambda device: get_backend(device, log_failures=False),
+                                       dpi_stages, active_dpi, shutdown_event)
+        if dpi_cycler is not None:
+            dpi_cycler.notifier = monitor
+        LOG.info("DPI notification monitor: %s", type(monitor).__name__)
+    else:
+        LOG.info("DPI notification monitor: disabled")
 
     if monitor is not None:
+        LOG.info("Starting DPI notification monitor")
         monitor.start()
     try:
-        MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler).run()
+        MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
+                      target_device=mouse or configured_mouse).run()
     finally:
         if monitor is not None:
             monitor.stop()
@@ -364,24 +393,28 @@ def main(argv: list[str] | None = None) -> int:
             return doctor_fix()
         return print_doctor(report=args.report)
 
-    if args.command == "install-service":
-        install_service()
-        return 0
+    try:
+        if args.command == "install-service":
+            install_service()
+            return 0
 
-    if args.command == "start":
-        start_service()
-        return 0
+        if args.command == "start":
+            start_service()
+            return 0
 
-    if args.command == "stop":
-        stop_service()
-        return 0
+        if args.command == "stop":
+            stop_service()
+            return 0
 
-    if args.command == "restart":
-        restart_service()
-        return 0
+        if args.command == "restart":
+            restart_service()
+            return 0
 
-    if args.command == "status":
-        return status_service()
+        if args.command == "status":
+            return status_service()
+    except (ServiceNotInstalled, OSError, subprocess.CalledProcessError) as exc:
+        print(f"mouse-control service: {exc}", file=sys.stderr)
+        return 1
 
     _build_parser().print_help()
     return 1

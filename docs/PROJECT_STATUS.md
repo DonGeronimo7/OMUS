@@ -31,12 +31,15 @@ ambiguous hardware falls back to Generic HID diagnostics and ordinary evdev
 remapping without guessed capabilities or writes.
 
 Freedesktop DPI notifications consume canonical DPI values. Each update uses
-the prior notification ID as its replacement ID, and notification failures do
+`replaces_id = 0` for every confirmed physical transition, and notification failures do
 not stop hardware handling or remapping.
 
 ## Validation status
 
 The native session and HID++ behavior use deterministic fixtures and require no
-physical hardware in CI. Logitech G305 hardware revalidation remains required
-for DPI reads, writes, button events, reconnect behavior, and interface
-selection before a release claims those operations as physically validated.
+physical hardware in CI. The Logitech G305 Lightspeed Wireless Gaming Mouse is
+the physically validated reference for automatic native detection; 200–12000
+DPI in 50-DPI steps; configured 800/1500/2000/2500/3000 stages; physical DPI
+events and OSD; 1000/500/250/125 Hz report-rate discovery; reconnect and late
+receiver insertion recovery; and side-button remapping. Other Logitech devices
+remain subject to device-specific physical validation.

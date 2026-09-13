@@ -1,257 +1,182 @@
 """Optional DPI monitoring and Freedesktop desktop notifications."""
-
 from __future__ import annotations
-
-import asyncio
-import logging
-import queue
-import threading
+import asyncio, logging, queue, threading
+from collections.abc import Callable
+from enum import Enum, auto
 from typing import Protocol
-
 from .discovery import MouseDevice
 from .hardware import HardwareBackend
 from .hardware.capabilities import DpiState
 
-
 LOG = logging.getLogger(__name__)
 
+class MonitorState(Enum):
+    UNBOUND = auto(); BINDING = auto(); READY = auto(); DISCONNECTED = auto(); STOPPING = auto()
 
 class Notifier(Protocol):
     def notify_dpi(self, dpi: int | tuple[int, int]) -> None: ...
-
+    def start(self) -> None: ...
 
 class FreedesktopNotifier:
-    """Send short-lived DPI notifications on one dedicated D-Bus worker."""
-
+    """Send independent short-lived OSDs; DBus failures never affect HID."""
+    _CONNECT = object()
     def __init__(self) -> None:
-        self._queue: queue.Queue[int | tuple[int, int] | None] = queue.Queue()
-        self._thread: threading.Thread | None = None
-        self._start_lock = threading.Lock()
-        self._notification_id = 0
-
+        self._queue: queue.Queue[object] = queue.Queue(); self._thread = None
+        self._start_lock = threading.Lock(); self._ready = threading.Event()
     @staticmethod
-    def _body(dpi: int | tuple[int, int]) -> str:
+    def _body(dpi):
         if isinstance(dpi, tuple):
-            x, y = dpi
-            if y in (0, x):
-                return f"{x} DPI"
-            return f"{x} × {y} DPI"
+            return f"{dpi[0]} DPI" if dpi[1] in (0, dpi[0]) else f"{dpi[0]} × {dpi[1]} DPI"
         return f"{dpi} DPI"
-
     async def _connect(self):
         from dbus_next import BusType
         from dbus_next.aio import MessageBus
-
         return await MessageBus(bus_type=BusType.SESSION).connect()
-
-    async def _notify(self, bus, dpi: int | tuple[int, int]) -> int:
+    async def _notify(self, bus, dpi):
         from dbus_next import Message, Variant
         from dbus_next.constants import MessageType
-
-        reply = await bus.call(Message(
-            destination="org.freedesktop.Notifications",
-            path="/org/freedesktop/Notifications",
-            interface="org.freedesktop.Notifications",
-            member="Notify",
-            signature="susssasa{sv}i",
-            body=["mouse-control", self._notification_id, "", "Mouse DPI", self._body(dpi), [], {
-                "urgency": Variant("y", 1),
-                "transient": Variant("b", True),
-                "suppress-sound": Variant("b", True),
-            }, 1500],
-        ))
-        if reply.message_type == MessageType.ERROR:
-            raise RuntimeError(reply.body[0] if reply.body else reply.error_name)
+        reply = await bus.call(Message(destination="org.freedesktop.Notifications", path="/org/freedesktop/Notifications", interface="org.freedesktop.Notifications", member="Notify", signature="susssasa{sv}i", body=["mouse-control", 0, "", "Mouse DPI", self._body(dpi), [], {"urgency": Variant("y", 1), "transient": Variant("b", True), "suppress-sound": Variant("b", True)}, 1500]))
+        if reply.message_type == MessageType.ERROR: raise RuntimeError(reply.body[0] if reply.body else reply.error_name)
         return int(reply.body[0])
-
-    @staticmethod
-    def _disconnect(bus) -> None:
-        if bus is not None:
-            try:
-                bus.disconnect()
-            except Exception:
-                pass
-
-    async def _run_async(self) -> None:
+    async def _run_async(self):
         bus = None
         try:
             while True:
-                try:
-                    dpi = self._queue.get_nowait()
+                try: request = self._queue.get_nowait()
                 except queue.Empty:
-                    # Yield while idle so queued work and shutdown stay responsive.
-                    await asyncio.sleep(0.05)
-                    continue
+                    await asyncio.sleep(.05); continue
                 try:
-                    if dpi is None:
-                        return
-                    if bus is None:
-                        bus = await self._connect()
-                    LOG.info("DPI Notify: %s replaces_id=%s", self._body(dpi),
-                             self._notification_id)
-                    notification_id = await self._notify(bus, dpi)
-                    self._notification_id = notification_id
-                    LOG.info("DPI Notify result: id=%s", notification_id)
+                    if request is None: return
+                    if bus is None: bus = await self._connect(); self._ready.set()
+                    if request is not self._CONNECT:
+                        LOG.info("DPI Notify: %s replaces_id=0", self._body(request)); await self._notify(bus, request)
                 except Exception as exc:
-                    LOG.warning("DPI notification failed: %s", exc)
-                    self._disconnect(bus)
+                    LOG.warning("DPI notification failed: %s", exc); self._ready.clear()
+                    if bus:
+                        try: bus.disconnect()
+                        except Exception: pass
                     bus = None
-                finally:
-                    self._queue.task_done()
+                finally: self._queue.task_done()
         finally:
-            self._disconnect(bus)
-
-    def _run(self) -> None:
-        asyncio.run(self._run_async())
-
-    def notify_dpi(self, dpi: int | tuple[int, int]) -> None:
+            self._ready.clear()
+            if bus:
+                try: bus.disconnect()
+                except Exception: pass
+    def start(self):
         with self._start_lock:
             if self._thread is None or not self._thread.is_alive():
-                self._thread = threading.Thread(
-                    target=self._run, name="dpi-notifier", daemon=True
-                )
-                self._thread.start()
-        self._queue.put(dpi)
-
-    def wait_idle(self) -> None:
-        """Wait for queued calls; intended for deterministic tests."""
-        self._queue.join()
-
-    def close(self) -> None:
-        thread = self._thread
-        if thread is None or not thread.is_alive():
-            return
-        self._queue.put(None)
-        thread.join(timeout=1.0)
-
+                self._thread = threading.Thread(target=lambda: asyncio.run(self._run_async()), name="dpi-notifier", daemon=True); self._thread.start(); self._queue.put(self._CONNECT)
+    def is_ready(self): return self._ready.is_set()
+    def notify_dpi(self, dpi): self.start(); self._queue.put(dpi)
+    def wait_idle(self): self._queue.join()
+    def close(self):
+        if self._thread and self._thread.is_alive(): self._queue.put(None); self._thread.join(timeout=1)
 
 class DpiMonitor:
-    """Poll a backend conservatively without coupling the remapper to hardware APIs."""
-
-    def __init__(self, backend: HardwareBackend, device: MouseDevice,
-                 notifier: Notifier | None = None, interval: float = 1.0,
-                 shutdown_event: threading.Event | None = None) -> None:
-        self.backend = backend
-        self.device = device
-        self.notifier = notifier if notifier is not None else FreedesktopNotifier()
-        self.interval = interval
-        self._last_dpi: int | tuple[int, int] | None = None
-        self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
-        self._thread: threading.Thread | None = None
-        self._read_failed = False
-        self._notify_failed = False
-
-    def poll_once(self) -> None:
+    def __init__(self, backend, device, notifier=None, interval=1., shutdown_event=None):
+        self.backend, self.device, self.notifier, self.interval = backend, device, notifier or FreedesktopNotifier(), interval
+        self.shutdown_event = shutdown_event or threading.Event(); self._last_dpi = None; self._read_failed = self._notify_failed = False; self._thread = None
+    def poll_once(self):
         try:
             dpi = self.backend.get_dpi(self.device)
-            if dpi is None:
-                return
+            if dpi is None: return
             self._read_failed = False
         except Exception as exc:
-            if not self._read_failed:
-                LOG.warning("DPI monitoring read failed; will retry: %s", exc)
-                self._read_failed = True
+            if not self._read_failed: LOG.warning("DPI monitoring read failed; will retry: %s", exc); self._read_failed = True
             return
-
-        previous = self._last_dpi
-        self._last_dpi = dpi
-        if previous is None or dpi == previous:
-            return
-        try:
-            self.notifier.notify_dpi(dpi)
-            self._notify_failed = False
+        previous, self._last_dpi = self._last_dpi, dpi
+        if previous is None or dpi == previous: return
+        try: self.notifier.notify_dpi(dpi); self._notify_failed = False
         except Exception as exc:
-            if not self._notify_failed:
-                LOG.warning("Desktop DPI notification failed; will retry: %s", exc)
-                self._notify_failed = True
-
-    def _run(self) -> None:
+            if not self._notify_failed: LOG.warning("Desktop DPI notification failed; will retry: %s", exc); self._notify_failed = True
+    def _run(self):
         self.poll_once()
-        while not self.shutdown_event.wait(self.interval):
-            self.poll_once()
-
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, name="dpi-monitor", daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
+        while not self.shutdown_event.wait(self.interval): self.poll_once()
+    def start(self): self._thread = threading.Thread(target=self._run, name="dpi-monitor", daemon=True); self._thread.start()
+    def stop(self):
         self.shutdown_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=max(1.0, self.interval + 0.5))
-        close = getattr(self.notifier, "close", None)
-        if close is not None:
-            close()
-
+        if self._thread: self._thread.join(timeout=max(1., self.interval+.5))
+        if close := getattr(self.notifier, "close", None): close()
 
 class DpiEventMonitor:
-    """Display canonical, hardware-confirmed DPI states from a backend."""
-
-    def __init__(self, backend: HardwareBackend, device: MouseDevice,
-                 stages: list[int], active_dpi: int,
-                 notifier: Notifier | None = None,
-                 shutdown_event: threading.Event | None = None) -> None:
-        self.backend = backend
-        self.device = device
-        self.notifier = notifier if notifier is not None else FreedesktopNotifier()
-        self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
-        self._last_dpi: int | tuple[int, int] | None = active_dpi or None
-        self._state_lock = threading.Lock()
-        self._thread: threading.Thread | None = None
-
-    def notify_dpi(self, dpi: int | tuple[int, int]) -> bool:
-        """Publish one DPI value and remember it for hardware-event deduplication."""
+    def __init__(self, backend, device, stages, active_dpi, notifier=None, shutdown_event=None, log_errors=True):
+        self.backend, self.device, self.notifier = backend, device, notifier or FreedesktopNotifier(); self.shutdown_event = shutdown_event or threading.Event()
+        self._last_notified_dpi = None; self._state_lock = threading.Lock(); self._thread = None; self.log_errors = log_errors
+    def notify_dpi(self, dpi):
         with self._state_lock:
-            if dpi == self._last_dpi:
-                return False
-            self._last_dpi = dpi
-        try:
-            self.notifier.notify_dpi(dpi)
-        except Exception as exc:
-            LOG.warning("Desktop DPI notification failed: %s", exc)
+            if dpi == self._last_notified_dpi: return False
+            try: self.notifier.notify_dpi(dpi)
+            except Exception as exc: LOG.warning("Desktop DPI notification failed: %s", exc); return False
+            self._last_notified_dpi = dpi
         return True
-
-    def handle_state(self, state: DpiState) -> None:
-        if not state.confirmed or state.x_dpi <= 0:
-            LOG.warning("Ignoring unconfirmed hardware DPI state")
-            return
-        if self.notify_dpi(state.display_value):
-            LOG.info("Hardware DPI changed to %s (stage %s)",
-                     state.display_value, state.active_stage)
-
-    def _run(self) -> None:
-        try:
-            self.backend.watch_dpi_events(self.device, self.handle_state,
-                                          self.shutdown_event)
+    def handle_state(self, state):
+        if not state.confirmed or state.x_dpi <= 0: LOG.warning("Ignoring unconfirmed hardware DPI state"); return
+        if self.notify_dpi(state.display_value): LOG.info("Hardware DPI changed to %s (stage %s)", state.display_value, state.active_stage)
+    def _run(self, ready_callback=None):
+        try: self.backend.watch_dpi_events(self.device, self.handle_state, self.shutdown_event, ready_callback)
         except Exception as exc:
-            LOG.warning("HID++ DPI monitoring stopped: %s", exc)
-
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, name="dpi-event-monitor", daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
+            if self.log_errors:
+                LOG.warning("HID++ DPI monitoring stopped: %s", exc)
+            else:
+                raise
+    def start(self): self._thread = threading.Thread(target=self._run, name="dpi-event-monitor", daemon=True); self._thread.start()
+    def stop(self):
         self.shutdown_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-        close = getattr(self.notifier, "close", None)
-        if close is not None:
-            close()
+        if self._thread: self._thread.join(timeout=1)
+        if close := getattr(self.notifier, "close", None): close()
 
+class DpiMonitorSupervisor:
+    """Freshly discover a backend after every unavailable or failed watcher."""
+    def __init__(self, backend, device, backend_factory, stages, active_dpi, shutdown_event, notifier=None, retry_interval=1.):
+        self.backend, self.device, self.backend_factory, self.stages = backend, device, backend_factory, stages; self.shutdown_event = shutdown_event; self.notifier = notifier or FreedesktopNotifier(); self.retry_interval = retry_interval
+        self._last_notified_dpi = None; self._state_lock = threading.Lock(); self._thread = None; self._watcher_bound = False; self._state = MonitorState.UNBOUND
+    def notify_dpi(self, dpi):
+        with self._state_lock:
+            if dpi == self._last_notified_dpi: return False
+            try: self.notifier.notify_dpi(dpi)
+            except Exception as exc: LOG.warning("Desktop DPI notification failed: %s", exc); return False
+            self._last_notified_dpi = dpi
+        return True
+    def _watcher_ready(self):
+        with self._state_lock: self._last_notified_dpi = None; self._watcher_bound = True; self._state = MonitorState.READY
+        LOG.info("DPI event watcher ready; DPI monitor ready")
+    def _run(self):
+        backend, unavailable = self.backend, False
+        while not self.shutdown_event.is_set():
+            try:
+                if start := getattr(self.notifier, "start", None): start()
+                with self._state_lock: self._watcher_bound = False; self._state = MonitorState.BINDING
+                monitor = create_dpi_monitor(backend, self.device, shutdown_event=self.shutdown_event, stages=self.stages, notifier=self, log_failure=False)
+                if monitor is None:
+                    if not unavailable: LOG.warning("DPI monitoring unavailable; retrying")
+                    unavailable = True
+                else:
+                    monitor._run(self._watcher_ready)
+                    if not self.shutdown_event.is_set():
+                        with self._state_lock: self._state = MonitorState.DISCONNECTED
+                        if not unavailable: LOG.warning("DPI monitor stopped; retrying")
+                        unavailable = True
+            except Exception as exc:
+                if not unavailable: LOG.warning("DPI monitoring unavailable; retrying: %s", exc)
+                unavailable = True
+            if self.shutdown_event.is_set() or self.shutdown_event.wait(self.retry_interval): break
+            try:
+                if close := getattr(backend, "close", None): close()
+                backend = self.backend_factory(self.device)
+            except Exception as exc: LOG.debug("DPI backend discovery unavailable: %s", exc)
+    def start(self): self._thread = threading.Thread(target=self._run, name="dpi-monitor-supervisor", daemon=True); self._thread.start()
+    def stop(self):
+        with self._state_lock: self._state = MonitorState.STOPPING
+        self.shutdown_event.set()
+        if self._thread: self._thread.join(timeout=max(1., self.retry_interval+.5))
+        if close := getattr(self.notifier, "close", None): close()
 
-def create_dpi_monitor(backend: HardwareBackend, device: MouseDevice,
-                       enabled: bool = True,
-                       shutdown_event: threading.Event | None = None,
-                       stages: list[int] | None = None,
-                       active_dpi: int = 0) -> DpiMonitor | DpiEventMonitor | None:
-    if not enabled:
-        return None
+def create_dpi_monitor(backend, device, enabled=True, shutdown_event=None, stages=None, active_dpi=0, notifier=None, log_failure=True):
+    if not enabled: return None
     try:
-        if backend.supports_dpi_events(device) is True:
-            return DpiEventMonitor(backend, device, stages or [], active_dpi,
-                                   shutdown_event=shutdown_event)
-        if not backend.supports_dpi_monitoring(device):
-            return None
+        if backend.supports_dpi_events(device) is True: return DpiEventMonitor(backend, device, stages or [], active_dpi, notifier, shutdown_event, log_failure)
+        if not backend.supports_dpi_monitoring(device): return None
     except Exception as exc:
-        LOG.warning("DPI monitoring is unavailable: %s", exc)
+        if log_failure: LOG.warning("DPI monitoring is unavailable: %s", exc)
         return None
-    return DpiMonitor(backend, device, shutdown_event=shutdown_event)
+    return DpiMonitor(backend, device, notifier, shutdown_event=shutdown_event)

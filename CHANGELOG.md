@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.2 — 2026-09-13
+
+### Added
+
+- First-class native Logitech HID++ 2 backend with dynamic ROOT feature
+  discovery, DPI enumeration/read/write/readback, physical DPI events, and
+  report-rate enumeration/read.
+- `mouse-control start`, `stop`, `restart`, and `status` service commands;
+  `mouse-control run` remains foreground/debug execution.
+- Reconnect-safe native HID backend rediscovery, late receiver insertion, and
+  watcher/monitor recovery.
+
+### Changed
+
+- Logitech DPI and report-rate control no longer depends on Libratbag,
+  ratbagd, or ratbagctl. OpenRazer remains optional for supported Razer mice.
+- Backend discovery now keeps generic HID diagnostics and evdev remapping as
+  the safe fallback for unknown hardware.
+- DPI monitoring uses confirmed live HID++ notifications without forcing a
+  profile-mode switch.
+
+### Fixed
+
+- Stale backends after late receiver insertion and evdev/HID reconnects.
+- Suppression of the first confirmed DPI event, report-rate write capability
+  handling, and notification monitor recovery after HID reconnect.
+
+### Packaging and hardware validation
+
+- Refreshes Python, RPM, Debian, AppImage, and Arch/AUR release metadata.
+- Physically validated on the Logitech G305 Lightspeed Wireless Gaming Mouse:
+  native detection; 200–12000 DPI in 50-DPI steps; configured 800/1500/2000/
+  2500/3000 stages; physical DPI events and OSD; 1000/500/250/125 Hz discovery;
+  reconnect and late-insertion recovery; and side-button remapping.
+
 ## 0.6.9 — 2026-09-12
 
 ### Community hardware-testing preparation

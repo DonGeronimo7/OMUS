@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Mouse Control
+Comment=Headless mouse remapping and hardware configuration utility
+Exec=mouse-control
+Icon=mouse-control
+Categories=Utility;Settings;
+Terminal=true

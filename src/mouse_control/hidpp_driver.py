@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import logging
 from collections.abc import Callable
 
 from .hardware.capabilities import (DpiCapabilities, DpiRange, DpiState,
@@ -16,6 +17,8 @@ from .hid_session import HidSession
 from .hidpp import (ADJUSTABLE_DPI_FEATURE_ID, DEVICE_NAME_FEATURE_ID,
                     HidppError, HidppFeature, HidppReport, get_device_name,
                     get_protocol_version, lookup_feature)
+
+LOG = logging.getLogger(__name__)
 
 EXTENDED_ADJUSTABLE_DPI_FEATURE_ID = 0x2202
 ONBOARD_PROFILES_FEATURE_ID = 0x8100
@@ -70,13 +73,25 @@ class Hidpp20Driver:
                            EXTENDED_ADJUSTABLE_DPI_FEATURE_ID,
                            ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID,
                            MODE_STATUS_FEATURE_ID, MOUSE_BUTTON_SPY_FEATURE_ID):
-            feature = lookup_feature(session, device_index, feature_id)
+            try:
+                feature = lookup_feature(session, device_index, feature_id)
+            except HidppError:
+                continue
             if feature is not None:
                 self.features[feature_id] = feature
         name_feature = self.features.get(DEVICE_NAME_FEATURE_ID)
-        self.name = get_device_name(session, device_index, name_feature) if name_feature else None
-        self._dpi_capabilities = self._discover_dpi()
-        self._report_rate_capabilities = self._discover_report_rate()
+        try:
+            self.name = get_device_name(session, device_index, name_feature) if name_feature else None
+        except HidppError:
+            self.name = None
+        try:
+            self._dpi_capabilities = self._discover_dpi()
+        except HidppError:
+            self._dpi_capabilities = DpiCapabilities()
+        try:
+            self._report_rate_capabilities = self._discover_report_rate()
+        except HidppError:
+            self._report_rate_capabilities = ReportRateCapabilities()
 
     def _discover_dpi(self) -> DpiCapabilities:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
@@ -92,8 +107,7 @@ class Hidpp20Driver:
         profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
         return DpiCapabilities(
             readable=True, writable=True, values=values, ranges=ranges,
-            active_stage_readable=profiles is not None,
-            events=profiles is not None,
+            events=profiles is not None and profiles.version in (0, 1),
         )
 
     @property
@@ -112,13 +126,14 @@ class Hidpp20Driver:
         values = tuple(1000 // milliseconds for milliseconds in range(1, 9)
                        if flags & (1 << (milliseconds - 1)))
         profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
-        writable = True
+        writable = False
         if profiles is not None:
             mode = self.session.request(self.device_index, profiles.index, 0x02)
             if not mode.parameters or mode.parameters[0] not in (0x01, 0x02):
                 raise HidppError("malformed onboard-profiles mode response")
             writable = mode.parameters[0] == 0x02
-        return ReportRateCapabilities(readable=True, writable=writable, values=values)
+        return ReportRateCapabilities(readable=bool(values), writable=writable,
+                                      values=values)
 
     def get_dpi_state(self, *, active_stage: int | None = None) -> DpiState:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
@@ -148,7 +163,7 @@ class Hidpp20Driver:
         if feature is None:
             raise HidppError("report rate is unsupported")
         response = self.session.request(self.device_index, feature.index, 0x01)
-        if not response.parameters or response.parameters[0] == 0:
+        if not response.parameters or response.parameters[0] == 0 or 1000 % response.parameters[0]:
             raise HidppError("malformed report-rate response")
         return 1000 // response.parameters[0]
 
@@ -166,21 +181,28 @@ class Hidpp20Driver:
         return actual
 
     def watch_dpi(self, callback: Callable[[DpiState], None],
-                  shutdown_event: threading.Event) -> None:
+                  shutdown_event: threading.Event,
+                  ready_callback: Callable[[], None] | None = None) -> None:
         profile = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
-        if profile is None:
+        if profile is None or not self._dpi_capabilities.events:
             raise HidppError("DPI events are unsupported")
         pending: queue.Queue[int] = queue.Queue()
 
         def receive(report: HidppReport) -> None:
             if (report.device_index == self.device_index and
-                    report.feature_index == profile.index and
+                    report.report_id == 0x11 and report.feature_index == profile.index and
                     report.function_or_event == 0x01 and report.software_id == 0 and
-                    report.parameters):
-                pending.put(report.parameters[0])
+                    report.parameters and report.parameters[0] < 16):
+                stage = report.parameters[0]
+                pending.put(stage)
 
         unsubscribe = self.session.subscribe(receive)
         try:
+            # Subscription registration, rather than thread creation, is the
+            # point at which the monitor may advertise that it can receive a
+            # physical button transition.
+            if ready_callback is not None:
+                ready_callback()
             while not shutdown_event.is_set():
                 if getattr(self.session, "closed", False):
                     raise HidppError("HID session disconnected")
@@ -189,16 +211,22 @@ class Hidpp20Driver:
                 except queue.Empty:
                     continue
                 # The event's slot is routing data. Query hardware for truth.
-                callback(self.get_dpi_state(active_stage=stage))
+                state = self.get_dpi_state(active_stage=stage)
+                callback(state)
         finally:
             unsubscribe()
 
 
 def connect_hidpp20(session: HidSession) -> Hidpp20Driver:
     last_error: Exception | None = None
-    for candidate in (1, 2, 3, 4, 5, 6, 0xFF):
+    found: list[Hidpp20Driver] = []
+    for candidate in (*range(1, 7), 0xFF):
         try:
-            return Hidpp20Driver(session, candidate)
+            found.append(Hidpp20Driver(session, candidate))
         except HidppError as exc:
             last_error = exc
+    if len(found) == 1:
+        return found[0]
+    if len(found) > 1:
+        raise HidppError("multiple HID++ devices responded on one interface; identity is ambiguous")
     raise HidppError(f"no HID++ 2 device index responded: {last_error}")

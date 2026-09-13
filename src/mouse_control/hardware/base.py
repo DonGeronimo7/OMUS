@@ -50,7 +50,9 @@ class HardwareBackend(ABC):
         return False
 
     def watch_dpi_events(self, device: MouseDevice, callback: Callable[[DpiState], None],
-                         shutdown_event: threading.Event) -> None:
+                         shutdown_event: threading.Event,
+                         ready_callback: Callable[[], None] | None = None) -> None:
+        """Watch DPI events and call ``ready_callback`` after subscribing."""
         raise HardwareError(f"{self.name}: DPI events are unsupported")
 
     def get_dpi_values(self, device: MouseDevice) -> list[int]:

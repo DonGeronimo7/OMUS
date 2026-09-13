@@ -1,56 +1,82 @@
-# Mouse Control v0.6.9
+# Mouse Control v0.7.2
 
-This release prepares the physically validated implementation for broad Linux
-community hardware testing while preserving existing remapping, service, and
-hardware-backend behavior.
+Mouse Control v0.7.2 is a major backend modernization release despite its 0.x
+version. It makes native Logitech HID++ 2 control a first-class backend while
+preserving the project's central promise: ordinary evdev remapping continues
+when vendor-specific hardware control is unavailable.
 
-- **Community testing infrastructure:** adds a compatibility matrix and GitHub
-  hardware/bug report templates, with a privacy-safe report suitable for issues.
-- **Read-only diagnostics:** `mouse-control doctor` reports dependency, service,
-  permission, backend, and safely obtainable mouse status. `doctor --fix` only
-  proposes a native package command and never executes privileged operations.
-- **Linux packaging preparation:** adds Debian metadata, Arch/AUR PKGBUILD, and
-  AppImage build preparation. Host udev, systemd, ratbagd, and OpenRazer remain
-  host-managed rather than bundled.
+## Native Logitech HID++
 
-- **Controlled Logitech HID++ discovery:** explicit `debug-dpi` discovery uses
-  dynamic ROOT feature lookup, discovers Device Name and Adjustable DPI metadata,
-  temporarily coordinates with ratbagd, persists selected schema-versioned
-  capability data, and restores ratbagd afterward.
-- **Passive normal runtime:** ordinary `mouse-control run` startup loads cached
-  metadata and performs no direct active HID++ discovery traffic. Missing,
-  ambiguous, stale, or conflicting notification metadata fails safely without
-  disabling remapping or Libratbag configuration.
-- **Validated G305 notifications:** the physically validated Logitech G305
-  (`046d:4074`, HID++ 4.2) uses independent routes: Adjustable DPI `0x2201` is
-  dynamically discovered at index `0x1a`, while the native firmware DPI-cycle
-  notification is the Onboard Profiles `0x8100` event at index `0x07`, event
-  `0x01`, SWID `0x00`. The native button remains `resolution-cycle-up`.
-- **Preserved architecture:** Ratbag, optional OpenRazer, and Generic backends,
-  keyboard capture, `BTN_EXTRA` remapping, polling, setup/service recovery, and
-  clean shutdown behavior remain supported. Solaar is not a dependency.
+- Native Logitech DPI and report-rate support no longer requires `libratbag`,
+  `ratbagd`, or `ratbagctl`.
+- HID++ ROOT feature discovery resolves feature indexes dynamically; no G305
+  feature indexes are hard-coded.
+- The backend enumerates DPI, reads and writes DPI with hardware readback,
+  receives confirmed live DPI notifications, and recognizes physical DPI events.
+- It enumerates and reads report rates, and enables report-rate writes only
+  where capability detection determines that they are safe.
+- It does not force profile-mode switching. OpenRazer remains optional for
+  supported Razer hardware.
 
-Only Logitech G305 `046d:4074` HID++ DPI notifications are physically validated
-for this release. Other compatible Logitech devices may be discoverable, but
-their notification behavior is not claimed as physically validated.
+## Validated hardware
+
+Physically validated: **Logitech G305 Lightspeed Wireless Gaming Mouse**.
+
+The validated capabilities are automatic native HID++ detection; 200–12000 DPI
+in 50-DPI steps; configured 800/1500/2000/2500/3000 stages; physical DPI event
+monitoring and DPI OSD; 1000/500/250/125 Hz report-rate discovery; reconnect
+recovery; late receiver insertion; and side-button remapping.
+
+The architecture is generalized, but the G305 is the primary physical
+reference. This release does not claim that all Logitech mice have been
+physically validated.
+
+## Reconnect, lifecycle, and notifications
+
+Evdev reconnect resilience, HID reconnect, fresh backend rediscovery, startup
+without a mouse, late receiver insertion, watcher recovery, and monitor
+recovery now work without requiring a service restart after reconnect.
+
+Notifications return to a simplified v0.6.9-style Freedesktop path with
+asynchronous submission and failure isolation. The first confirmed DPI event
+is no longer incorrectly suppressed, and HID reconnect no longer stops
+monitoring.
+
+## CLI and generic fallback
+
+Service management is available through:
+
+```text
+mouse-control start
+mouse-control stop
+mouse-control restart
+mouse-control status
+```
+
+`mouse-control run` remains foreground/debug execution.
+
+Unknown mice retain evdev remapping. Generic HID discovery is a read-only
+fallback and extension point; USB HID itself does not standardize DPI or
+report-rate controls. Future vendor protocol drivers can be added without
+affecting the Logitech HID++ backend.
 
 ## Install or upgrade
 
 ```bash
-sudo dnf install ./mouse-control-0.6.9-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.7.2-1.fc44.noarch.rpm
 /usr/bin/mouse-control --help
 ```
 
-The RPM is unsigned. Installing it does not activate remapping or enable the
-user service. OpenRazer remains optional.
+The RPM is unsigned and does not enable remapping or start the user service.
+For installation and device-access diagnostics, use `mouse-control
+check-permissions` followed by `mouse-control setup` as your logged-in desktop
+user.
 
 ## Release assets
 
-- `mouse-control-0.6.9-1.fc44.noarch.rpm` — installable Fedora package.
-- `mouse-control_0.6.9_all.deb` — installable Debian package.
-- `mouse_control-0.6.9.tar.gz` — Python source distribution.
-- `mouse_control-0.6.9-py3-none-any.whl` — Python wheel.
-- `SHA256SUMS` — checksums for the published artifacts above.
-
-Any source RPM built during validation is internal and is not included in the
-public checksum manifest unless publication is requested separately.
+- `mouse-control-0.7.2-1.fc44.noarch.rpm`
+- `mouse-control_0.7.2_all.deb`
+- `Mouse-Control-0.7.2-x86_64.AppImage`
+- `mouse_control-0.7.2.tar.gz`
+- `mouse_control-0.7.2-py3-none-any.whl`
+- `SHA256SUMS`
