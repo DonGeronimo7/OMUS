@@ -1,5 +1,5 @@
 pkgname=mouse-control
-pkgver=0.7.2
+pkgver=0.7.3
 pkgrel=1
 pkgdesc='Headless evdev/uinput mouse remapping with optional hardware backends'
 arch=('any')
@@ -8,7 +8,7 @@ license=('GPL-3.0-or-later')
 depends=('python' 'python-evdev' 'python-dbus-next' 'systemd')
 optdepends=('openrazer: optional Razer hardware integration')
 source=("https://github.com/DonGeronimo7/mouse-control/releases/download/v${pkgver}/mouse_control-${pkgver}.tar.gz")
-sha256sums=('d8f584bc4939f827e657e74bd1cf66867a2f7dbf077195fb48bcba8d9dd13f0d')
+sha256sums=('a276ae3c5ef58df1707ed7fbca55e401cb46c35cd4406e86f7446779480b7dc6')
 
 package() {
   cd "${pkgname}-${pkgver}"
