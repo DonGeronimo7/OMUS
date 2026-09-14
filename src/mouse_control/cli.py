@@ -19,6 +19,8 @@ from .battery import BatteryMonitorSupervisor
 from .hidpp_debug import debug_dpi
 from .generic_hid import capture_input_reports, discover_hid_devices
 from .wizard import ButtonCaptureError, map_mouse_buttons
+from .setup_flow import (SetupChoices, discover_choices, restore_dpi, dpi_screen,
+                         polling_screen, review_screen)
 
 from .service import (install_service, is_service_active, start_service, stop_service,
                       restart_service, status_service, ServiceNotInstalled)
@@ -226,6 +228,10 @@ def run_setup_wizard() -> int:
     print("Native HID discovery enabled; unsupported mice retain generic remapping.")
     was_active = is_service_active()
     service_restored = False
+    selected = None
+    backend = None
+    choices = None
+    saved = False
     if was_active:
         print("Mouse Control background service is running.")
         print("Temporarily stopping it for setup...")
@@ -256,23 +262,86 @@ def run_setup_wizard() -> int:
                 print(f"Hardware name: {hardware_name}{identity}")
         except HardwareError as exc:
             logging.info("Hardware name lookup unavailable: %s", exc)
-        mappings = _default_mappings()
-        mappings.update(map_mouse_buttons(selected.path))
-        dpi_stages = DEFAULT_DPI_STAGES
-        active_dpi = DEFAULT_DPI
-        polling_rate_hz: int | None = None
-        try:
-            if backend.supports_dpi(selected):
-                dpi_stages, active_dpi = _choose_default_dpi(backend, selected)
-        except HardwareError as exc:
-            logging.warning("DPI capability query failed: %s", exc)
-        try:
-            if backend.supports_polling_rate(selected):
-                polling_rate_hz = _select_max_polling_rate(backend, selected)
-        except HardwareError as exc:
-            logging.warning("Polling capability query failed: %s", exc)
-
-        enable_service = _ask_enable_service()
+        choices = SetupChoices(mappings=_default_mappings())
+        discover_choices(backend, selected, choices)
+        page = 'buttons'
+        review_return = False
+        finished = False
+        while not finished:
+            if page == 'buttons':
+                print('\nButton mappings: press buttons to configure; Ctrl+C ends capture.')
+                print('[Enter] Configure buttons  [S] Skip/keep mappings  [B] Back  [Q] Cancel setup')
+                answer = input('> ').strip().lower()
+                if answer == 'q':
+                    break
+                if answer == 'b':
+                    replacement = select_mouse_device(mice)
+                    if replacement is None:
+                        break
+                    if replacement != selected:
+                        restore_dpi(backend, selected, choices.original_dpi)
+                        selected = replacement
+                        backend = get_backend(selected)
+                        choices = SetupChoices(mappings=_default_mappings())
+                        discover_choices(backend, selected, choices)
+                        review_return = False
+                    continue
+                if answer not in ('', 'e', 'edit', 's', 'skip'):
+                    print('Press Enter, S, B, or Q.')
+                    continue
+                if answer in ('', 'e', 'edit'):
+                    choices.mappings.update(map_mouse_buttons(selected.path))
+                page = 'review' if review_return else 'dpi'
+            elif page == 'dpi':
+                action = dpi_screen(backend, selected, choices)
+                if action == 'q':
+                    break
+                page = ('review' if review_return else 'buttons') if action == 'b' else 'review' if review_return else 'polling'
+            elif page == 'polling':
+                action = polling_screen(choices)
+                if action == 'q':
+                    break
+                page = ('review' if review_return else 'dpi') if action == 'b' else 'review' if review_return else 'service'
+            elif page == 'service':
+                print('\nEnable Mouse Control at login?')
+                print('[Enter/Y] Yes  [N] No  [B] Back  [Q] Cancel setup')
+                answer = input('> ').strip().lower()
+                if answer == 'q':
+                    break
+                if answer == 'b':
+                    page = 'polling'
+                elif answer in ('', 'y', 'yes', 'n', 'no'):
+                    choices.enable_service = answer not in ('n', 'no')
+                    page = 'review'
+                else:
+                    print('Choose Y, N, B, or Q.')
+            else:
+                action = review_screen(selected, choices)
+                if action == 'q':
+                    break
+                if action == 'b':
+                    review_return = False
+                    page = 'service'
+                elif action in ('1', '2', '3'):
+                    review_return = True
+                    page = {'1': 'dpi', '2': 'polling', '3': 'buttons'}[action]
+                else:
+                    finished = True
+        if not finished:
+            restore_dpi(backend, selected, choices.original_dpi)
+            print('Setup cancelled; the existing configuration was not changed.')
+            return 0
+        dpi_stages = choices.stages
+        active_dpi = choices.active_dpi
+        polling_rate_hz = choices.polling_rate
+        mappings = choices.mappings
+        enable_service = choices.enable_service
+        if len(dpi_stages) != 5 or any(not isinstance(v, int) or v <= 0 for v in dpi_stages):
+            raise ValueError('Invalid DPI stages')
+        if choices.dpi_values and any(v not in choices.dpi_values for v in dpi_stages):
+            raise ValueError('One or more DPI stages are unsupported by this mouse')
+        if polling_rate_hz is not None and polling_rate_hz not in choices.polling_rates:
+            raise ValueError('Polling rate is unsupported by this mouse')
         content = generate_config(
             selected, mappings, dpi_stages=dpi_stages, active_dpi=active_dpi,
             polling_rate_hz=polling_rate_hz,
@@ -281,6 +350,7 @@ def run_setup_wizard() -> int:
             backend, selected, dpi_stages, active_dpi, polling_rate_hz, setup=True
         )
         path = save_config(content)
+        saved = True
         print(f"\nConfiguration saved to: {path}")
 
         if enable_service:
@@ -308,6 +378,8 @@ def run_setup_wizard() -> int:
         print("The existing configuration was not changed.", file=sys.stderr)
         return 1
     finally:
+        if not saved and selected is not None and backend is not None and choices is not None:
+            restore_dpi(backend, selected, choices.original_dpi)
         if was_active and not service_restored:
             try:
                 restart_service()
