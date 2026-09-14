@@ -8,27 +8,28 @@ import sys
 from typing import TextIO
 
 
-# This mouse is the terminal rendition of the centered mouse mark in the
-# approved social-preview artwork.  Keep it here so interactive flows share
-# one canonical mark rather than each carrying a slightly different copy.
+# This mouse is the terminal rendition of the neon, segmented mouse mark in
+# the application icon. Keep it here so interactive flows share one canonical
+# branded mark rather than each carrying a slightly different copy.
 _MOUSE_LOGO = r"""
-          .--------.
-        .'  .--.    '.
-       /   |    |     \
-      |    |    |      |
-      |       M         |
-      |        |        |
-       \       |       /
-        '.     o     .'
-          '---------'
+             ╻
+         ╭───┿───╮
+      ╭──╯    ╿    ╰──╮
+     ╱      ╭─╂─╮      ╲
+    │       │ ▣ │       │
+    │       ╰─╂─╯       │
+    │         ╿         │
+    │       ╭─M─╮       │
+    │         ╿         │
+     ╲        ╿        ╱
+      ╰────────┷────────╯
 """.strip("\n")
 
 _COMPACT_LOGO = r"""
-  .----.
- / .--. \
-|   M   |
- \  |  /
-  '--o-'
+   ╭─╮
+ ╭─╯▣╰─╮
+ │  M  │
+ ╰──┷──╯
 """.strip("\n")
 
 _CODES = {
