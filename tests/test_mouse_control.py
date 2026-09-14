@@ -82,7 +82,7 @@ def test_packaging_declares_gpl_and_installs_udev_rule():
     root = Path(__file__).parents[1]
     metadata = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
     spec = (root / 'mouse-control.spec').read_text(encoding='utf-8')
-    assert metadata['project']['license'] == 'GPL-3.0-or-later'
+    assert metadata['project']['license'] == {'text': 'GPL-3.0-or-later'}
     assert 'License:        GPL-3.0-or-later' in spec
     assert 'LicenseRef-Proprietary' not in spec
     assert '%{_udevrulesdir}/71-mouse-control-uaccess.rules' in spec
