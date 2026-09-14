@@ -1,5 +1,7 @@
 # Mouse Control
 
+![Mouse Control — Linux gaming mouse configuration and remapping](assets/mouse-control-social-preview.png)
+
 Open-source Linux gaming mouse configuration and remapping: map mouse buttons to keyboard keys, configure supported DPI and polling rates, and help test new hardware.
 
 [![Current release](https://img.shields.io/github/v/release/DonGeronimo7/mouse-control?display_name=tag&label=release)](https://github.com/DonGeronimo7/mouse-control/releases/latest)
