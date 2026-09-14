@@ -24,4 +24,4 @@ cat > AppDir/AppRun <<'EOF'
 exec "$(dirname "$0")/usr/bin/mouse-control" "$@"
 EOF
 chmod +x AppDir/AppRun
-appimagetool AppDir Mouse-Control-0.7.6-x86_64.AppImage
+appimagetool AppDir Mouse-Control-0.7.7-x86_64.AppImage

@@ -1,15 +1,13 @@
-# Mouse Control v0.7.6
+# Mouse Control v0.7.7
 
-## Universal updater
+## Launcher and icon polish
 
-`mouse-control update` and `mouse-control update --check` are available in the
-published RPM, DEB, AppImage, and Python packages. Mouse Control detects the
-running installation and safely delegates to its owner.
+The interactive terminal launcher now opens with a Unicode rendition of the
+Mouse Control segmented mouse mark rather than a generic ASCII drawing. The
+menu, setup flow, remapping, hardware support, services, and updater behavior
+are unchanged.
 
-This release also includes the terminal-native launcher, Mouse Control icon,
-and corrected native package dependencies, including the Arch build fix. It
-supersedes the unpublished v0.7.5 tag.
-
-System-package-owned files are never manually overwritten, AppImage replacement
-is atomic, release assets are validated by name and architecture, source
-checkouts are not automatically modified, and `--check` is non-mutating.
+The desktop icon keeps its cyan, blue, and magenta cyber aesthetic while using
+stronger outer contours and clearer central details. Updated 512, 256, 128,
+64, 48, and 32 pixel assets are included in the RPM, DEB, and AppImage
+packages for improved visibility in launchers, menus, taskbars, and panels.

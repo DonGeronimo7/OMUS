@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.7 — 2026-09-14
+
+### Launcher and icon polish
+
+- Replaces the generic ASCII launcher mouse with a terminal-native rendition
+  of the Mouse Control segmented mouse mark.
+- Strengthens the neon application icon contours and central details for
+  clearer recognition in desktop launchers, menus, taskbars, and small sizes.
+
 ## 0.7.6 — 2026-09-14
 
 ### Release packaging

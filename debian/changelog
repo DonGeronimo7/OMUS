@@ -1,3 +1,9 @@
+mouse-control (0.7.7-1) unstable; urgency=medium
+
+  * Polish the terminal launcher mark and strengthen icon visibility at small sizes.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Sun, 14 Sep 2026 05:00:00 +0000
+
 mouse-control (0.7.6-1) unstable; urgency=medium
 
   * Fix Arch build dependencies for the updater release.
