@@ -93,4 +93,17 @@ def test_package_definitions_own_desktop_entry_and_icon():
     arch = (ROOT / "PKGBUILD").read_text()
     for packaging in (debian, rpm, arch):
         assert "mouse-control.desktop" in packaging
-        assert "mouse-control.svg" in packaging
+        assert "mouse-control.png" in packaging
+
+
+def test_approved_png_icon_sizes_are_packaged_with_alpha():
+    expected_sizes = (512, 256, 128, 64, 48, 32)
+    for size in expected_sizes:
+        icon = ROOT / f"assets/icons/hicolor/{size}x{size}/apps/mouse-control.png"
+        assert icon.is_file()
+        with icon.open("rb") as handle:
+            header = handle.read(29)
+        assert header[:8] == b"\x89PNG\r\n\x1a\n"
+        assert int.from_bytes(header[16:20]) == size
+        assert int.from_bytes(header[20:24]) == size
+        assert header[25] == 6  # PNG RGBA: preserve the approved transparency.

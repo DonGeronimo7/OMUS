@@ -17,7 +17,9 @@ package() {
     "$pkgdir/usr/lib/udev/rules.d/71-mouse-control-uaccess.rules"
   install -Dm644 packaging/appimage/mouse-control.desktop \
     "$pkgdir/usr/share/applications/mouse-control.desktop"
-  install -Dm644 packaging/appimage/mouse-control.svg \
-    "$pkgdir/usr/share/icons/hicolor/scalable/apps/mouse-control.svg"
+  for size in 512 256 128 64 48 32; do
+    install -Dm644 "assets/icons/hicolor/${size}x${size}/apps/mouse-control.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/mouse-control.png"
+  done
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

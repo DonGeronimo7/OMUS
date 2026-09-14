@@ -41,8 +41,10 @@ install -Dpm 0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
   %{buildroot}%{_udevrulesdir}/71-mouse-control-uaccess.rules
 install -Dpm 0644 packaging/appimage/mouse-control.desktop \
   %{buildroot}%{_datadir}/applications/mouse-control.desktop
-install -Dpm 0644 packaging/appimage/mouse-control.svg \
-  %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/mouse-control.svg
+for size in 512 256 128 64 48 32; do
+  install -Dpm 0644 assets/icons/hicolor/${size}x${size}/apps/mouse-control.png \
+    %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/mouse-control.png
+done
 desktop-file-validate %{buildroot}%{_datadir}/applications/mouse-control.desktop
 %pyproject_save_files mouse_control
 # pip records bytecode even when it is not a distributable source file.  Remove
@@ -64,7 +66,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_bindir}/mouse-control
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 %{_datadir}/applications/mouse-control.desktop
-%{_datadir}/icons/hicolor/scalable/apps/mouse-control.svg
+%{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.4-1
