@@ -5,10 +5,10 @@ mouse-control (0.7.4-1) unstable; urgency=medium
     write hardware settings.
   * Add optional StatusNotifierItem battery monitoring.
 
- -- Marc-A. Geronimo  Sun, 13 Sep 2026 12:00:00 +0000
+ -- Marc-A. Geronimo <mgeronimo@nobara-pc.lan>  Sun, 13 Sep 2026 12:00:00 +0000
 
 mouse-control (0.7.2-1) unstable; urgency=medium
 
   * Native Logitech HID++ stabilization release.
 
- -- Marc-A. Geronimo  Fri, 11 Sep 2026 12:00:00 +0000
+ -- Marc-A. Geronimo <mgeronimo@nobara-pc.lan>  Fri, 11 Sep 2026 12:00:00 +0000
