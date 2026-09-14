@@ -38,7 +38,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("setup", help="run the interactive setup wizard")
-    sub.add_parser("run", help="apply the saved configuration")
+    run_parser = sub.add_parser("run", help="apply the saved configuration")
+    run_parser.add_argument("--config", type=Path,
+                            help="use an explicit configuration file instead of the default")
     sub.add_parser("show-config", help="print the active configuration path")
     sub.add_parser("check-permissions", help="check mouse and uinput access for this session")
     sub.add_parser("debug-dpi", help="discover Logitech HID++ capabilities and capture reports")
@@ -343,7 +345,11 @@ def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
 
 
 def run_from_config(path: Path | None = None) -> int:
-    config = load_config(path)
+    try:
+        config = load_config(path)
+    except OSError as exc:
+        print(f"Could not read configuration: {exc}", file=sys.stderr)
+        return 1
     device = config.get("device", {})
     mappings = config.get("remap", {})
     event_path = device.get("event_path")
@@ -531,7 +537,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_setup_wizard()
 
     if args.command == "run":
-        return run_from_config()
+        return run_from_config(args.config)
 
     if args.command == "show-config":
         print(get_config_path())

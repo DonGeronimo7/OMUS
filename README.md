@@ -340,6 +340,13 @@ mapping actions are `passthrough`, `disable`, `mouse:BTN_*`, `key:KEY_*`, and
 `chord:KEY_*+KEY_*` (with two or more keys).
 The configuration can be edited by hand.
 
+To test a source checkout with an isolated config, without changing the normal
+installed configuration, run:
+
+```bash
+PYTHONPATH=src python3 -m mouse_control.cli run --config /tmp/mouse-control-test.toml
+```
+
 For example, in `[remap]`:
 
 ```toml
