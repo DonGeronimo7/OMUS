@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 — 2026-09-14
+
+- Add held keyboard chord bindings, setup capture, shared-modifier handling,
+  and synthetic-key cleanup on disconnect and shutdown.
+- Add `mouse-control run --config PATH` for isolated runtime testing.
+
 ## 0.7.11 — 2026-09-14
 
 ### RPM updater reliability

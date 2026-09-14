@@ -1,3 +1,10 @@
+mouse-control (0.8.0-1) unstable; urgency=medium
+
+  * Add held keyboard chord bindings with safe shared-modifier and disconnect cleanup.
+  * Allow an explicit configuration file for isolated runtime testing.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Mon, 14 Sep 2026 18:59:00 +0000
+
 mouse-control (0.7.11-1) unstable; urgency=medium
 
   * Verify RPM updates from the installed package version after DNF completes.

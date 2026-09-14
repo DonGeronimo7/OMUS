@@ -119,9 +119,9 @@ native package when you need the packaged udev and service integration.
 
 ### Arch Linux
 
-The repository includes a [PKGBUILD](PKGBUILD) for v0.7.11, but this project does
-not currently claim to publish an AUR package. Review and build it locally, or
-install from source. OpenRazer remains an optional dependency.
+The repository includes a [PKGBUILD](PKGBUILD) prepared for v0.8.0; it needs
+the v0.8.0 tag before it can build. This project does not currently claim to
+publish an AUR package. OpenRazer remains an optional dependency.
 
 ### Source installation
 

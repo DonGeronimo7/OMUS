@@ -1,3 +1,19 @@
+# Mouse Control v0.8.0
+
+Mouse buttons can now hold keyboard chords, for example
+`chord:KEY_LEFTCTRL+KEY_LEFTSHIFT+KEY_S`. The keys stay held while the mouse
+button is pressed. Overlapping chords safely share modifiers, and disconnect
+or shutdown releases synthetic keys so they do not remain stuck.
+
+The setup wizard can capture a chord, and you can also enter one manually in
+the configuration. Chord support is not general macro/sequencing support.
+
+For isolated configuration and runtime testing, use
+`mouse-control run --config /path/to/config.toml`. This runs with the selected
+file without changing the normal installed configuration.
+
+---
+
 # Mouse Control v0.7.11
 
 ## RPM updater reliability

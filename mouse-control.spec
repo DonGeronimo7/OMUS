@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.11
+Version:        0.8.0
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.8.0-1
+- Add held keyboard chord bindings with shared-modifier and disconnect cleanup.
+- Allow an explicit configuration file for isolated runtime testing.
+
 * Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.11-1
 - Verify RPM updates from the installed package version after DNF completes.
 - Make `mouse-control update --yes` non-interactive for DNF upgrades and fallback installs.
