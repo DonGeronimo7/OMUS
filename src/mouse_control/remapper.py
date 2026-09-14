@@ -24,6 +24,7 @@ LOG = logging.getLogger(__name__)
 class Action:
     kind: str
     code: int | None = None
+    codes: tuple[int, ...] = ()
 
 
 def parse_action(value: str) -> Action:
@@ -46,6 +47,14 @@ def parse_action(value: str) -> Action:
         if code is None or not name.startswith("KEY_"):
             raise ValueError(f"Invalid keyboard action: {value}")
         return Action("key", code)
+    if value.startswith("chord:"):
+        names = value.split(":", 1)[1].split("+")
+        codes = tuple(getattr(ecodes, name, None) for name in names)
+        if (len(codes) < 2 or any(not name.startswith("KEY_") or not isinstance(code, int)
+                                   for name, code in zip(names, codes))
+                or len(set(codes)) != len(codes)):
+            raise ValueError(f"Invalid keyboard chord: {value}")
+        return Action("chord", codes=codes)
     raise ValueError(f"Unknown action: {value}")
 
 
@@ -119,6 +128,8 @@ class MouseRemapper:
         self.dpi_cycler = dpi_cycler
         self.retry_interval = retry_interval
         self._pressed_keys: set[int] = set()
+        self._held_chords: set[int] = set()
+        self._chord_key_counts: dict[int, int] = {}
         self._ambiguity_logged = False
 
     def _capabilities(self) -> dict[int, list[int]]:
@@ -139,6 +150,7 @@ class MouseRemapper:
         for action in self.mappings.values():
             if action.code is not None and action.kind in {"mouse", "key"}:
                 keys.add(action.code)
+            keys.update(action.codes)
         capabilities[ecodes.EV_KEY] = sorted(keys)
         return capabilities
 
@@ -202,12 +214,42 @@ class MouseRemapper:
 
     def _release_pressed_keys(self) -> None:
         if self.ui is None:
+            self._pressed_keys.clear()
+            self._held_chords.clear()
+            self._chord_key_counts.clear()
             return
+        had_pressed_keys = bool(self._pressed_keys)
+        for source in tuple(self._held_chords):
+            self._handle_chord(source, self.mappings[source], 0)
         for code in tuple(self._pressed_keys):
             self.ui.write(ecodes.EV_KEY, code, 0)
-        if self._pressed_keys:
+        if had_pressed_keys:
             self.ui.syn()
         self._pressed_keys.clear()
+        self._held_chords.clear()
+        self._chord_key_counts.clear()
+
+    def _handle_chord(self, source: int, action: Action, value: int) -> None:
+        if value == 1:
+            if source in self._held_chords:
+                return
+            self._held_chords.add(source)
+            for key in action.codes:
+                count = self._chord_key_counts.get(key, 0)
+                if count == 0:
+                    self._emit(ecodes.EV_KEY, key, 1)
+                self._chord_key_counts[key] = count + 1
+        elif value == 0:
+            if source not in self._held_chords:
+                return
+            self._held_chords.remove(source)
+            for key in reversed(action.codes):
+                count = self._chord_key_counts[key] - 1
+                if count:
+                    self._chord_key_counts[key] = count
+                else:
+                    del self._chord_key_counts[key]
+                    self._emit(ecodes.EV_KEY, key, 0)
 
     def _close_device(self) -> None:
         if self.device is None:
@@ -235,6 +277,8 @@ class MouseRemapper:
             return
         if action.kind == "passthrough":
             self._emit(event_type, code, value)
+        elif action.kind == "chord":
+            self._handle_chord(code, action, value)
         elif action.code is not None:
             self._emit(ecodes.EV_KEY, action.code, value)
 
