@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.10 — 2026-09-14
+
+### Battery tray and terminal polish
+
+- Keeps the battery tray visible through transient HID++ battery read timeouts;
+  it hides only after three consecutive failed reads, and a successful read
+  resets the failure count.
+- Removes the redundant mouse/device name from the tray menu.
+- Refreshes the terminal branding and logo.
+
 ## 0.7.9 — 2026-09-14
 
 ### AppImage portability

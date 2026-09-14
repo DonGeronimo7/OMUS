@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.9
+Version:        0.7.10
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.10-1
+- Keep the battery tray visible through transient HID++ read timeouts.
+- Remove the redundant device name from the tray menu and refresh terminal branding.
+
 * Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.9-1
 - Bundle a self-contained Python 3.12 runtime in the AppImage.
 - Prevent host Python ABI mismatches with native extensions such as evdev.
