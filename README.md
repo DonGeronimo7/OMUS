@@ -16,6 +16,16 @@ The current release is [v0.7.3](https://github.com/DonGeronimo7/mouse-control/re
 
 ## Install
 
+## Community hardware testing
+
+`mouse-control support` creates a local, privacy-safe report for an unsupported
+mouse selected by the user. It records relevant device identity, input
+capabilities, backend status, HID interfaces, and deterministic HID
+report-descriptor topology. Reports are never uploaded automatically and there
+is no telemetry or hardware write during probing. `--guided` optionally records
+one requested side-button press. Unknown hardware is expected and still yields
+a useful report; this does not claim Turtle Beach Kone II compatibility.
+
 Choose the package that fits your Linux distribution. Native packages are the
 best choice when available: they install the dependencies and udev integration
 needed by the host system.

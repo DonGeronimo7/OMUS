@@ -2,6 +2,14 @@
 
 ## 0.7.3 — 2026-09-13
 
+### Community hardware support reports
+
+- Adds on-demand `mouse-control support` reports for investigating unsupported
+  mice. Reports are local, read-only, privacy-safe, and include optional guided
+  button capture plus deterministic HID descriptor topology.
+- There is no telemetry, automatic upload, background monitor, or hardware
+  write during support probing. Unknown hardware remains reportable.
+
 ### Added
 
 - Optional battery monitoring tray integration with a programmatically drawn

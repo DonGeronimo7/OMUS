@@ -24,6 +24,7 @@ from .service import (install_service, is_service_active, start_service, stop_se
                       restart_service, status_service, ServiceNotInstalled)
 from .permissions import permission_report
 from .doctor import doctor_fix, print_doctor
+from . import __version__
 
 
 LOG = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ LOG = logging.getLogger(__name__)
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mouse-control")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("setup", help="run the interactive setup wizard")
@@ -48,6 +50,8 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="read-only environment and hardware diagnostics")
     doctor.add_argument("--report", action="store_true", help="format a privacy-safe compatibility report")
     doctor.add_argument("--fix", action="store_true", help="offer safe dependency-installation guidance")
+    support = sub.add_parser("support", help="create a privacy-safe hardware support report")
+    support.add_argument("--guided", action="store_true", help="also capture one optional button press")
 
     sub.add_parser("install-service", help="install and enable the systemd user service")
     sub.add_parser("start", help="start the background service")
@@ -109,6 +113,48 @@ def debug_hid(seconds: float = 10.0) -> int:
         else:
             print("  no input reports observed")
     print("\nNo HID feature or output reports were sent.")
+    return 0
+
+
+def run_support(*, guided: bool = False) -> int:
+    """Create an explicitly requested local report without hardware writes."""
+    from .support import capture_button, probe, render_report
+
+    print("Mouse Control Hardware Support\n" + "─" * 31)
+    mice = get_mouse_devices()
+    if not mice:
+        print("No mouse devices were detected. Check that your mouse is connected and try again.")
+        return 1
+    print("\nSelect the mouse you're having trouble with:")
+    for index, mouse in enumerate(mice, 1):
+        print(f"  {index}. {mouse.name}")
+    try:
+        selected = mice[int(input("\n> ").strip()) - 1]
+    except (ValueError, IndexError, EOFError, KeyboardInterrupt):
+        print("\nSupport report cancelled.")
+        return 0
+    print(f"\nChecking {selected.name}...")
+    report = probe(selected, get_backend(selected))
+    if guided:
+        print("\nOptional button test: press the BACK or FORWARD button now (10 seconds)...")
+        event = capture_button(selected)
+        report["guided"]["Requested action"] = "Press a side button"
+        report["guided"]["Detected event"] = event or "No event detected"
+    try:
+        answer = input("Create support report? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+    if answer not in ("", "y", "yes"):
+        print("Support report cancelled.")
+        return 0
+    slug = "".join(char.lower() if char.isalnum() else "-" for char in selected.name).strip("-") or "mouse"
+    destination = Path.home() / f"mouse-control-{slug}-report.txt"
+    try:
+        destination.write_text(render_report(report), encoding="utf-8")
+    except OSError as exc:
+        print(f"Could not save support report: {exc}", file=sys.stderr)
+        return 1
+    print(f"Report saved: {destination}\nPlease attach this report to a GitHub issue.")
     return 0
 
 
@@ -404,6 +450,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.fix:
             return doctor_fix()
         return print_doctor(report=args.report)
+
+    if args.command == "support":
+        return run_support(guided=args.guided)
 
     try:
         if args.command == "install-service":

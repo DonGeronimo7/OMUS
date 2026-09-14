@@ -60,6 +60,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 
 %changelog
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.3-1
+- Add the on-demand, read-only mouse-control support report workflow for
+  community hardware testing. Reports remain local and include optional guided
+  button capture plus selected-mouse HID descriptor topology only.
 - Add the optional StatusNotifierItem battery monitor with a live icon,
   tooltip, and standards-based DBusMenu battery details.
 

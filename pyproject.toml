@@ -28,3 +28,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+norecursedirs = ["native-hid-fallback"]

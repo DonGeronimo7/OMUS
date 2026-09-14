@@ -5,6 +5,19 @@ the native Logitech HID++ modernization introduced across the v0.7.x feature
 set. Ordinary evdev remapping remains available when vendor-specific hardware
 control is unavailable.
 
+## Community hardware testing
+
+`mouse-control support` provides a built-in, read-only hardware reporting
+workflow for unsupported mice. Users select a mouse and generate a privacy-safe
+local report with relevant device identity, input capabilities, backend status,
+HID interfaces, and HID report-descriptor topology. Reports remain local until
+the user chooses to share them.
+
+The command optionally offers guided button capture. It has no telemetry or
+automatic uploads and performs no hardware writes during probing. Unknown
+hardware is expected and does not make report generation fail. This is for
+community testing; it does not claim Turtle Beach Kone II compatibility.
+
 ## Battery tray integration
 
 - A standard StatusNotifierItem tray icon draws a clean monochrome battery
