@@ -110,14 +110,34 @@ def test_editable_git_install_is_source_and_never_upgraded(monkeypatch, tmp_path
     assert updater.detect_installation(Path("/home/me/.local/bin/mouse-control")).kind == "source"
 
 
-@pytest.mark.parametrize(("owner", "kind"), [("mouse-control-0.7.4", "rpm"), ("mouse-control: /usr/bin/mouse-control", "deb")])
+@pytest.mark.parametrize(("owner", "kind"), [("mouse-control", "rpm"), ("mouse-control: /usr/bin/mouse-control", "deb")])
 def test_system_package_ownership_remains_authoritative(monkeypatch, tmp_path, owner, kind):
     module = tmp_path / "site-packages" / "mouse_control" / "updater.py"
     module.parent.mkdir(parents=True)
     module.touch()
     monkeypatch.setattr(updater, "__file__", str(module))
     monkeypatch.setattr(updater, "_owned_by", lambda command: owner if command[0] == ("rpm" if kind == "rpm" else "dpkg-query") else None)
-    assert updater.detect_installation(Path("/usr/bin/mouse-control")).kind == kind
+    installation = updater.detect_installation(Path("/usr/bin/mouse-control"))
+    assert installation.kind == kind
+    assert installation.package == "mouse-control"
+
+
+def test_rpm_ownership_queries_stable_package_name(monkeypatch, tmp_path):
+    module = tmp_path / "site-packages" / "mouse_control" / "updater.py"
+    module.parent.mkdir(parents=True)
+    module.touch()
+    monkeypatch.setattr(updater, "__file__", str(module))
+    monkeypatch.setattr(updater.shutil, "which", lambda command: "/usr/bin/rpm" if command == "rpm" else None)
+    commands = []
+
+    def runner(args):
+        commands.append(args)
+        return result(out="mouse-control\n")
+
+    monkeypatch.setattr(updater, "_run", runner)
+    installation = updater.detect_installation(Path("/usr/bin/mouse-control"))
+    assert installation.package == "mouse-control"
+    assert commands == [["rpm", "-qf", "--qf", "%{NAME}\\n", "/usr/bin/mouse-control"]]
 
 
 def test_version_comparison_and_current_release(capsys, monkeypatch):
@@ -189,6 +209,56 @@ def test_package_manager_real_upgrade_does_not_download(monkeypatch, kind, query
     def runner(args):
         return result(out=query_version + "\n") if args[0] in {"rpm", "dpkg-query"} else result()
     updater._package_update(install, release(), runner)
+
+
+def test_noisy_dnf_output_with_target_rpm_installed_reports_success(monkeypatch, capsys):
+    installation = updater.Installation("rpm", Path("/usr/bin/mouse-control"), "mouse-control")
+    monkeypatch.setattr(updater, "detect_installation", lambda _: installation)
+    monkeypatch.setattr(updater, "_shadowed", lambda _: None)
+    monkeypatch.setattr(updater, "is_service_active", lambda: False)
+    monkeypatch.setattr(updater, "__version__", "0.7.9")
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(updater, "_download", lambda *_: pytest.fail("fallback must not download"))
+    calls = []
+
+    def runner(args):
+        calls.append(args)
+        if args[0] == "rpm":
+            assert args[-1] == "mouse-control"
+            return result(out="0.7.10\n")
+        return result(1, out="Last metadata expiration check...\nWarnings and progress text",
+                      err="Warning: unrelated repository metadata")
+
+    assert updater.run_update(assume_yes=True, fetcher=lambda: release("0.7.10"), runner=runner) == 0
+    assert "updated successfully to 0.7.10" in capsys.readouterr().out
+    assert "--assumeyes" in calls[0]
+
+
+@pytest.mark.parametrize("assume_yes", [False, True])
+def test_rpm_fallback_preserves_version_check_and_dnf_confirmation(monkeypatch, assume_yes):
+    installation = updater.Installation("rpm", Path("/usr/bin/mouse-control"), "mouse-control")
+    package = "mouse-control-0.8.0-1.noarch.rpm"
+    artifact = {"name": package, "browser_download_url":
+                f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{package}"}
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    calls, installed = [], ["0.7.9"]
+
+    def runner(args):
+        calls.append(args)
+        if args[0] == "rpm":
+            return result(out=installed[0] + "\n")
+        if any(str(part).endswith(".rpm") for part in args):
+            installed[0] = "0.8.0"
+            return result(1, out="Warnings and noisy DNF output", err="Warning: repository metadata")
+        return result(out="Nothing to do")
+
+    updater._package_update(installation, release(assets=(artifact,)), runner, assume_yes=assume_yes)
+    dnf_calls = [args for args in calls if "dnf" in args]
+    assert len(dnf_calls) == 2
+    assert all(("--assumeyes" in args) is assume_yes for args in dnf_calls)
+    assert dnf_calls[0][-1] == "mouse-control"
+    assert dnf_calls[1][-1].endswith(".rpm")
 
 
 def test_dnf_error_continues_to_verified_github_rpm(monkeypatch):

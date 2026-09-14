@@ -97,7 +97,7 @@ def detect_installation(executable: Path | None = None) -> Installation:
     checkout = _loaded_source_checkout()
     if checkout is not None:
         return Installation("source", executable, detail=f"running from {checkout}")
-    rpm = _owned_by(["rpm", "-qf", str(executable)])
+    rpm = _owned_by(["rpm", "-qf", "--qf", "%{NAME}\\n", str(executable)])
     if rpm:
         return Installation("rpm", executable, rpm.splitlines()[0])
     deb = _owned_by(["dpkg-query", "-S", str(executable)])
@@ -248,7 +248,8 @@ def _package_is_current(installation: Installation, release: Release, run: Calla
         return False
 
 
-def _package_update(installation: Installation, release: Release, run: Callable = _run) -> None:
+def _package_update(installation: Installation, release: Release, run: Callable = _run,
+                    assume_yes: bool = False) -> None:
     if installation.kind == "arch":
         raise UpdateError("This pacman-owned installation is not updated automatically. Update it using the package source that installed it.")
     manager = "dnf" if installation.kind == "rpm" else "apt"
@@ -256,7 +257,7 @@ def _package_update(installation: Installation, release: Release, run: Callable 
         raise UpdateError(f"{manager} is unavailable; package-owned files were not changed.")
     package = installation.package or "mouse-control"
     # First let the enabled native repository perform a normal upgrade.
-    native = _sudo([manager, "upgrade" if manager == "dnf" else "install", package] if manager == "dnf"
+    native = _sudo([manager, "upgrade", *(["--assumeyes"] if assume_yes else []), package] if manager == "dnf"
                    else [manager, "install", "--only-upgrade", package])
     run(native)
     if _package_is_current(installation, release, run):
@@ -270,9 +271,14 @@ def _package_update(installation: Installation, release: Release, run: Callable 
         if destination.parent != Path(directory).resolve():
             raise UpdateError("Release asset destination escaped its temporary directory.")
         artifact = _download(asset, destination)
-        command = [manager, "install", str(artifact)]
+        command = [manager, "install", *(["--assumeyes"] if installation.kind == "rpm" and assume_yes else []),
+                   str(artifact)]
         result = run(_sudo(command))
-    if result.returncode or not _package_is_current(installation, release, run):
+    if installation.kind == "rpm":
+        installed_current = _package_is_current(installation, release, run)
+    else:
+        installed_current = not result.returncode and _package_is_current(installation, release, run)
+    if not installed_current:
         raise UpdateError(result.stderr.strip() or result.stdout.strip()
                           or "Package manager did not install the requested release.")
 
@@ -345,7 +351,7 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
         active = False
     try:
         if installation.kind in {"rpm", "deb", "arch"}:
-            _package_update(installation, release, runner)
+            _package_update(installation, release, runner, assume_yes=assume_yes)
         elif installation.kind == "appimage":
             _appimage_update(installation, release, opener)
         elif installation.kind == "pip":
