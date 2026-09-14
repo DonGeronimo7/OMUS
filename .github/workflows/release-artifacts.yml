@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install AppImage build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y python3-pip libfuse2
+        run: sudo apt-get update && sudo apt-get install -y python3-pip libfuse2 build-essential
       - name: Install AppImageKit 13
         run: |
           curl --fail --location --retry 3 --output /tmp/appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/13/obsolete-appimagetool-x86_64.AppImage

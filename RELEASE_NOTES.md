@@ -1,4 +1,14 @@
-# Mouse Control v0.7.8
+# Mouse Control v0.7.9
+
+## AppImage portability fix
+
+The AppImage now bundles its own portable CPython 3.12 runtime instead of using
+the host system Python. This prevents native-extension ABI mismatches on systems
+running newer Python versions, including the evdev `_input` import failure seen
+on Fedora with Python 3.14.
+
+The AppImage build installs Mouse Control and its dependencies directly into the
+bundled runtime, so the application no longer depends on the host Python ABI.
 
 ## Updater verification fix
 

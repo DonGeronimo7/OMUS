@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.9 — 2026-09-14
+
+### AppImage portability
+
+- Bundles a portable CPython 3.12 runtime inside the AppImage.
+- Stops depending on the host Python ABI for native modules such as `evdev`.
+- Fixes `_input` import failures on systems using newer Python versions.
+- Makes the AppImage build dependency on a native compiler explicit in CI.
+
+### Updater verification
+
+- Verifies the installed RPM/DEB version after native package-manager updates.
+- Falls back to the validated GitHub release package when APT/DNF reports
+  success without actually upgrading Mouse Control.
+
 ## 0.7.8 — 2026-09-14
 
 ### Updater verification

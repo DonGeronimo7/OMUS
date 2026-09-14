@@ -1,4 +1,7 @@
-mouse-control (0.7.8-1) unstable; urgency=medium
+mouse-control (0.7.9-1) unstable; urgency=medium
+
+  * Bundle a self-contained Python 3.12 runtime in the AppImage.
+  * Prevent host Python ABI mismatches with native extensions such as evdev.
 
   * Verify the installed RPM/DEB version after native and GitHub-package updates.
   * Fall back to the validated GitHub package when APT/DNF does not upgrade it.

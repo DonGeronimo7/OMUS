@@ -23,7 +23,7 @@ Razer hardware. When those controls are unavailable, ordinary mouse remapping
 continues to work. Generic USB HID does not standardize DPI or polling-rate
 writes, so Mouse Control never guesses them.
 
-The current release is [v0.7.8](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.8).
+The current release is [v0.7.9](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.9).
 
 ## What Mouse Control does
 
@@ -37,7 +37,7 @@ The current release is [v0.7.8](https://github.com/DonGeronimo7/mouse-control/re
 
 ## Get Mouse Control
 
-Get the latest package from the [v0.7.8 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.8):
+Get the latest package from the [v0.7.9 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.9):
 
 - **Fedora, Nobara, and other RPM distributions:** RPM
 - **Debian, Ubuntu, Mint, and other DEB distributions:** DEB
@@ -83,10 +83,10 @@ needed by the host system.
 
 ### Fedora, Nobara, and other RPM-based distributions
 
-Download the v0.7.8 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.8), then install it with DNF:
+Download the v0.7.9 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.9), then install it with DNF:
 
 ```bash
-sudo dnf install ./mouse-control-0.7.8-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.7.9-1.fc44.noarch.rpm
 ```
 
 This unsigned Fedora 44 package declares Python, evdev, dbus-next, and systemd
@@ -95,19 +95,19 @@ installation shadows the command, use `/usr/bin/mouse-control`.
 
 ### Debian, Ubuntu, Mint, and other DEB-based distributions
 
-Download `mouse-control_0.7.8-1_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.8), then let APT resolve its declared dependencies:
+Download `mouse-control_0.7.9-1_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.9), then let APT resolve its declared dependencies:
 
 ```bash
-sudo apt install ./mouse-control_0.7.8-1_all.deb
+sudo apt install ./mouse-control_0.7.9-1_all.deb
 ```
 
 ### AppImage and other distributions
 
-Download [Mouse-Control-0.7.8-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.7.8/Mouse-Control-0.7.8-x86_64.AppImage), make it executable, and run it:
+Download [Mouse-Control-0.7.9-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.7.9/Mouse-Control-0.7.9-x86_64.AppImage), make it executable, and run it:
 
 ```bash
-chmod +x Mouse-Control-0.7.8-x86_64.AppImage
-./Mouse-Control-0.7.8-x86_64.AppImage setup
+chmod +x Mouse-Control-0.7.9-x86_64.AppImage
+./Mouse-Control-0.7.9-x86_64.AppImage setup
 ```
 
 The AppImage can contain the Python application and user-space libraries such
@@ -119,14 +119,14 @@ native package when you need the packaged udev and service integration.
 
 ### Arch Linux
 
-The repository includes a [PKGBUILD](PKGBUILD) for v0.7.8, but this project does
+The repository includes a [PKGBUILD](PKGBUILD) for v0.7.9, but this project does
 not currently claim to publish an AUR package. Review and build it locally, or
 install from source. OpenRazer remains an optional dependency.
 
 ### Source installation
 
 For developers and advanced users, download the source distribution from the
-[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.8), or clone this repository:
+[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.9), or clone this repository:
 
 ```bash
 git clone https://github.com/DonGeronimo7/mouse-control.git

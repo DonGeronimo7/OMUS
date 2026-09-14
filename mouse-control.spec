@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.8
+Version:        0.7.9
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.9-1
+- Bundle a self-contained Python 3.12 runtime in the AppImage.
+- Prevent host Python ABI mismatches with native extensions such as evdev.
+
 * Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.8-1
 - Verify installed RPM and DEB versions before reporting updater success.
 - Fall back to the validated GitHub package when native repositories do not
