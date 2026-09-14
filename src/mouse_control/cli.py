@@ -25,6 +25,7 @@ from .service import (install_service, is_service_active, start_service, stop_se
 from .permissions import permission_report
 from .doctor import doctor_fix, print_doctor
 from . import __version__
+from .branding import print_banner, style
 
 
 LOG = logging.getLogger(__name__)
@@ -120,7 +121,8 @@ def run_support(*, guided: bool = False) -> int:
     """Create an explicitly requested local report without hardware writes."""
     from .support import capture_button, probe, render_report
 
-    print("Mouse Control Hardware Support\n" + "─" * 31)
+    print_banner()
+    print(style("Mouse Control Hardware Support", "purple") + "\n" + "─" * 31)
     mice = get_mouse_devices()
     if not mice:
         print("No mouse devices were detected. Check that your mouse is connected and try again.")
@@ -212,7 +214,8 @@ def _ask_enable_service() -> bool:
 
 
 def run_setup_wizard() -> int:
-    print("=== Mouse Control Setup Wizard ===")
+    print_banner()
+    print(style("Mouse Control Setup Wizard", "purple"))
     # Read-only readiness information: optional backends never block remapping.
     print("Native HID discovery enabled; unsupported mice retain generic remapping.")
     was_active = is_service_active()
@@ -422,10 +425,103 @@ def run_from_config(path: Path | None = None) -> int:
     return 0
 
 
+def _run_service_action(action: str) -> int:
+    """Run a service action with the same friendly error boundary as the CLI."""
+    actions = {
+        "1": ("Status", status_service),
+        "2": ("Start", start_service),
+        "3": ("Restart", restart_service),
+        "4": ("Stop", stop_service),
+        "5": ("Install and enable", install_service),
+    }
+    label, operation = actions[action]
+    try:
+        result = operation()
+        return int(result) if isinstance(result, int) else 0
+    except (ServiceNotInstalled, OSError, subprocess.CalledProcessError) as exc:
+        print(f"Service {label.lower()} unavailable: {exc}", file=sys.stderr)
+        return 1
+
+
+def _service_menu(input_func=input) -> int:
+    print("\nService controls")
+    print("  1. Service status")
+    print("  2. Start service")
+    print("  3. Restart service")
+    print("  4. Stop service")
+    print("  5. Install and enable service")
+    print("  B. Back")
+    try:
+        choice = input_func("Service action: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return 0
+    if choice in {"b", "", "q"}:
+        return 0
+    if choice in {"1", "2", "3", "4", "5"}:
+        return _run_service_action(choice)
+    print("Please choose a numbered service action or B to go back.")
+    return 0
+
+
+def run_home_screen(*, input_func=input, columns: int | None = None) -> int:
+    """Present a lightweight, keyboard-first terminal home screen."""
+    print_banner(columns=columns)
+    try:
+        active = is_service_active()
+    except (OSError, subprocess.CalledProcessError):
+        active = None
+    status = "Running" if active else "Not running" if active is False else "Unknown"
+    status_style = "success" if active else "muted" if active is False else "warning"
+    print(f"\nService: {style(status, status_style)}")
+    print("\n  1. Configure mouse")
+    print("  2. Button remapping")
+    print("  3. DPI & polling")
+    print("  4. Hardware support")
+    print("  5. Service controls")
+    print("  6. Diagnostics")
+    print("  7. Help / About")
+    print("  Q. Quit")
+
+    routes = {
+        "1": run_setup_wizard,
+        "2": run_setup_wizard,
+        "3": run_setup_wizard,
+        "4": run_support,
+        "6": print_doctor,
+    }
+    while True:
+        try:
+            choice = input_func("\nChoose an option: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            return 0
+        if choice in {"q", "quit"}:
+            print("Goodbye.")
+            return 0
+        if choice == "5":
+            _service_menu(input_func)
+            return 0
+        if choice == "7":
+            _build_parser().print_help()
+            return 0
+        route = routes.get(choice)
+        if route is not None:
+            return int(route() or 0)
+        print("Please choose 1–7 or Q to quit.")
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s %(name)s: %(message)s")
-    args = _build_parser().parse_args(argv)
+    supplied_argv = sys.argv[1:] if argv is None else argv
+    if not supplied_argv:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            return run_home_screen()
+        _build_parser().print_help()
+        return 0
+
+    args = _build_parser().parse_args(supplied_argv)
 
     if args.command == "setup":
         return run_setup_wizard()

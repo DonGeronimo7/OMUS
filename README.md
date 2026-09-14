@@ -130,6 +130,23 @@ rule required by a source installation.
 
 ## Quick start
 
+## Desktop launcher
+
+Native package installs add **Mouse Control** to the Linux application launcher.
+Selecting it opens the interactive terminal-native application in the desktop
+environment's configured terminal; Mouse Control does not use a graphical
+desktop toolkit. You can still invoke individual workflows directly:
+
+```bash
+mouse-control setup
+mouse-control support
+mouse-control status
+```
+
+Running `mouse-control` with no arguments opens the same interactive home
+screen when used from a terminal. In scripts or redirected output it prints
+normal command help instead of waiting for input.
+
 Run setup as your logged-in desktop user:
 
 ```bash

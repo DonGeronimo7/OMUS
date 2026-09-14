@@ -1,1 +1,3 @@
 src/mouse_control/udev/71-mouse-control-uaccess.rules usr/lib/udev/rules.d
+packaging/appimage/mouse-control.desktop usr/share/applications
+packaging/appimage/mouse-control.svg usr/share/icons/hicolor/scalable/apps

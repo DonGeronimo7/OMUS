@@ -1,8 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=Mouse Control
-Comment=Headless mouse remapping and hardware configuration utility
+Comment=Configure and remap gaming mice on Linux
 Exec=mouse-control
 Icon=mouse-control
-Categories=Utility;Settings;
+Categories=Utility;System;
 Terminal=true
+Keywords=mouse;gaming;remap;dpi;polling;hid;logitech;
+StartupNotify=true

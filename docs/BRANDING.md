@@ -19,6 +19,10 @@ source, Linux-native, understated, developer-friendly, and gaming-oriented.
 - **Terminal identity:** `DonGeronimo@linux:~$ mouse-control`.
 - **Hardware identity shown in the approved artwork:** Logitech (HID++).
 
+The interactive terminal application uses the same Meslo Nerd Font aesthetic,
+canonical ASCII mouse mark, and cyan/blue/purple syntax-highlighting palette.
+It ships no font binaries.
+
 Avoid generic RGB gamer graphics, glossy mouse renders, Tux as the primary
 logo, distro-logo collages, fake GUI screenshots, corporate SaaS aesthetics,
 unrelated palettes, and excessive glow effects.

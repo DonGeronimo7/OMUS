@@ -15,5 +15,9 @@ package() {
   python -m installer --destdir="$pkgdir" dist/*.whl
   install -Dm644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
     "$pkgdir/usr/lib/udev/rules.d/71-mouse-control-uaccess.rules"
+  install -Dm644 packaging/appimage/mouse-control.desktop \
+    "$pkgdir/usr/share/applications/mouse-control.desktop"
+  install -Dm644 packaging/appimage/mouse-control.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/mouse-control.svg"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

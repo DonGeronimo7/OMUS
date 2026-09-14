@@ -14,6 +14,7 @@ BuildRequires:  python3-evdev
 BuildRequires:  python3-dbus-next
 BuildRequires:  pyproject-rpm-macros
 BuildRequires:  systemd-rpm-macros
+BuildRequires:  desktop-file-utils
 # The wheel installer is kept from writing bytecode below; avoid recreating it
 # during RPM's post-install processing so build-time caches are not shipped.
 %undefine py_auto_byte_compile
@@ -38,6 +39,11 @@ export PIP_NO_COMPILE=1
 %pyproject_install
 install -Dpm 0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
   %{buildroot}%{_udevrulesdir}/71-mouse-control-uaccess.rules
+install -Dpm 0644 packaging/appimage/mouse-control.desktop \
+  %{buildroot}%{_datadir}/applications/mouse-control.desktop
+install -Dpm 0644 packaging/appimage/mouse-control.svg \
+  %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/mouse-control.svg
+desktop-file-validate %{buildroot}%{_datadir}/applications/mouse-control.desktop
 %pyproject_save_files mouse_control
 # pip records bytecode even when it is not a distributable source file.  Remove
 # it only after the generated file manifest has been created, then omit it from
@@ -57,6 +63,8 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
+%{_datadir}/applications/mouse-control.desktop
+%{_datadir}/icons/hicolor/scalable/apps/mouse-control.svg
 
 %changelog
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.4-1
