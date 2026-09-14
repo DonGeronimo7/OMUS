@@ -1,5 +1,5 @@
 pkgname=mouse-control
-pkgver=0.7.3
+pkgver=0.7.4
 pkgrel=1
 pkgdesc='Headless evdev/uinput mouse remapping with optional hardware backends'
 arch=('any')

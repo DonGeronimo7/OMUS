@@ -12,7 +12,7 @@ evdev/uinput and uses available hardware integrations for DPI and polling-rate
 configuration. When a vendor-specific feature is unavailable, ordinary
 software remapping can still be available.
 
-The current release is [v0.7.3](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.3).
+The current release is [v0.7.4](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.4).
 
 ## Install
 
@@ -32,10 +32,10 @@ needed by the host system.
 
 ### Fedora, Nobara, and other RPM-based distributions
 
-Download the v0.7.3 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.3), then install it with DNF:
+Download the v0.7.4 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.4), then install it with DNF:
 
 ```bash
-sudo dnf install ./mouse-control-0.7.3-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.7.4-1.fc44.noarch.rpm
 ```
 
 This unsigned Fedora 44 package declares Python, evdev, dbus-next, and systemd
@@ -44,19 +44,19 @@ installation shadows the command, use `/usr/bin/mouse-control`.
 
 ### Debian, Ubuntu, Mint, and other DEB-based distributions
 
-Download `mouse-control_0.7.3_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.3), then let APT resolve its declared dependencies:
+Download `mouse-control_0.7.4_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.4), then let APT resolve its declared dependencies:
 
 ```bash
-sudo apt install ./mouse-control_0.7.3_all.deb
+sudo apt install ./mouse-control_0.7.4_all.deb
 ```
 
 ### AppImage and other distributions
 
-Download [Mouse-Control-0.7.3-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.7.3/Mouse-Control-0.7.3-x86_64.AppImage), make it executable, and run it:
+Download [Mouse-Control-0.7.4-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.7.4/Mouse-Control-0.7.4-x86_64.AppImage), make it executable, and run it:
 
 ```bash
-chmod +x Mouse-Control-0.7.3-x86_64.AppImage
-./Mouse-Control-0.7.3-x86_64.AppImage setup
+chmod +x Mouse-Control-0.7.4-x86_64.AppImage
+./Mouse-Control-0.7.4-x86_64.AppImage setup
 ```
 
 The AppImage can contain the Python application and user-space libraries such
@@ -68,14 +68,14 @@ native package when you need the packaged udev and service integration.
 
 ### Arch Linux
 
-The repository includes a [PKGBUILD](PKGBUILD) for v0.7.3, but this project does
+The repository includes a [PKGBUILD](PKGBUILD) for v0.7.4, but this project does
 not currently claim to publish an AUR package. Review and build it locally, or
 install from source. OpenRazer remains an optional dependency.
 
 ### Source installation
 
 For developers and advanced users, download the source distribution from the
-[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.3), or clone this repository:
+[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.4), or clone this repository:
 
 ```bash
 git clone https://github.com/DonGeronimo7/mouse-control.git

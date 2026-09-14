@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.3 — 2026-09-13
+## 0.7.4 — 2026-09-13
 
 ### Community hardware support reports
 

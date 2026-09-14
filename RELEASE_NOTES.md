@@ -1,6 +1,6 @@
-# Mouse Control v0.7.3
+# Mouse Control v0.7.4
 
-Mouse Control v0.7.3 adds an optional live battery indicator while retaining
+Mouse Control v0.7.4 adds an optional live battery indicator while retaining
 the native Logitech HID++ modernization introduced across the v0.7.x feature
 set. Ordinary evdev remapping remains available when vendor-specific hardware
 control is unavailable.
@@ -88,4 +88,4 @@ affecting the Logitech HID++ backend.
 ## Install or upgrade
 
 Packaging artifacts are intentionally not part of this source checkpoint.
-The v0.7.3 source is ready for the separate packaging and release workflow.
+The v0.7.4 source is ready for the separate packaging and release workflow.

@@ -1,0 +1,73 @@
+name: Release artifacts
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - run: python -m pip install --upgrade build
+      - run: python -m build
+      - uses: actions/upload-artifact@v5
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Debian build dependencies
+        run: sudo apt-get update && sudo apt-get install -y debhelper dh-python python3-all python3-setuptools python3-evdev python3-dbus-next
+      - name: Build Debian package
+        run: dpkg-buildpackage -us -uc -b
+      - uses: actions/upload-artifact@v5
+        with:
+          name: debian-package
+          path: ../mouse-control_*.deb
+          if-no-files-found: error
+
+  rpm:
+    runs-on: ubuntu-latest
+    container: fedora:44
+    steps:
+      - uses: actions/checkout@v5
+      - run: dnf -y install dnf-plugins-core rpm-build rpmdevtools
+      - run: dnf -y builddep mouse-control.spec
+      - run: |
+          python3 -m build --sdist
+          rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: fedora-rpm
+          path: rpms/noarch/mouse-control-*.rpm
+          if-no-files-found: error
+
+  appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install AppImage build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y python3-pip libfuse2
+      - name: Install AppImageKit 13
+        run: |
+          curl --fail --location --retry 3 --output /tmp/appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/13/obsolete-appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          sudo ln -s /tmp/appimagetool.AppImage /usr/local/bin/appimagetool
+      - name: Build AppImage
+        run: ARCH=x86_64 sh packaging/appimage/build-appimage.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: appimage
+          path: Mouse-Control-*.AppImage
+          if-no-files-found: error

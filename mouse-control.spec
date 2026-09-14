@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.3
+Version:        0.7.4
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -59,6 +59,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 
 %changelog
+* Sun Sep 13 2026 Marc-A. Geronimo - 0.7.4-1
+- Release community hardware support reporting with a local, read-only workflow.
+
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.3-1
 - Add the on-demand, read-only mouse-control support report workflow for
   community hardware testing. Reports remain local and include optional guided

@@ -11,7 +11,7 @@ MOUSE = MouseDevice("Turtle Beach Kone II", "/dev/input/event99", vendor=0x1E7D,
 
 
 def report_model():
-    return {"mouse_control": {"Version": "0.7.3"}, "system": {"Distribution": "Test Linux", "Kernel": "1"}, "device": {"Manufacturer": "Turtle Beach", "Product": "Kone II", "USB VID:PID": "1e7d:2e27"}, "interfaces": {"evdev": "accessible", "hidraw": "None detected", "Kernel driver": "Unknown"}, "input": {"Buttons": "BTN_SIDE", "Relative motion": "yes"}, "hid": {"Report descriptor": "Not found"}, "backend": {"Selected backend": "Generic HID / evdev", "DPI": "Unsupported", "Polling rate": "Unsupported", "Hardware control": "generic input/remapping only"}, "guided": {}, "errors": []}
+    return {"mouse_control": {"Version": "0.7.4"}, "system": {"Distribution": "Test Linux", "Kernel": "1"}, "device": {"Manufacturer": "Turtle Beach", "Product": "Kone II", "USB VID:PID": "1e7d:2e27"}, "interfaces": {"evdev": "accessible", "hidraw": "None detected", "Kernel driver": "Unknown"}, "input": {"Buttons": "BTN_SIDE", "Relative motion": "yes"}, "hid": {"Report descriptor": "Not found"}, "backend": {"Selected backend": "Generic HID / evdev", "DPI": "Unsupported", "Polling rate": "Unsupported", "Hardware control": "generic input/remapping only"}, "guided": {}, "errors": []}
 
 
 def test_report_is_deterministic_and_has_no_paths_or_personal_values():
