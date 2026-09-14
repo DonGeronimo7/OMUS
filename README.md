@@ -1,30 +1,67 @@
 # Mouse Control
 
+Open-source Linux gaming mouse configuration and remapping: map mouse buttons to keyboard keys, configure supported DPI and polling rates, and help test new hardware.
+
 [![Current release](https://img.shields.io/github/v/release/DonGeronimo7/mouse-control?display_name=tag&label=release)](https://github.com/DonGeronimo7/mouse-control/releases/latest)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-FCC624?logo=linux&logoColor=black)](https://github.com/DonGeronimo7/mouse-control)
 
-A Linux mouse configuration and remapping utility designed to work across
-hardware vendors. Mouse Control provides software button remapping through
-evdev/uinput and uses available hardware integrations for DPI and polling-rate
-configuration. When a vendor-specific feature is unavailable, ordinary
-software remapping can still be available.
+Mouse Control is a Linux gaming mouse utility for people whose vendor software
+does not work on Linux. It remaps extra mouse buttons through evdev/uinput,
+including mapping a mouse button to a keyboard key, disabling a button, or
+passing it through. This input-level approach is suited to modern Linux desktop
+sessions, including Wayland, without relying on X11-specific remapping.
+
+Where a device has a validated hardware backend, Mouse Control can also expose
+DPI and polling/report-rate configuration. Native Logitech HID/HID++ support
+discovers capabilities from the device; OpenRazer is optional for applicable
+Razer hardware. When those controls are unavailable, ordinary mouse remapping
+continues to work. Generic USB HID does not standardize DPI or polling-rate
+writes, so Mouse Control never guesses them.
 
 The current release is [v0.7.4](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.4).
 
+## What Mouse Control does
+
+- Remaps gaming-mouse buttons, including side buttons, to mouse actions or keyboard keys.
+- Disables or passes through buttons when that fits a game or desktop workflow.
+- Configures DPI and polling/report rate only when a detected backend reports that capability.
+- Uses native Logitech HID++ discovery for supported capabilities; the Logitech G305 is the physically validated reference device.
+- Uses optional OpenRazer integration for supported Razer hardware without making it a requirement for remapping.
+- Falls back to read-only generic HID diagnostics and evdev/uinput remapping when advanced hardware control is unavailable.
+- Invites community testing of unsupported mice with a privacy-safe support report.
+
+## Get Mouse Control
+
+Get the latest package from the [v0.7.4 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.4):
+
+- **Fedora, Nobara, and other RPM distributions:** RPM
+- **Debian, Ubuntu, Mint, and other DEB distributions:** DEB
+- **Other distributions:** AppImage
+- **Arch Linux:** included [PKGBUILD](PKGBUILD)
+- **Developers and advanced users:** source installation
+
+Detailed commands and package filenames are in [Install](#install).
+
+## Unsupported gaming mouse? Help expand compatibility
+
+Run:
+
+```bash
+mouse-control support
+```
+
+This creates a local, privacy-safe, read-only report for the mouse you select.
+Nothing is uploaded automatically and probing performs no hardware writes.
+Attach the report to the [hardware compatibility issue template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml) to help expand Linux gaming-mouse compatibility. `mouse-control support --guided` can additionally record one requested side-button press.
+
+Unknown hardware is expected: a useful report does not mean the device is
+already supported. In particular, this project does not claim support for the
+Turtle Beach Kone II.
+
 ## Install
-
-## Community hardware testing
-
-`mouse-control support` creates a local, privacy-safe report for an unsupported
-mouse selected by the user. It records relevant device identity, input
-capabilities, backend status, HID interfaces, and deterministic HID
-report-descriptor topology. Reports are never uploaded automatically and there
-is no telemetry or hardware write during probing. `--guided` optionally records
-one requested side-button press. Unknown hardware is expected and still yields
-a useful report; this does not claim Turtle Beach Kone II compatibility.
 
 Choose the package that fits your Linux distribution. Native packages are the
 best choice when available: they install the dependencies and udev integration
@@ -109,6 +146,52 @@ mouse-control stop
 
 Run `mouse-control install-service` once before `start`. `mouse-control run`
 remains the explicit foreground/debug command; it does not start the service.
+
+## How Mouse Control fits into the Linux mouse ecosystem
+
+Mouse Control combines mouse-focused evdev/uinput remapping, selected
+hardware-control backends, and a community hardware-reporting path. It can be a
+useful complement to established Linux mouse tools:
+
+- [Piper](https://github.com/libratbag/piper) is a GTK application to configure gaming devices and works with the [libratbag](https://github.com/libratbag/libratbag) configuration daemon.
+- [Solaar](https://github.com/pwr-Solaar/Solaar) is a Linux device manager for Logitech devices.
+- [Input Remapper](https://github.com/sezanzeb/input-remapper) changes the behavior of a broader range of Linux input devices.
+- [OpenRazer](https://github.com/openrazer/openrazer) provides a Linux driver and user-space daemon for Razer features; Mouse Control can use it optionally where applicable.
+
+Mouse Control does not require libratbag or OpenRazer for ordinary evdev/uinput
+remapping, and its native Logitech HID++ path is independent of libratbag.
+
+## Frequently asked questions
+
+### Does Mouse Control work on Wayland?
+
+Mouse Control remaps through Linux evdev/uinput rather than an X11-specific
+remapping layer, so its core remapping model is suitable for Wayland desktop
+sessions. Device access and optional keyboard-key capture still depend on the
+active session's permissions and desktop policy.
+
+### Can I remap gaming-mouse buttons on Linux?
+
+Yes. Mouse Control can pass through, disable, or remap mouse buttons to mouse
+actions or keyboard keys. This software remapping remains available separately
+from vendor-specific hardware features.
+
+### Can I change gaming-mouse DPI on Linux?
+
+Only when a detected, validated backend exposes writable DPI capability for the
+selected device. Generic USB HID does not define a standard DPI-control command,
+so Mouse Control does not make unverified DPI writes.
+
+### Can Mouse Control change mouse polling rate on Linux?
+
+Only when the selected device reports supported polling/report rates through a
+validated backend. Mouse Control verifies reported capabilities rather than
+assuming a default rate or generic HID command.
+
+### What if my gaming mouse is unsupported?
+
+Run `mouse-control support`, review the local report, and attach it to the
+[hardware compatibility issue template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml). This read-only workflow helps guide future device work; it does not claim the device is already supported.
 
 ## Hardware support
 
