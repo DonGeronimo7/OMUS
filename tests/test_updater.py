@@ -133,7 +133,10 @@ def test_native_package_update_uses_manager_not_file_replacement(monkeypatch, ki
     install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
     calls = []
-    updater._package_update(install, release(assets=()), lambda args: calls.append(args) or result())
+    def runner(args):
+        calls.append(args)
+        return result(out="0.8.0\n") if args[0] in {"rpm", "dpkg-query"} else result()
+    updater._package_update(install, release(assets=()), runner)
     assert calls and calls[0][0] in {"sudo", manager}
     assert not any(str(install.executable) in part for call in calls for part in call)
 
@@ -149,9 +152,77 @@ def test_package_manager_failure_uses_only_matching_official_asset(monkeypatch, 
     calls = []
     def runner(args):
         calls.append(args)
+        if args[0] == "dpkg-query":
+            return result(out="0.8.0-1\n") if any(part.endswith(".deb") for part in calls[-2]) else result(out="0.7.6-1\n")
         return result(1 if len(calls) == 1 else 0)
     updater._package_update(install, release(assets=(asset,)), runner)
     assert any(any(part.endswith(".deb") for part in call) for call in calls)
+
+
+@pytest.mark.parametrize("kind,asset_name,query", [
+    ("rpm", "mouse-control-0.8.0-1.noarch.rpm", "rpm"),
+    ("deb", "mouse-control_0.8.0_all.deb", "dpkg-query"),
+])
+def test_package_manager_false_success_falls_back_and_verifies(monkeypatch, kind, asset_name, query):
+    install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
+    asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{asset_name}"}
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    calls, installed = [], ["0.7.6"]
+    def runner(args):
+        calls.append(args)
+        if args[0] == query:
+            suffix = "-1" if kind == "deb" else ""
+            return result(out=installed[0] + suffix + "\n")
+        if any(str(part).endswith((".rpm", ".deb")) for part in args):
+            installed[0] = "0.8.0"
+        return result()
+    updater._package_update(install, release(assets=(asset,)), runner)
+    assert any(any(str(part).endswith((".rpm", ".deb")) for part in call) for call in calls)
+
+
+@pytest.mark.parametrize("kind,query_version", [("rpm", "0.8.0"), ("deb", "1:0.8.0-2")])
+def test_package_manager_real_upgrade_does_not_download(monkeypatch, kind, query_version):
+    install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(updater, "_download", lambda *_args: pytest.fail("fallback must not download"))
+    def runner(args):
+        return result(out=query_version + "\n") if args[0] in {"rpm", "dpkg-query"} else result()
+    updater._package_update(install, release(), runner)
+
+
+def test_dnf_error_continues_to_verified_github_rpm(monkeypatch):
+    install = updater.Installation("rpm", Path("/usr/bin/mouse-control"), "mouse-control")
+    package = "mouse-control-0.8.0-1.noarch.rpm"
+    artifact = {"name": package, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{package}"}
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    installed, calls = ["0.7.6"], []
+    def runner(args):
+        calls.append(args)
+        if args[0] == "rpm":
+            return result(out=installed[0] + "\n")
+        if any(str(part).endswith(".rpm") for part in args):
+            installed[0] = "0.8.0"
+            return result()
+        return result(1, err="not in repository")
+    updater._package_update(install, release(assets=(artifact,)), runner)
+    assert any(any(str(part).endswith(".rpm") for part in call) for call in calls)
+
+
+@pytest.mark.parametrize("kind,asset_name,query", [
+    ("rpm", "mouse-control-0.8.0-1.noarch.rpm", "rpm"),
+    ("deb", "mouse-control_0.8.0_all.deb", "dpkg-query"),
+])
+def test_package_fallback_requires_final_version_verification(monkeypatch, kind, asset_name, query):
+    install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
+    asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{asset_name}"}
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    def runner(args):
+        return result(out="0.7.6\n") if args[0] == query else result()
+    with pytest.raises(updater.UpdateError, match="did not install"):
+        updater._package_update(install, release(assets=(asset,)), runner)
 
 
 def test_arch_is_conservative():

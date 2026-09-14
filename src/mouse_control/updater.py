@@ -217,6 +217,37 @@ def _sudo(command: list[str]) -> list[str]:
     return ["sudo", *command]
 
 
+def _installed_package_version(installation: Installation, run: Callable) -> str | None:
+    """Return the installed upstream version, or ``None`` when unverified.
+
+    RPM's VERSION field deliberately excludes its packaging release.  Debian
+    versions can include an epoch and Debian revision; neither is part of the
+    Mouse Control release tag we compare against.
+    """
+    package = installation.package or "mouse-control"
+    command = (['rpm', '-q', '--qf', '%{VERSION}\\n', package]
+               if installation.kind == 'rpm'
+               else ['dpkg-query', '-W', '-f=${Version}\\n', package])
+    result = run(command)
+    if result.returncode:
+        return None
+    version = result.stdout.strip()
+    if installation.kind == "deb":
+        version = version.partition(":")[2] if ":" in version else version
+        version = version.rsplit("-", 1)[0]
+    return version or None
+
+
+def _package_is_current(installation: Installation, release: Release, run: Callable) -> bool:
+    installed = _installed_package_version(installation, run)
+    if installed is None:
+        return False
+    try:
+        return Version(installed.lstrip("vV")) >= Version(release.version.lstrip("vV"))
+    except InvalidVersion:
+        return False
+
+
 def _package_update(installation: Installation, release: Release, run: Callable = _run) -> None:
     if installation.kind == "arch":
         raise UpdateError("This pacman-owned installation is not updated automatically. Update it using the package source that installed it.")
@@ -227,8 +258,8 @@ def _package_update(installation: Installation, release: Release, run: Callable 
     # First let the enabled native repository perform a normal upgrade.
     native = _sudo([manager, "upgrade" if manager == "dnf" else "install", package] if manager == "dnf"
                    else [manager, "install", "--only-upgrade", package])
-    result = run(native)
-    if result.returncode == 0:
+    run(native)
+    if _package_is_current(installation, release, run):
         return
     # A direct GitHub package can be upgraded safely through the same manager.
     suffix = ".rpm" if installation.kind == "rpm" else ".deb"
@@ -241,8 +272,9 @@ def _package_update(installation: Installation, release: Release, run: Callable 
         artifact = _download(asset, destination)
         command = [manager, "install", str(artifact)]
         result = run(_sudo(command))
-    if result.returncode:
-        raise UpdateError(result.stderr.strip() or result.stdout.strip() or "Package manager update failed.")
+    if result.returncode or not _package_is_current(installation, release, run):
+        raise UpdateError(result.stderr.strip() or result.stdout.strip()
+                          or "Package manager did not install the requested release.")
 
 
 def _appimage_update(installation: Installation, release: Release, opener: Callable = urlopen) -> None:
@@ -323,7 +355,7 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
     except UpdateError as exc:
         print(f"Update failed. Your existing installation was not manually replaced.\nReason: {exc}", file=sys.stderr)
         return 1
-    print("Mouse Control was updated successfully.")
+    print(f"Mouse Control was updated successfully to {release.version}.")
     if active:
         try:
             restart_service()
