@@ -30,11 +30,14 @@ jobs:
       - name: Install Debian build dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential debhelper dh-python pybuild-plugin-pyproject python3-all python3-setuptools python3-evdev python3-dbus-next
       - name: Build Debian package
-        run: dpkg-buildpackage -us -uc -b
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir artifacts
+          mv ../mouse-control_*.deb artifacts/
       - uses: actions/upload-artifact@v5
         with:
           name: debian-package
-          path: ../mouse-control_*.deb
+          path: artifacts/*.deb
           if-no-files-found: error
 
   rpm:
