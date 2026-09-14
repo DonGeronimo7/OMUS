@@ -2,12 +2,16 @@
 set -eu
 # Run in a clean x86_64 build environment with appimagetool installed.
 test "$(uname -m)" = x86_64
+python3 -c 'import sys; assert sys.version_info >= (3, 12), "AppImage build needs Python >= 3.12"'
 rm -rf AppDir
 mkdir -p AppDir/usr/bin AppDir/usr/share/applications
 python3 -m pip install --target AppDir/usr/lib/python3/site-packages .
 cat > AppDir/usr/bin/mouse-control <<'EOF'
 #!/bin/sh
-appdir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+appdir=${APPDIR:-}
+if [ -z "$appdir" ]; then
+  appdir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+fi
 export PYTHONPATH="${appdir}/usr/lib/python3/site-packages${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m mouse_control.cli "$@"
 EOF
@@ -22,7 +26,12 @@ install -Dm644 packaging/appimage/mouse-control.desktop AppDir/mouse-control.des
 install -Dm644 assets/icons/hicolor/256x256/apps/mouse-control.png AppDir/mouse-control.png
 cat > AppDir/AppRun <<'EOF'
 #!/bin/sh
-exec "$(dirname "$0")/usr/bin/mouse-control" "$@"
+appdir=${APPDIR:-}
+if [ -z "$appdir" ]; then
+  appdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+fi
+export APPDIR="$appdir"
+exec "$appdir/usr/bin/mouse-control" "$@"
 EOF
 chmod +x AppDir/AppRun
 appimagetool AppDir Mouse-Control-0.7.8-x86_64.AppImage

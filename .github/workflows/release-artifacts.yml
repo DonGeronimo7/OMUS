@@ -57,7 +57,7 @@ jobs:
           if-no-files-found: error
 
   appimage:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - name: Install AppImage build prerequisites
@@ -69,6 +69,11 @@ jobs:
           sudo ln -s /tmp/appimagetool.AppImage /usr/local/bin/appimagetool
       - name: Build AppImage
         run: ARCH=x86_64 sh packaging/appimage/build-appimage.sh
+      - name: Smoke-test AppImage
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --version
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --help
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage update --check
       - uses: actions/upload-artifact@v5
         with:
           name: appimage
