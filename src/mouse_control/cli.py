@@ -26,6 +26,7 @@ from .permissions import permission_report
 from .doctor import doctor_fix, print_doctor
 from . import __version__
 from .branding import print_banner, style
+from .updater import run_update
 
 
 LOG = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stop", help="stop the background service")
     sub.add_parser("restart", help="restart the background service")
     sub.add_parser("status", help="show the background service status")
+    update = sub.add_parser("update", help="check for and safely install an update")
+    update.add_argument("--check", action="store_true", help="only check whether an update is available")
+    update.add_argument("--yes", action="store_true", help="do not ask before updating")
 
     return parser
 
@@ -549,6 +553,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "support":
         return run_support(guided=args.guided)
+
+    if args.command == "update":
+        return run_update(check=args.check, assume_yes=args.yes)
 
     try:
         if args.command == "install-service":

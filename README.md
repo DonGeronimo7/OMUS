@@ -47,6 +47,18 @@ Get the latest package from the [v0.7.4 release](https://github.com/DonGeronimo7
 
 Detailed commands and package filenames are in [Install](#install).
 
+## Updating
+
+Run `mouse-control update` to check the latest stable GitHub release and update
+the installation currently running the command. Mouse Control detects its
+documented installation methods and delegates to the owning native mechanism
+(DNF, APT, a user-owned AppImage, or the active Python environment). Use
+`mouse-control update --check` for a non-modifying availability check.
+
+Repository packages can intentionally lag behind the newest GitHub release.
+Editable/source and unsupported installation methods are reported with safe
+next steps rather than changed automatically.
+
 ## Unsupported gaming mouse? Help expand compatibility
 
 Run:
