@@ -28,6 +28,38 @@ class Tray:
     def close(self): self.closed += 1
 
 
+def wait_for(predicate, timeout=1.):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(.001)
+    assert predicate()
+
+
+class ScriptedBackend(HardwareBackend):
+    def __init__(self, outcomes):
+        self.outcomes = iter(outcomes)
+        self.calls = 0
+        self.finished = threading.Event()
+        self.release = threading.Event()
+
+    def supports_device(self, device): return True
+    def supports_battery(self, device): return True
+
+    def get_battery_state(self, device):
+        self.calls += 1
+        try:
+            outcome = next(self.outcomes)
+        except StopIteration:
+            self.finished.set()
+            self.release.wait()
+            raise RuntimeError("test backend stopped")
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
 def test_icons_are_simple_symbolic_battery_states():
     assert battery_icon(100) == "battery-full-symbolic"
     assert battery_icon(50) == "battery-medium-symbolic"
@@ -110,11 +142,21 @@ def test_sni_tooltip_uses_the_dbus_next_status_notifier_signature():
 
 def test_battery_menu_contains_live_identity_percentage_and_status():
     properties = battery_menu_properties("Example Mouse", BatteryState(percentage=83, status="discharging"))
-    assert properties[1]["label"].value == "Example Mouse"
-    assert properties[3]["label"].value == "Battery: 83%"
-    assert properties[4]["label"].value == "Status: Discharging"
+    assert properties[1]["label"].value == "Battery: 83%"
+    assert properties[2]["label"].value == "Status: Discharging"
     assert all("G305" not in value.value and "90%" not in value.value
                for row in properties.values() for value in row.values() if value.signature == "s")
+
+
+def test_device_name_does_not_appear_in_tray_menu():
+    """Device name must not appear in tray menu labels."""
+    properties = battery_menu_properties("G305 Gaming Mouse", BatteryState(percentage=83, status="discharging"))
+    for row_values in properties.values():
+        for value in row_values.values():
+            if value.signature == "s":
+                assert "G305" not in value.value
+                assert "Gaming" not in value.value
+                assert "Mouse" not in value.value
 
 
 def test_status_notifier_exposes_a_standard_menu_object_path():
@@ -125,10 +167,61 @@ def test_status_notifier_exposes_a_standard_menu_object_path():
 def test_battery_menu_omits_status_when_unavailable_and_updates_with_state():
     before = battery_menu_properties("Example Mouse", BatteryState(percentage=25, status="discharging"))
     after = battery_menu_properties("Example Mouse", BatteryState(percentage=78))
-    assert before[3]["label"].value == "Battery: 25%"
-    assert after[3]["label"].value == "Battery: 78%"
-    assert 4 in before
-    assert 4 not in after
+    assert before[1]["label"].value == "Battery: 25%"
+    assert after[1]["label"].value == "Battery: 78%"
+    assert 2 in before
+    assert 2 not in after
+
+
+def test_transient_failures_keep_last_known_battery_visible():
+    stop, tray = threading.Event(), Tray()
+    backend = ScriptedBackend([BatteryState(percentage=75), RuntimeError("timeout"),
+                               RuntimeError("timeout")])
+    monitor = BatteryMonitorSupervisor(backend, DEVICE, lambda _: backend, stop, tray=tray,
+                                       interval=.001, retry_interval=.001)
+    monitor.start()
+    try:
+        wait_for(backend.finished.is_set)
+        assert tray.values == [(BatteryState(percentage=75), "test")]
+        assert tray.closed == 0
+        assert monitor._consecutive_failures == 2
+    finally:
+        backend.release.set()
+        monitor.stop()
+
+
+def test_third_consecutive_failure_closes_the_tray():
+    stop, tray = threading.Event(), Tray()
+    backend = ScriptedBackend([BatteryState(percentage=75), RuntimeError("timeout"),
+                               RuntimeError("timeout"), RuntimeError("timeout")])
+    monitor = BatteryMonitorSupervisor(backend, DEVICE, lambda _: backend, stop, tray=tray,
+                                       interval=.001, retry_interval=.001)
+    monitor.start()
+    try:
+        wait_for(backend.finished.is_set)
+        assert tray.closed == 1
+        assert monitor._consecutive_failures == 3
+    finally:
+        backend.release.set()
+        monitor.stop()
+
+
+def test_successful_read_resets_failure_counter():
+    stop, tray = threading.Event(), Tray()
+    backend = ScriptedBackend([BatteryState(percentage=60), RuntimeError("timeout"),
+                               RuntimeError("timeout"), BatteryState(percentage=61),
+                               RuntimeError("timeout"), RuntimeError("timeout")])
+    monitor = BatteryMonitorSupervisor(backend, DEVICE, lambda _: backend, stop, tray=tray,
+                                       interval=.001, retry_interval=.001)
+    monitor.start()
+    try:
+        wait_for(backend.finished.is_set)
+        assert [state.percentage for state, _ in tray.values] == [60, 61]
+        assert tray.closed == 0
+        assert monitor._consecutive_failures == 2
+    finally:
+        backend.release.set()
+        monitor.stop()
 
 
 def test_battery_menu_layout_has_valid_dbusmenu_struct_and_variant_shapes():

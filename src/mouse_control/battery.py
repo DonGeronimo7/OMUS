@@ -84,13 +84,11 @@ def battery_menu_properties(device_name: str, state: BatteryState):
     if state.percentage is None:
         raise ValueError("battery percentage is required for a menu")
     rows = {
-        1: {"label": Variant("s", device_name), "enabled": Variant("b", False)},
-        2: {"type": Variant("s", "separator")},
-        3: {"label": Variant("s", f"Battery: {state.percentage}%"),
+        1: {"label": Variant("s", f"Battery: {state.percentage}%"),
             "enabled": Variant("b", False)},
     }
     if state.status:
-        rows[4] = {"label": Variant("s", f"Status: {state.status.capitalize()}"),
+        rows[2] = {"label": Variant("s", f"Status: {state.status.capitalize()}"),
                    "enabled": Variant("b", False)}
     return rows
 
@@ -273,6 +271,7 @@ class BatteryMonitorSupervisor:
         self.backend, self.device, self.backend_factory = backend, device, backend_factory
         self.shutdown_event, self.tray = shutdown_event, tray or StatusNotifierTray()
         self.interval, self.retry_interval, self._thread = interval, retry_interval, None
+        self._consecutive_failures = 0
 
     def _run(self) -> None:
         backend = self.backend
@@ -287,14 +286,18 @@ class BatteryMonitorSupervisor:
                 LOG.debug("BatteryState delivered to monitor: %s; tray percentage: %s",
                           state, state.percentage)
                 self.tray.update(state, self.device.name); shown = True
+                self._consecutive_failures = 0
                 if self.shutdown_event.wait(self.interval): break
                 continue
             except Exception as exc:
-                if shown:
-                    LOG.info("Battery state unavailable; removing tray item: %s", exc)
+                self._consecutive_failures += 1
+                if shown and self._consecutive_failures >= 3:
+                    LOG.info("Battery state unavailable after %d consecutive failures; removing tray item: %s",
+                             self._consecutive_failures, exc)
                     self.tray.close(); shown = False
                 elif not self.shutdown_event.is_set():
-                    LOG.debug("Battery monitoring unavailable: %s", exc)
+                    LOG.debug("Battery monitoring unavailable (failure %d/%d): %s",
+                              self._consecutive_failures, 3, exc)
             if self.shutdown_event.wait(self.retry_interval): break
             try:
                 close = getattr(backend, "close", None)
