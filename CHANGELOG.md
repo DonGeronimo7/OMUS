@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.6 — 2026-09-14
+
+### Release packaging
+
+- Makes the universal updater, terminal-native launcher, and icon assets the
+  user-facing release after the unpublished v0.7.5 tag.
+- Adds the missing Arch `python-setuptools` build dependency.
+
 ## 0.7.5 — 2026-09-13
 
 ### Universal updater

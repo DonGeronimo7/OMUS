@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.5
+Version:        0.7.6
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Sun Sep 14 2026 Marc-A. Geronimo - 0.7.6-1
+- Fix Arch build dependencies for the updater release.
+
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.5-1
 - Add the safe cross-distribution update command and package its version
   comparison dependency.
