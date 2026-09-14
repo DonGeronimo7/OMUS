@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 — 2026-09-14
+
+- Make setup revisitable, with numeric live DPI testing and Back/Cancel rollback.
+- Show readable polling rates and offer selection only when safe writes are supported.
+- Save accepted DPI stages so runtime cycling uses the reviewed values.
+
 ## 0.8.0 — 2026-09-14
 
 - Add held keyboard chord bindings, setup capture, shared-modifier handling,
