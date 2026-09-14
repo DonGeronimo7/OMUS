@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.4
+Version:        0.7.5
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -12,6 +12,7 @@ BuildRequires:  python3-wheel
 BuildRequires:  python3-pytest
 BuildRequires:  python3-evdev
 BuildRequires:  python3-dbus-next
+BuildRequires:  python3-packaging
 BuildRequires:  pyproject-rpm-macros
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  desktop-file-utils
@@ -20,6 +21,7 @@ BuildRequires:  desktop-file-utils
 %undefine py_auto_byte_compile
 Requires:       python3-evdev
 Requires:       python3-dbus-next
+Requires:       python3-packaging
 Requires:       systemd-udev
 
 %description
@@ -69,6 +71,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Sun Sep 13 2026 Marc-A. Geronimo - 0.7.5-1
+- Add the safe cross-distribution update command and package its version
+  comparison dependency.
+
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.4-1
 - Release community hardware support reporting with a local, read-only workflow.
 

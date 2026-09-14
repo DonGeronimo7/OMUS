@@ -1,17 +1,24 @@
 pkgname=mouse-control
-pkgver=0.7.4
+pkgver=0.7.5
 pkgrel=1
 pkgdesc='Headless evdev/uinput mouse remapping with optional hardware backends'
 arch=('any')
 url='https://github.com/DonGeronimo7/mouse-control'
 license=('GPL-3.0-or-later')
-depends=('python' 'python-evdev' 'python-dbus-next' 'systemd')
+depends=('python' 'python-evdev' 'python-dbus-next' 'python-packaging' 'systemd')
+makedepends=('git' 'python-build' 'python-installer')
 optdepends=('openrazer: optional Razer hardware integration')
-source=("https://github.com/DonGeronimo7/mouse-control/releases/download/v${pkgver}/mouse_control-${pkgver}.tar.gz")
-sha256sums=('a276ae3c5ef58df1707ed7fbca55e401cb46c35cd4406e86f7446779480b7dc6')
+# Stable source is pinned to the exact upstream release tag.
+source=("mouse-control::git+https://github.com/DonGeronimo7/mouse-control.git#tag=v${pkgver}")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/mouse-control"
+  python -m build --wheel --no-isolation --outdir dist
+}
 
 package() {
-  cd "${pkgname}-${pkgver}"
+  cd "$srcdir/mouse-control"
   python -m installer --destdir="$pkgdir" dist/*.whl
   install -Dm644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
     "$pkgdir/usr/lib/udev/rules.d/71-mouse-control-uaccess.rules"

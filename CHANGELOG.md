@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.5 — 2026-09-13
+
+### Universal updater
+
+- Adds `mouse-control update` and `mouse-control update --check` for the
+  documented RPM/DNF, DEB/APT, AppImage, and Python/pip installation methods.
+- Delegates updates to the installation owner: system-package files are never
+  overwritten manually, AppImage replacement is atomic, and source/editable or
+  unsupported installations are reported without modification.
+- Validates release asset names and architecture before selection, preserves
+  user configuration and service state, and keeps `--check` non-mutating.
+
 ## 0.7.4 — 2026-09-13
 
 ### Community hardware support reports

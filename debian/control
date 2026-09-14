@@ -2,13 +2,13 @@ Source: mouse-control
 Section: utils
 Priority: optional
 Maintainer: Marc-A. Geronimo
-Build-Depends: debhelper-compat (= 13), dh-python, pybuild-plugin-pyproject, python3-all, python3-setuptools
+Build-Depends: debhelper-compat (= 13), dh-python, pybuild-plugin-pyproject, python3-all, python3-setuptools, python3-packaging
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 
 Package: mouse-control
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}, python3-evdev, python3-dbus-next, udev
+Depends: ${misc:Depends}, ${python3:Depends}, python3-evdev, python3-dbus-next, python3-packaging, udev
 Description: mouse remapping with optional hardware backends
  Headless evdev/uinput mouse remapping with native HID and optional OpenRazer
  hardware controls. Generic remapping remains available without optional backends.
