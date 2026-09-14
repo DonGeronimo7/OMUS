@@ -1,14 +1,14 @@
-# Mouse Control v0.7.10
+# Mouse Control v0.7.11
 
-## Persistent battery tray
+## RPM updater reliability
 
-The battery tray now remains visible through transient HID++ battery read
-timeouts, retaining the last known percentage. It hides only after three
-consecutive failed reads, and a successful read resets the failure count.
+RPM ownership detection now retains the stable package name. After DNF runs,
+Mouse Control verifies the installed RPM version; warnings, noisy output, or a
+nonzero DNF result cannot report a false failure when the target version is
+installed.
 
-The tray menu now shows only the battery percentage and, when available, the
-battery status; it no longer repeats the mouse/device name.
+If a native DNF upgrade leaves the old version installed, Mouse Control still
+uses the validated GitHub RPM fallback and verifies the final installed version.
 
-## Terminal branding refresh
-
-The terminal launcher branding and logo have been refreshed.
+`mouse-control update --yes` now passes DNF `--assumeyes` for both native and
+fallback installs. Updates without `--yes` keep their normal confirmation flow.

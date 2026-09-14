@@ -1,3 +1,10 @@
+mouse-control (0.7.11-1) unstable; urgency=medium
+
+  * Verify RPM updates from the installed package version after DNF completes.
+  * Make mouse-control update --yes non-interactive for DNF upgrades and fallback installs.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Mon, 14 Sep 2026 08:30:00 +0000
+
 mouse-control (0.7.10-1) unstable; urgency=medium
 
   * Keep the battery tray visible through transient HID++ read timeouts.

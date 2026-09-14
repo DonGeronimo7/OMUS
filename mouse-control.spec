@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.10
+Version:        0.7.11
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.11-1
+- Verify RPM updates from the installed package version after DNF completes.
+- Make `mouse-control update --yes` non-interactive for DNF upgrades and fallback installs.
+
 * Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.10-1
 - Keep the battery tray visible through transient HID++ read timeouts.
 - Remove the redundant device name from the tray menu and refresh terminal branding.

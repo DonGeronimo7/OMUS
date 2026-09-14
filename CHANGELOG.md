@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.11 — 2026-09-14
+
+### RPM updater reliability
+
+- Uses the stable RPM package name and verifies the installed RPM version after
+  DNF finishes, so warnings or a nonzero DNF result do not cause a false failure
+  when the target release is installed.
+- Preserves the GitHub RPM fallback when a native upgrade leaves the old version
+  installed, and verifies the final installed version.
+- Makes `mouse-control update --yes` pass DNF `--assumeyes` for native and
+  fallback installs while normal interactive updates remain unchanged.
+
 ## 0.7.10 — 2026-09-14
 
 ### Battery tray and terminal polish
