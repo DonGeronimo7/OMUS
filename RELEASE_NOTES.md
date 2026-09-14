@@ -1,13 +1,14 @@
-# Mouse Control v0.7.7
+# Mouse Control v0.7.8
 
-## Launcher and icon polish
+## Updater verification fix
 
-The interactive terminal launcher now opens with a Unicode rendition of the
-Mouse Control segmented mouse mark rather than a generic ASCII drawing. The
-menu, setup flow, remapping, hardware support, services, and updater behavior
-are unchanged.
+The RPM/DEB updater now verifies the installed Mouse Control version after
+DNF/APT runs. A successful package-manager exit no longer counts as an update
+when it leaves the installed version behind the requested release.
 
-The desktop icon keeps its cyan, blue, and magenta cyber aesthetic while using
-stronger outer contours and clearer central details. Updated 512, 256, 128,
-64, 48, and 32 pixel assets are included in the RPM, DEB, and AppImage
-packages for improved visibility in launchers, menus, taskbars, and panels.
+This fixes direct-GitHub RPM/DEB installations where the distribution package
+manager can return success with “nothing to do.” In that case, Mouse Control
+downloads the validated GitHub release package through the existing secure
+path, installs it through the native package manager, and verifies the version
+again. The updater reports success only when the installed version reaches the
+requested release.

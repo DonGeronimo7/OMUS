@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.7.7
+Version:        0.7.8
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.8-1
+- Verify installed RPM and DEB versions before reporting updater success.
+- Fall back to the validated GitHub package when native repositories do not
+  actually upgrade a direct-release installation.
+
 * Sun Sep 14 2026 Marc-Anthony Geronimo - 0.7.7-1
 - Polish the terminal launcher mark and strengthen icon visibility at small sizes.
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.8 — 2026-09-14
+
+### Updater verification
+
+- The RPM/DEB updater now verifies the installed package version after DNF/APT
+  runs instead of treating a successful process exit as proof of an upgrade.
+- When a native repository reports success but leaves Mouse Control unchanged,
+  such as a direct-GitHub RPM/DEB install with “nothing to do,” the updater
+  falls back to the validated GitHub release package.
+- GitHub package installs are verified too; success is reported only after the
+  installed version reaches the requested release.
+
 ## 0.7.7 — 2026-09-14
 
 ### Launcher and icon polish

@@ -7,7 +7,8 @@ mkdir -p AppDir/usr/bin AppDir/usr/share/applications
 python3 -m pip install --target AppDir/usr/lib/python3/site-packages .
 cat > AppDir/usr/bin/mouse-control <<'EOF'
 #!/bin/sh
-export PYTHONPATH="${APPDIR}/usr/lib/python3/site-packages${PYTHONPATH:+:$PYTHONPATH}"
+appdir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+export PYTHONPATH="${appdir}/usr/lib/python3/site-packages${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m mouse_control.cli "$@"
 EOF
 chmod +x AppDir/usr/bin/mouse-control
@@ -24,4 +25,4 @@ cat > AppDir/AppRun <<'EOF'
 exec "$(dirname "$0")/usr/bin/mouse-control" "$@"
 EOF
 chmod +x AppDir/AppRun
-appimagetool AppDir Mouse-Control-0.7.7-x86_64.AppImage
+appimagetool AppDir Mouse-Control-0.7.8-x86_64.AppImage
