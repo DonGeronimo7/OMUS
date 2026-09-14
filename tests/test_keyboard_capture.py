@@ -28,11 +28,52 @@ def device(fd=10, batches=(), held=()):
     return dev
 
 
-def run_capture(devices, ready=None):
+def run_capture(devices, ready=None, capture_function=None):
     with patch.object(capture, '_open_keyboards', return_value=devices), \
          patch.object(capture, '_capture_terminal', return_value=nullcontext()), \
          patch.object(capture, 'select', side_effect=ready or [(devices[:], [], [])]):
-        return capture.capture_keyboard_key()
+        return (capture_function or capture.capture_keyboard_key)()
+
+
+def test_chord_capture_holds_keys_until_all_released():
+    dev = device(batches=[[
+        event(ecodes.KEY_LEFTCTRL), event(ecodes.KEY_LEFTSHIFT), event(ecodes.KEY_S),
+        event(ecodes.KEY_S, 2), event(ecodes.KEY_S, 0),
+        event(ecodes.KEY_LEFTSHIFT, 0), event(ecodes.KEY_LEFTCTRL, 0)]])
+    assert run_capture([dev], capture_function=capture.capture_keyboard_chord) == (
+        'chord:KEY_LEFTCTRL+KEY_LEFTSHIFT+KEY_S')
+    dev.close.assert_called_once()
+    dev.grab.assert_not_called()
+
+
+def test_chord_capture_ignores_stale_and_one_key_attempts():
+    dev = device(held=[ecodes.KEY_ENTER], batches=[[
+        event(ecodes.KEY_ENTER), event(ecodes.KEY_ENTER, 0),
+        event(ecodes.KEY_A), event(ecodes.KEY_A, 0),
+        event(ecodes.KEY_LEFTCTRL), event(ecodes.KEY_C),
+        event(ecodes.KEY_C, 0), event(ecodes.KEY_LEFTCTRL, 0)]])
+    assert run_capture([dev], capture_function=capture.capture_keyboard_chord) == (
+        'chord:KEY_LEFTCTRL+KEY_C')
+
+
+def test_chord_capture_escape_and_disconnect_close_devices():
+    first = device(10, [OSError('unplugged')])
+    second = device(11, [[event(ecodes.KEY_ESC)]])
+    assert run_capture([first, second], capture_function=capture.capture_keyboard_chord) is None
+    first.close.assert_called_once()
+    second.close.assert_called_once()
+
+
+def test_wizard_chord_capture_and_manual_entry(capsys):
+    with patch('builtins.input', return_value='6'), \
+         patch('mouse_control.wizard.capture_keyboard_chord',
+               return_value='chord:KEY_LEFTCTRL+KEY_C'):
+        assert ask_for_action('BTN_EXTRA') == 'chord:KEY_LEFTCTRL+KEY_C'
+    assert 'Detected keyboard chord' in capsys.readouterr().out
+    with patch('builtins.input', side_effect=['6', '7', 'KEY_C',
+                                             'KEY_LEFTCTRL++KEY_C', 'key_leftctrl+key_c']), \
+         patch('mouse_control.wizard.capture_keyboard_chord', return_value=None):
+        assert ask_for_action('BTN_EXTRA') == 'chord:KEY_LEFTCTRL+KEY_C'
 
 
 @pytest.mark.parametrize('code,name', [(ecodes.KEY_LEFTMETA, 'KEY_LEFTMETA'),
@@ -125,6 +166,20 @@ def test_terminal_restored_and_buffer_flushed_on_cancel():
         with pytest.raises(KeyboardInterrupt), capture._capture_terminal():
             raise KeyboardInterrupt
     assert setter.call_args_list[0].args[2][3] == capture.termios.ISIG
+    assert setter.call_args_list[-1].args == (0, capture.termios.TCSAFLUSH, settings)
+
+
+def test_chord_terminal_allows_ctrl_c_and_restores_signals():
+    settings = [0, 0, 0, capture.termios.ICANON | capture.termios.ECHO | capture.termios.ISIG,
+                0, 0, []]
+    with patch.object(capture.sys, 'stdin') as stdin, \
+         patch.object(capture.termios, 'tcgetattr', side_effect=lambda fd: settings.copy()), \
+         patch.object(capture.termios, 'tcsetattr') as setter:
+        stdin.isatty.return_value = True
+        stdin.fileno.return_value = 0
+        with capture._capture_terminal(keep_signals=False):
+            pass
+    assert not setter.call_args_list[0].args[2][3] & capture.termios.ISIG
     assert setter.call_args_list[-1].args == (0, capture.termios.TCSAFLUSH, settings)
 
 

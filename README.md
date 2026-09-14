@@ -336,8 +336,17 @@ details, see [RELEASE_NOTES.md](RELEASE_NOTES.md).
 ## Configuration and behavior
 
 The configuration is saved at `~/.config/mouse-control/config.toml`. Supported
-mapping actions are `passthrough`, `disable`, `mouse:BTN_*`, and `key:KEY_*`.
+mapping actions are `passthrough`, `disable`, `mouse:BTN_*`, `key:KEY_*`, and
+`chord:KEY_*+KEY_*` (with two or more keys).
 The configuration can be edited by hand.
+
+For example, in `[remap]`:
+
+```toml
+BTN_EXTRA = "chord:KEY_LEFTCTRL+KEY_LEFTSHIFT+KEY_S"
+```
+
+The chord stays held while the mouse button is held.
 
 When supported by a native driver, setup uses project defaults of 800, 1500, 2000,
 2500, and 3000 DPI, selects 800 DPI as active/default, and chooses the highest

@@ -6,7 +6,8 @@ from typing import Optional
 
 from evdev import InputDevice, InputEvent, ecodes
 
-from .keyboard_capture import capture_keyboard_key
+from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
+from .remapper import parse_action
 
 
 MOUSE_ACTIONS = {
@@ -51,6 +52,18 @@ def _ask_keyboard_action() -> str:
         print("Invalid key. Use a Linux KEY_* name, such as KEY_LEFTCTRL or KEY_F13.")
 
 
+def _ask_chord_action() -> str:
+    while True:
+        raw = input("Enter key codes joined by + (example KEY_LEFTCTRL+KEY_C): ").strip().upper()
+        action = f"chord:{raw}"
+        try:
+            parse_action(action)
+        except ValueError:
+            print("Invalid chord. Enter at least two distinct Linux KEY_* names joined by +.")
+            continue
+        return action
+
+
 def _ask_mouse_action() -> str:
     while True:
         raw = input("Enter a Linux mouse button (example BTN_MIDDLE): ").strip().upper()
@@ -67,6 +80,8 @@ def ask_for_action(symbolic_name: str) -> str:
     print("  3. Remap to keyboard key")
     print("  4. Disable")
     print("  5. Enter a keyboard key code manually")
+    print("  6. Remap to keyboard chord")
+    print("  7. Enter a keyboard chord manually")
 
     while True:
         try:
@@ -87,9 +102,18 @@ def ask_for_action(symbolic_name: str) -> str:
             continue
         if choice == "5":
             return _ask_keyboard_action()
+        if choice == "6":
+            action = capture_keyboard_chord()
+            if action is not None:
+                print(f"Detected keyboard chord: {action.removeprefix('chord:')}")
+                return action
+            print("You can enter the chord manually with option 7.")
+            continue
+        if choice == "7":
+            return _ask_chord_action()
         if choice == "4":
             return "disable"
-        print("Please choose 1, 2, 3, 4, or 5.")
+        print("Please choose 1, 2, 3, 4, 5, 6, or 7.")
 
 
 def map_mouse_buttons(device_path: str) -> dict[str, str]:

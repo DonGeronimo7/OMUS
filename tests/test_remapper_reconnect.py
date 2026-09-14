@@ -57,6 +57,31 @@ def test_enodev_read_closes_stale_device_and_rebinds_stable_path():
     cycler.cycle.assert_called_once()
 
 
+def test_disconnect_releases_held_chord_before_retry():
+    old = device("/dev/input/event5", [
+        MagicMock(type=ecodes.EV_KEY, code=ecodes.BTN_EXTRA, value=1),
+    ])
+    old.read.side_effect = [old.read.return_value, OSError(errno.ENODEV, "disconnected")]
+    stop = threading.Event()
+    stop.wait = MagicMock(side_effect=lambda _interval: stop.set())
+    remapper = module.MouseRemapper(
+        TARGET.path, {"BTN_EXTRA": "chord:KEY_LEFTCTRL+KEY_S"}, stop,
+        target_device=TARGET, retry_interval=0)
+    ui = MagicMock()
+    with patch.object(module, "InputDevice", side_effect=[old, OSError(errno.ENODEV, "missing")]), \
+         patch.object(module, "UInput", return_value=ui), \
+         patch.object(module.select, "select", return_value=([9], [], [])), \
+         patch.object(module.signal, "signal"):
+        remapper.run()
+    assert [entry.args for entry in ui.write.call_args_list] == [
+        (ecodes.EV_KEY, ecodes.KEY_LEFTCTRL, 1),
+        (ecodes.EV_KEY, ecodes.KEY_S, 1),
+        (ecodes.EV_KEY, ecodes.KEY_S, 0),
+        (ecodes.EV_KEY, ecodes.KEY_LEFTCTRL, 0),
+    ]
+    assert not remapper._held_chords
+
+
 def test_fallback_rebinds_single_matching_device_and_rejects_ambiguity():
     target = MouseDevice("G305", "/dev/input/event5", phys="usb-1",
                          vendor=0x046D, product=0x4074, bustype=3)
