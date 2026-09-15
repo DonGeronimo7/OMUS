@@ -94,3 +94,35 @@ task; no memory/runtime optimization has begun.
   **inconclusive because setup was still destructive**, not a confirmed Native
   HID/HID++ regression. Install this build before repeating the physical
   polling acceptance sequence.
+
+## 2026-09-15 — Reconnect promotion after partial receiver enumeration
+
+Request: user attachment `pasted-text.txt` on
+`feat/core-hardware-stabilization`, beginning at
+`55e4af25667dc448964af3a03de99b97f856cd49`.
+
+- Physical reproduction: a G305 operating through Native HID/HID++ was
+  unplugged and reinserted. A reconnect probe during partial enumeration bound
+  Generic HID / evdev. Input and remapping later recovered, but Native HID was
+  never reacquired, leaving DPI event monitoring and DPI notifications absent
+  until `mouse-control restart`.
+- Verified root cause: `HardwareSupervisor` cleared `discovery_pending` when
+  Native HID was active but did not restore it after a Generic fallback.
+  `DpiMonitorSupervisor` therefore classified Generic's lack of DPI events as
+  final and stopped issuing short rebind attempts. This is a backend lifecycle
+  and preference defect, not a DBus notification defect.
+- Implementation: preserve Generic as an immediate safe fallback, but mark it
+  provisional after a previously selected non-Generic backend. Repeated
+  Generic-only probes close only their unselected candidate and do not advance
+  the generation. A later Native result replaces and closes Generic, advances
+  the generation, and allows consumers to subscribe on the promoted backend.
+- Regression: added a deterministic Native → Generic → Native supervisor race
+  test that verifies fallback cleanup and generation behavior, plus a DPI
+  monitor test that verifies an event after promotion reaches the notifier.
+- Validation: targeted tests passed (35 tests); full suite passed (305 tests,
+  one existing GLib deprecation warning); compileall and diff whitespace checks
+  passed.
+- Physical follow-up: reinstall/use the matching source build, remove and
+  reinsert the G305 receiver, and verify that the temporary Generic bind is
+  followed by Native HID promotion and resumed one-notification-per-DPI press.
+  That physical receiver-reinsert validation remains pending.

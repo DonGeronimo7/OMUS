@@ -130,3 +130,30 @@ Physical acceptance remains required after installing this build: verify
 custom DPI/active DPI, `BTN_FORWARD = 'dpi-cycle'`, other mappings, and a
 configured 500 Hz rate survive setup; then run the documented 1000→500→250→125→1000
 polling sequence and separate reconnect acceptance.
+
+## 2026-09-15 reconnect promotion after partial enumeration
+
+Physical reproduction: a normally operating G305 using Native HID/HID++ was
+unplugged and reinserted. During incomplete receiver enumeration the
+supervisor rebound to Generic HID / evdev. Evdev remapping recovered, but no
+later Native HID rebind occurred, so Native-HID DPI event monitoring and DPI
+notifications remained unavailable until a daemon restart.
+
+Root cause: after Native HID had cleared `HardwareSupervisor.discovery_pending`,
+a Generic fallback rebind did not set it again. `DpiMonitorSupervisor` then
+treated Generic's unsupported DPI events as conclusive and used its unsupported
+wait path instead of continuing supervisor rebind discovery. This was a
+backend-selection lifecycle defect, not a notification delivery failure.
+
+Correction: a Generic fallback following any previously selected non-Generic
+backend is provisional. The supervisor continues retrying discovery, retains
+the current Generic backend without generation churn for repeated Generic-only
+probes, and atomically promotes to Native when it becomes safely available.
+Promotion closes the superseded fallback, advances the generation, and lets
+existing generation-aware consumers bind a fresh DPI event watcher.
+
+Automated validation: 305 tests pass, including delayed Native HID discovery
+after a Generic fallback and DPI event/notification recovery after promotion.
+`python3 -m compileall -q src tests` and `git diff --check` pass. Physical
+receiver-reinsert validation on the G305 remains pending; no physical recovery
+claim is made from the fixtures alone.

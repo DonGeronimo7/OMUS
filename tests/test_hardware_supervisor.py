@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware import (DesiredHardwareState, HardwareBackend,
                                     HardwareSupervisor)
+from mouse_control.hardware.generic import GenericBackend
 from mouse_control.hardware.capabilities import BatteryState, DpiState
 from mouse_control.remapper import DpiCycler
 
@@ -116,3 +117,34 @@ def test_rebind_updates_device_identity_used_by_existing_consumers():
     second.get_dpi.assert_called_with(resolved)
     assert supervisor.device == resolved
     assert not supervisor.discovery_pending
+
+
+def test_reconnect_promotes_native_after_temporary_generic_fallback():
+    """Incomplete hotplug discovery must not make Generic permanently sticky."""
+    native_before, native_after = backend(), backend()
+    fallback = GenericBackend()
+    fallback.close = MagicMock()
+    duplicate_fallback = GenericBackend()
+    duplicate_fallback.close = MagicMock()
+    replacements = iter((fallback, duplicate_fallback, native_after))
+    supervisor = HardwareSupervisor(
+        native_before, G305, lambda _device: next(replacements))
+
+    assert supervisor.rebind(0)
+    assert supervisor.current_backend is fallback
+    assert supervisor.discovery_pending
+    assert supervisor.generation == 1
+    native_before.close.assert_called_once()
+
+    # A settling probe that finds only Generic does not replace the live
+    # fallback or advance its generation.
+    assert not supervisor.rebind(1)
+    assert supervisor.current_backend is fallback
+    assert supervisor.generation == 1
+    duplicate_fallback.close.assert_called_once()
+
+    assert supervisor.rebind(1)
+    assert supervisor.current_backend is native_after
+    assert not supervisor.discovery_pending
+    assert supervisor.generation == 2
+    fallback.close.assert_called_once()

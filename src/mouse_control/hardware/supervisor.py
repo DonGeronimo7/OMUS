@@ -43,6 +43,11 @@ class HardwareSupervisor(HardwareBackend):
         self.desired = desired
         self._device_resolver = device_resolver or (lambda selected: selected)
         self._discovery_pending = discovery_pending
+        # A Generic backend is a safe fallback, but it is not an equivalent
+        # replacement for a backend which has already demonstrated native
+        # hardware control for this device.  Keep probing in that case: hotplug
+        # enumeration may expose evdev before the protocol hidraw interface.
+        self._has_preferred_backend = not isinstance(backend, GenericBackend)
         self._lock = threading.RLock()
         self._generation = 0
         self._closed = False
@@ -150,10 +155,26 @@ class HardwareSupervisor(HardwareBackend):
                     if close:
                         close()
                 raise
+            if (isinstance(old, GenericBackend) and
+                    isinstance(replacement, GenericBackend)):
+                # The fallback remains usable while discovery settles.  Do not
+                # manufacture generations or repeatedly close/reopen it when
+                # a probe has not yet found a better backend.
+                close = getattr(replacement, "close", None)
+                if close:
+                    close()
+                self.device = resolved_device
+                return False
             self.device = resolved_device
             self._backend = replacement
             if not isinstance(replacement, GenericBackend):
+                self._has_preferred_backend = True
                 self._discovery_pending = False
+            elif self._has_preferred_backend:
+                # A previously selected native/vendor backend may return after
+                # partial hotplug enumeration.  Generic is provisional until
+                # discovery can safely reacquire that capability.
+                self._discovery_pending = True
             self._generation += 1
             if old is not replacement:
                 close = getattr(old, "close", None)
