@@ -93,7 +93,6 @@ class Hidpp20Driver:
 
     def __init__(self, session: HidSession, device_index: int) -> None:
         self.session, self.device_index = session, device_index
-        self._profile_mode: int | None = None
         protocol = get_protocol_version(session, device_index)
         if protocol is None:
             raise HidppError("device is not HID++ 2")
@@ -132,8 +131,6 @@ class Hidpp20Driver:
     def _discover_dpi(self) -> DpiCapabilities:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
         if feature is None:
-            # 0x2202 is represented but not claimed until its independent-axis
-            # packet format is implemented and validated.
             return DpiCapabilities()
         count = self.session.request(self.device_index, feature.index, 0x00)
         if not count.parameters or count.parameters[0] == 0:
@@ -188,40 +185,33 @@ class Hidpp20Driver:
             return self._read_unified_battery(feature)
         return self._read_battery_status(self.features[BATTERY_STATUS_FEATURE_ID])
 
-    def _get_profile_mode(self) -> int:
-        profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
-        if profiles is None or profiles.version not in VALIDATED_ONBOARD_PROFILE_VERSIONS:
+    def supports_profile_mode_control(self) -> bool:
+        feature = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
+        return feature is not None and feature.version in VALIDATED_ONBOARD_PROFILE_VERSIONS
+
+    def get_profile_mode(self) -> int:
+        if not self.supports_profile_mode_control():
             raise HidppError("validated onboard-profile mode control is unavailable")
+        profiles = self.features[ONBOARD_PROFILES_FEATURE_ID]
         response = self.session.request(self.device_index, profiles.index, 0x02)
         if not response.parameters or response.parameters[0] not in (ONBOARD_MODE, HOST_MODE):
             raise HidppError("malformed onboard-profiles mode response")
-        self._profile_mode = response.parameters[0]
-        return self._profile_mode
+        return response.parameters[0]
 
-    def _set_profile_mode(self, mode: int) -> int:
+    def set_profile_mode(self, mode: int) -> int:
         if mode not in (ONBOARD_MODE, HOST_MODE):
             raise HidppError(f"refusing invalid onboard-profiles mode 0x{mode:02x}")
-        profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
-        if profiles is None or profiles.version not in VALIDATED_ONBOARD_PROFILE_VERSIONS:
+        if not self.supports_profile_mode_control():
             raise HidppError("validated onboard-profile mode control is unavailable")
-        # 0x8100 function 0x10 changes only the live control mode. It does not
-        # write profile sectors, macros, DPI tables, report-rate storage or CRCs.
+        profiles = self.features[ONBOARD_PROFILES_FEATURE_ID]
         self.session.request(self.device_index, profiles.index, 0x01, bytes((mode,)))
-        actual = self._get_profile_mode()
+        actual = self.get_profile_mode()
         if actual != mode:
             raise HidppError(
                 f"onboard-profiles mode verification failed: requested 0x{mode:02x}, "
                 f"read 0x{actual:02x}"
             )
         return actual
-
-    def _ensure_host_mode(self) -> None:
-        # Re-read instead of trusting cached discovery state. This costs one
-        # request only when a report-rate write is requested and avoids writing
-        # against stale device state after reconnects or firmware mode changes.
-        if self._get_profile_mode() == HOST_MODE:
-            return
-        self._set_profile_mode(HOST_MODE)
 
     def _discover_report_rate(self) -> ReportRateCapabilities:
         feature = self.features.get(REPORT_RATE_FEATURE_ID)
@@ -233,12 +223,7 @@ class Hidpp20Driver:
         flags = response.parameters[0]
         values = tuple(1000 // milliseconds for milliseconds in range(1, 9)
                        if flags & (1 << (milliseconds - 1)))
-        profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
-        writable = False
-        if profiles is not None and profiles.version in VALIDATED_ONBOARD_PROFILE_VERSIONS:
-            self._get_profile_mode()
-            writable = True
-        return ReportRateCapabilities(readable=bool(values), writable=writable,
+        return ReportRateCapabilities(readable=bool(values), writable=bool(values),
                                       values=values)
 
     def get_dpi_state(self, *, active_stage: int | None = None) -> DpiState:
@@ -279,7 +264,6 @@ class Hidpp20Driver:
             raise HidppError(f"unsupported report rate {hz} Hz")
         if hz <= 0 or 1000 % hz:
             raise HidppError(f"invalid report rate {hz} Hz")
-        self._ensure_host_mode()
         milliseconds = 1000 // hz
         feature = self.features[REPORT_RATE_FEATURE_ID]
         self.session.request(self.device_index, feature.index, 0x02,
@@ -302,8 +286,7 @@ class Hidpp20Driver:
                     report.report_id == 0x11 and report.feature_index == profile.index and
                     report.function_or_event == 0x01 and report.software_id == 0 and
                     report.parameters and report.parameters[0] < 16):
-                stage = report.parameters[0]
-                pending.put(stage)
+                pending.put(report.parameters[0])
 
         unsubscribe = self.session.subscribe(receive)
         try:
