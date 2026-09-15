@@ -37,7 +37,9 @@ failed hardware backend must never prevent ordinary remapping from starting.
 
 ## Development workflow
 
+- Read `docs/AI_HANDOFF_PROTOCOL.md` before beginning implementation work.
 - Read `docs/PROJECT_STATUS.md` before changing hardware architecture.
+- Read the latest entry in `docs/AI_HANDOFF_LOG.md` when it exists.
 - Add tests for identity matching, ambiguity, malformed reports, unsupported
   capabilities, and hardware failure fallback.
 - Run `python3 -m pytest -q`, `python3 -m compileall -q src tests`, and
@@ -49,6 +51,7 @@ failed hardware backend must never prevent ordinary remapping from starting.
 
 ## Task handoff format
 
-End implementation tasks with: files changed, behavior changed, validation
-performed, commit hash (if committed), remaining risks/blockers, and the
-recommended next bounded task.
+Follow `docs/AI_HANDOFF_PROTOCOL.md`. End implementation tasks with: goal,
+branch/commit and working-tree state, files changed, behavior changed,
+automated and physical validation with an explicit validation level, evidence,
+remaining risks/blockers, and the recommended next bounded task.
