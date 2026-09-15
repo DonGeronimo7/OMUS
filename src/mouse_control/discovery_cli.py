@@ -16,6 +16,7 @@ from .discovery import get_mouse_devices, select_mouse_device
 from .discovery_engine import DiscoveryEngine
 from .discovery_ui import render_discovery_result, result_to_dict
 from .learning_session import ReadOnlyLearningSession
+from .protocol_grammar import SemanticBehavior
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -52,7 +53,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "after discovery, capture three read-only DPI-button actions and infer "
-            "changing raw state fields"
+            "both persistent state and momentary trigger fields"
         ),
     )
     parser.add_argument(
@@ -93,7 +94,8 @@ def _render_guided_learning(learned) -> str:
         "==========================",
         f"Samples: {len(learned.samples)}",
         f"Feature-field candidates: {len(learned.feature_candidates)}",
-        f"Raw-report field candidates: {len(learned.report_candidates)}",
+        f"Persistent raw-state candidates: {len(learned.report_candidates)}",
+        f"Momentary raw-trigger candidates: {len(learned.trigger_candidates)}",
     ]
 
     if learned.hypotheses:
@@ -111,7 +113,7 @@ def _render_guided_learning(learned) -> str:
             lines.append(f"               {hypothesis.reason}")
     else:
         lines.append(
-            "Semantic hypotheses: none yet — the action produced no repeatable raw/Feature field."
+            "Semantic hypotheses: none yet — no repeatable persistent or momentary field was found."
         )
 
     teacher_states = [dict(sample.teacher_state) for sample in learned.samples if sample.teacher_state]
@@ -125,8 +127,9 @@ def _render_guided_learning(learned) -> str:
 
 def _run_guided_learning(selected, result, engine, *, seconds: float, teacher: bool) -> None:
     print(
-        "\nGuided learner is read-only. It will watch every correlated evdev/hidraw "
-        "interface while you press the physical DPI button exactly once per sample."
+        "\nGuided learner is read-only. Native/onboard control is preserved. It will watch "
+        "every readable correlated evdev/hidraw interface while you press the physical "
+        "DPI button exactly once per sample."
     )
     session = ReadOnlyLearningSession(result.device, engine.descriptors)
     reader = (lambda: read_backend_teacher_state(selected)) if teacher else None
@@ -149,7 +152,11 @@ def _run_guided_learning(selected, result, engine, *, seconds: float, teacher: b
                 "  skipped unreadable hidraw sibling(s): "
                 + ", ".join(sample.unreadable_hidraw_paths)
             )
-    print(_render_guided_learning(session.analyze(samples)))
+    learned = session.analyze(
+        samples,
+        trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+    )
+    print(_render_guided_learning(learned))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.json:
         mode = (
-            "Known protocol detectors are disabled; unknown HID remains read-only."
+            "Known protocol detectors are disabled; unknown HID remains read-only and native control is preserved."
             if args.generic_only
             else "Unknown HID is read-only and the normal mouse-control runtime is not being reconfigured."
         )
