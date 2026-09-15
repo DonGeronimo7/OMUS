@@ -11,6 +11,7 @@ from enum import Enum
 import json
 import os
 from pathlib import Path
+import re
 from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
 
@@ -18,6 +19,11 @@ from .discovery_models import DiscoveryEvidence, DiscoveryResult
 
 
 PROFILE_SCHEMA_VERSION = 1
+
+_VOLATILE_PATH_PATTERNS = (
+    (re.compile(r"/dev/hidraw\d+"), "<live-hidraw>"),
+    (re.compile(r"/dev/input/event\d+"), "<live-input-event>"),
+)
 
 
 class DeviceProfileError(RuntimeError):
@@ -44,13 +50,40 @@ def _json_safe(value: Any) -> Any:
     return repr(value)
 
 
+def _profile_safe(value: Any) -> Any:
+    """Return JSON-safe profile data with volatile live-node paths redacted.
+
+    Discovery diagnostics are allowed to mention the current ``hidrawN`` or
+    ``eventN`` node because that is useful while troubleshooting a live run.
+    Those names are not stable device identity, however, so cached profiles
+    must never retain them.  Redaction happens before validation; validation
+    remains strict and still rejects any raw volatile path that reaches it.
+    """
+
+    if isinstance(value, Path):
+        value = str(value)
+    if isinstance(value, Enum):
+        return value.name.lower()
+    if isinstance(value, Mapping):
+        return {str(key): _profile_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return [_profile_safe(item) for item in value]
+    if isinstance(value, str):
+        for pattern, replacement in _VOLATILE_PATH_PATTERNS:
+            value = pattern.sub(replacement, value)
+        return value
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    return _profile_safe(repr(value))
+
+
 def _evidence_to_json(item: DiscoveryEvidence) -> dict[str, Any]:
     return {
         "level": item.level.name.lower(),
         "code": item.code,
-        "message": item.message,
-        "source": item.source,
-        "details": _json_safe(item.details),
+        "message": _profile_safe(item.message),
+        "source": _profile_safe(item.source),
+        "details": _profile_safe(item.details),
     }
 
 
