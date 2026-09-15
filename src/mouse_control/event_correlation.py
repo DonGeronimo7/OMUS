@@ -7,7 +7,7 @@ it cannot turn that observation into writable DPI support.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -149,7 +149,7 @@ def detect_repeated_changes(
     *,
     minimum_observations: int = 2,
 ) -> list[CorrelationCandidate]:
-    """Find report bytes that change repeatedly across physical actions."""
+    """Find Feature-report bytes that change repeatedly across physical actions."""
 
     if minimum_observations < 1:
         raise ValueError("minimum_observations must be at least one")
@@ -179,6 +179,63 @@ def detect_repeated_changes(
                 transitions=tuple(items),
             )
         )
+    return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
+
+
+def detect_repeated_report_fields(
+    actions: Sequence[PhysicalAction],
+    *,
+    minimum_observations: int = 2,
+) -> list[CorrelationCandidate]:
+    """Find changing byte positions in spontaneous raw HID reports.
+
+    Reports are grouped by live source, length, and first byte (normally the
+    report ID).  The last report of each shape in each guided action is used so
+    repeated button presses can reveal small state fields even when the device
+    has no readable Feature report for that state.
+
+    The live source path is diagnostic only and must never become persistent
+    identity; device profiles already redact volatile hidraw/event paths.
+    """
+
+    if minimum_observations < 1:
+        raise ValueError("minimum_observations must be at least one")
+
+    per_shape: dict[tuple[str, int, int | None], list[tuple[int, bytes]]] = defaultdict(list)
+    for action_index, action in enumerate(actions):
+        latest: dict[tuple[str, int, int | None], bytes] = {}
+        for report in action.hid_reports:
+            data = bytes(report.data)
+            shape = (report.source, len(data), data[0] if data else None)
+            latest[shape] = data
+        for shape, data in latest.items():
+            per_shape[shape].append((action_index, data))
+
+    result: list[CorrelationCandidate] = []
+    for shape, observed in per_shape.items():
+        if len(observed) < minimum_observations:
+            continue
+        width = min(len(data) for _index, data in observed)
+        for offset in range(width):
+            ordered_values = tuple(data[offset] for _index, data in observed)
+            unique_values = tuple(sorted(set(ordered_values)))
+            if len(unique_values) < 2:
+                continue
+            transitions: list[tuple[int | None, int | None]] = []
+            previous: int | None = None
+            for value in ordered_values:
+                transitions.append((previous, value))
+                previous = value
+            result.append(
+                CorrelationCandidate(
+                    report_key=shape,
+                    offset=offset,
+                    observations=len(observed),
+                    values=unique_values,
+                    transitions=tuple(transitions),
+                )
+            )
+
     return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
 
 
