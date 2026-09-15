@@ -54,18 +54,26 @@ def test_finish_persists_reviewed_stages_and_runtime_loads_exact_list(tmp_path, 
     assert backend.set_dpi.call_args.args[-1] == 800
 
     runtime_backend = hardware()
+    observed = {}
+    def exercise_runtime():
+        target = observed['cycler'] = remapper.call_args.args[3]
+        runtime_backend.get_dpi.return_value = 1450
+        observed['cycled'] = target.cycle()
     with patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
          patch.object(cli, 'get_backend', return_value=runtime_backend), \
          patch.object(cli, 'DpiMonitorSupervisor') as monitor, \
          patch.object(cli, 'BatteryMonitorSupervisor'), \
          patch.object(cli, 'MouseRemapper') as remapper:
+        remapper.return_value.run.side_effect = exercise_runtime
         assert cli.run_from_config(path) == 0
-    cycler = remapper.call_args.args[3]
+    cycler = observed['cycler']
     assert isinstance(cycler, DpiCycler)
     assert cycler.stages == FINAL
     assert monitor.call_args.args[3] == FINAL
-    assert cycler.cycle()
+    assert observed['cycled']
     assert runtime_backend.set_dpi.call_args.args[-1] == 1450
+    assert cycler.current_dpi == 1450
+    monitor.return_value.notify_dpi.assert_called_once_with(1450)
 
 
 def test_back_keeps_accepted_stage_and_cancel_does_not_save(tmp_path, capsys):

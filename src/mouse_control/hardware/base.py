@@ -90,3 +90,7 @@ class HardwareBackend(ABC):
 
     def set_polling_rate(self, device: MouseDevice, hz: int) -> None:
         raise HardwareError(f"{self.name}: polling rate is unsupported")
+
+    def close(self) -> None:
+        """Release backend resources. Implementations may safely call twice."""
+        return None

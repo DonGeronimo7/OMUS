@@ -12,7 +12,9 @@ import threading
 
 from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_config, get_config_path, load_config, save_config
 from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
-from .hardware import HardwareBackend, HardwareError, get_backend
+from .hardware import (DesiredHardwareState, HardwareBackend, HardwareError,
+                       HardwareSupervisor, get_backend)
+from .hardware.generic import GenericBackend
 from .remapper import DpiCycler, MouseRemapper
 from .notifications import DpiMonitorSupervisor
 from .battery import BatteryMonitorSupervisor
@@ -202,7 +204,8 @@ def _select_max_polling_rate(backend: HardwareBackend, device: MouseDevice) -> i
 
     maximum = max(supported)
     print(f"Supported polling rates: {', '.join(str(value) + ' Hz' for value in supported)}")
-    print(f"Setting polling rate to maximum: {maximum} Hz")
+    print(f"Selected maximum polling rate for setup: {maximum} Hz")
+    print("The wizard will report separately whether the hardware write is verified.")
     return maximum
 
 def _ask_enable_service() -> bool:
@@ -394,6 +397,7 @@ def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
     """Apply independent capabilities; a hardware failure never blocks remapping."""
     try:
         if active_dpi > 0 and backend.supports_dpi(device):
+            applied_directly = False
             if backend.supports_dpi_stages(device):
                 slot = backend.apply_dpi_stages(device, stages, active_dpi)
                 if slot is not None:
@@ -403,17 +407,67 @@ def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
                     print("Warning: the mouse did not expose a resolution slot for the requested active DPI.")
                 else:
                     backend.set_dpi(device, active_dpi)
+                    applied_directly = True
             else:
                 backend.set_dpi(device, active_dpi)
+                applied_directly = True
+            if applied_directly:
+                actual = backend.get_dpi(device)
+                matches = (actual == active_dpi or
+                           isinstance(actual, tuple) and actual[0] == active_dpi and
+                           actual[1] in (0, active_dpi))
+                if actual is None:
+                    print(f"Hardware DPI requested at {active_dpi} through {backend.name}; "
+                          "readback is unavailable.")
+                elif matches:
+                    print(f"Hardware DPI set and verified at {active_dpi} through {backend.name}.")
+                else:
+                    raise HardwareError(
+                        f"DPI verification requested {active_dpi}, read {actual}")
+        elif setup and active_dpi > 0:
+            print(f"DPI control is unsupported by {backend.name}; hardware DPI was unchanged.")
     except HardwareError as exc:
         logging.warning("Could not apply %s DPI settings: %s", backend.name, exc)
 
     try:
         if polling_rate_hz is not None and backend.supports_polling_rate_writes(device):
             backend.set_polling_rate(device, int(polling_rate_hz))
-            print(f"Hardware polling rate set to {polling_rate_hz} Hz through {backend.name}.")
+            actual = backend.get_polling_rate(device)
+            if actual is None:
+                print(f"Hardware polling rate requested at {polling_rate_hz} Hz through "
+                      f"{backend.name}; readback is unavailable.")
+            elif actual == int(polling_rate_hz):
+                print(f"Hardware polling rate set and verified at {actual} Hz through {backend.name}.")
+            else:
+                raise HardwareError(
+                    f"polling verification requested {polling_rate_hz} Hz, read {actual} Hz")
+        elif setup and polling_rate_hz is not None:
+            print(f"Polling-rate writes are unsupported by {backend.name}; hardware was unchanged.")
     except (HardwareError, ValueError, TypeError) as exc:
         logging.warning("Could not apply %s polling settings: %s", backend.name, exc)
+
+
+def _resolve_runtime_device(configured: MouseDevice) -> MouseDevice:
+    """Resolve reconnect identity without guessing among matching devices."""
+    mice = get_mouse_devices()
+    by_path = [mouse for mouse in mice
+               if os.path.realpath(mouse.path) == os.path.realpath(configured.path) and
+               (configured.vendor is None or mouse.vendor == configured.vendor) and
+               (configured.product is None or mouse.product == configured.product) and
+               (configured.bustype is None or mouse.bustype == configured.bustype)]
+    if len(by_path) == 1:
+        return by_path[0]
+    if configured.vendor is None or configured.product is None:
+        return configured
+    candidates = [mouse for mouse in mice
+                  if mouse.vendor == configured.vendor and
+                  mouse.product == configured.product and
+                  (configured.bustype is None or mouse.bustype == configured.bustype)]
+    if configured.phys:
+        physical = [mouse for mouse in candidates if mouse.phys == configured.phys]
+        if len(physical) == 1:
+            return physical[0]
+    return candidates[0] if len(candidates) == 1 else configured
 
 
 def run_from_config(path: Path | None = None) -> int:
@@ -450,7 +504,6 @@ def run_from_config(path: Path | None = None) -> int:
         bustype=device.get("bustype") if isinstance(device.get("bustype"), int) else None,
     )
     monitor = None
-    battery_monitor = None
     dpi_cycler = None
     shutdown_event = threading.Event()
     enabled = config.get("notifications", {}).get("dpi_changes", True)
@@ -459,26 +512,38 @@ def run_from_config(path: Path | None = None) -> int:
     else:
         logging.warning("Invalid notifications.dpi_changes; using enabled default")
         notifications_enabled = True
+    cycle_device = mouse or configured_mouse
+    g305_hidpp = (cycle_device.vendor == 0x046d and cycle_device.product == 0x4074 and
+                   cycle_device.bustype in (None, 3))
+    hardware_device = mouse or configured_mouse
+    initial_backend = get_backend(hardware_device, log_failures=mouse is not None)
+    hardware = HardwareSupervisor(
+        initial_backend, hardware_device,
+        lambda selected: get_backend(selected, log_failures=False),
+        DesiredHardwareState(active_dpi=active_dpi,
+                             dpi_stages=tuple(dpi_stages),
+                             polling_rate_hz=polling_rate_hz),
+        device_resolver=_resolve_runtime_device,
+        discovery_pending=mouse is None or isinstance(initial_backend, GenericBackend))
     if mouse is not None:
-        backend = get_backend(mouse)
         identity = (f"{mouse.vendor:04x}:{mouse.product:04x}"
                     if mouse.vendor is not None and mouse.product is not None
                     else "identity unavailable")
         LOG.info("Selected mouse: %s (%s, %s)", mouse.name, mouse.path, identity)
-        LOG.info("Selected hardware backend: %s (%s)", backend.name,
-                 type(backend).__name__)
-        _apply_hardware(backend, mouse, dpi_stages, active_dpi, polling_rate_hz)
-        if "dpi-cycle" in mappings.values():
-            dpi_cycler = DpiCycler(backend, mouse, dpi_stages, active_dpi,
-                                   notifications_enabled)
+        LOG.info("Selected hardware backend: %s (%s)", initial_backend.name,
+                 type(initial_backend).__name__)
+    hardware.reconcile()
+    if "dpi-cycle" in mappings.values() or g305_hidpp:
+        dpi_cycler = DpiCycler(hardware, hardware_device, dpi_stages, active_dpi,
+                               notifications_enabled)
 
-    if notifications_enabled:
-        monitor_device = mouse or configured_mouse
-        if mouse is None:
-            backend = get_backend(monitor_device)
-        monitor = DpiMonitorSupervisor(backend, monitor_device,
-                                       lambda device: get_backend(device, log_failures=False),
-                                       dpi_stages, active_dpi, shutdown_event)
+    if notifications_enabled or g305_hidpp:
+        monitor_kwargs = ({"dpi_cycler": dpi_cycler,
+                           "notifications_enabled": notifications_enabled}
+                          if g305_hidpp else {})
+        monitor = DpiMonitorSupervisor(hardware, hardware_device,
+                                       lambda _device: hardware,
+                                       dpi_stages, active_dpi, shutdown_event, **monitor_kwargs)
         if dpi_cycler is not None:
             dpi_cycler.notifier = monitor
         LOG.info("DPI notification monitor: %s", type(monitor).__name__)
@@ -487,11 +552,8 @@ def run_from_config(path: Path | None = None) -> int:
 
     # Battery is a separate optional capability.  Its failures must remain
     # invisible to the evdev/uinput remapper.
-    battery_device = mouse or configured_mouse
-    battery_backend = backend if mouse is not None else get_backend(battery_device, log_failures=False)
     battery_monitor = BatteryMonitorSupervisor(
-        battery_backend, battery_device,
-        lambda selected: get_backend(selected, log_failures=False), shutdown_event)
+        hardware, hardware_device, lambda _selected: hardware, shutdown_event)
 
     if monitor is not None:
         LOG.info("Starting DPI notification monitor")
@@ -504,6 +566,7 @@ def run_from_config(path: Path | None = None) -> int:
         if monitor is not None:
             monitor.stop()
         battery_monitor.stop()
+        hardware.close()
     return 0
 
 

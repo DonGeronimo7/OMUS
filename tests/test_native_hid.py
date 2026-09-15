@@ -9,7 +9,8 @@ from mouse_control.hardware.capabilities import BatteryState, DpiState
 from mouse_control.hid_session import HidSession
 from mouse_control.hidpp import HidppError, HidppReport
 from mouse_control.hidpp_driver import (ADJUSTABLE_DPI_FEATURE_ID,
-    ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID, BATTERY_STATUS_FEATURE_ID, Hidpp20Driver,
+    HOST_MODE, ONBOARD_MODE, ONBOARD_PROFILES_FEATURE_ID, REPORT_RATE_FEATURE_ID,
+    BATTERY_STATUS_FEATURE_ID, Hidpp20Driver,
     connect_hidpp20,
     decode_supported_dpi)
 from mouse_control.hidpp_driver import (UNIFIED_BATTERY_FEATURE_ID,
@@ -53,6 +54,21 @@ def test_session_correlates_reply_while_dispatching_unsolicited_event():
     session.close()
     assert response.parameters[:2] == b"\x02\x00"
     assert [(event.feature_index, event.software_id) for event in events] == [(0x12, 0)]
+
+
+def test_subscriber_failure_is_logged_without_killing_other_consumers(caplog):
+    session = HidSession(Path("/dev/fake"), io_factory=QueueIo)
+    delivered = []
+    def broken(_report):
+        raise RuntimeError("subscriber bug")
+    session.subscribe(broken)
+    session.subscribe(delivered.append)
+    report = HidppReport(0x11, 1, 0x12, 1, 0, b"\x01")
+    for _ in range(3):
+        session._dispatch(report)
+    session.close()
+    assert delivered == [report, report, report]
+    assert caplog.text.count("HID event subscriber failed") == 2
 
 
 def test_session_routes_protocol_error_to_waiter():
@@ -129,6 +145,9 @@ class FakeSession:
             result = b"\x8b"  # 1, 2, 4 and 8 ms
         elif feature == 0x12 and function == 2:
             result = bytes((self.profile_mode,))
+        elif feature == 0x12 and function == 1:
+            self.profile_mode = parameters[0]
+            result = b"\0"
         elif feature == 0x17 and function == 1:
             result = bytes((self.rate_ms,))
         elif feature == 0x17 and function == 2:
@@ -187,18 +206,18 @@ def test_g305_dynamic_battery_status_runtime_path():
     assert driver.capabilities.battery.readable
 
 
-def test_report_rate_remains_readable_but_not_writable_in_onboard_mode():
+def test_report_rate_protocol_mechanics_are_available_in_onboard_mode():
     session = FakeSession(profile_mode=0x01)
     driver = Hidpp20Driver(session, 1)
     caps = driver.capabilities.report_rate
     assert caps.readable
-    assert not caps.writable
+    assert caps.writable
     assert caps.values == (1000, 500, 250, 125)
     assert driver.get_report_rate() == 500
-    calls_before_write = list(session.calls)
-    with pytest.raises(HidppError, match="unsupported report rate"):
-        driver.set_report_rate(1000)
-    assert session.calls == calls_before_write
+    assert driver.get_control_mode() == ONBOARD_MODE
+    driver.set_control_mode(HOST_MODE)
+    assert driver.get_control_mode() == HOST_MODE
+    assert driver.set_report_rate(1000) == 1000
 
 
 def test_report_rate_is_writable_in_host_mode():
@@ -230,7 +249,7 @@ def test_onboard_profiles_v0_supports_dpi_events():
     driver = Hidpp20Driver(VersionZeroProfiles(profile_mode=0x01), 1)
     assert driver.features[ONBOARD_PROFILES_FEATURE_ID].version == 0
     assert driver.capabilities.dpi.events
-    assert not driver.capabilities.report_rate.writable
+    assert driver.capabilities.report_rate.writable
 
 
 def test_profile_event_is_resolved_by_live_dpi_query():

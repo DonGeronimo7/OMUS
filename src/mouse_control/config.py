@@ -22,7 +22,7 @@ def generate_config(
     polling_rate_hz: int | None = None,
 ) -> str:
     """Generate the human-editable TOML configuration."""
-    stages = dpi_stages or DEFAULT_DPI_STAGES
+    stages = DEFAULT_DPI_STAGES if dpi_stages is None else dpi_stages
     lines = [
         "# mouse-control configuration",
         "# Actions: passthrough, disable, dpi-cycle, mouse:BTN_*, key:KEY_*, chord:KEY_*+KEY_*",
@@ -37,6 +37,8 @@ def generate_config(
         lines.append(f"vendor = {device_info.vendor}")
     if device_info.product is not None:
         lines.append(f"product = {device_info.product}")
+    if device_info.bustype is not None:
+        lines.append(f"bustype = {device_info.bustype}")
 
     lines.extend([
         "",
