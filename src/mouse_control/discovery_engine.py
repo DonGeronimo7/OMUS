@@ -32,13 +32,15 @@ from .protocol_discovery import (
     ProtocolDetector,
     detect_known_protocol,
 )
+from .protocol_repertoire import FamilyCandidate, match_repertoire
 
 
 class DiscoveryEngine:
     """Discover one selected mouse without speculative writes.
 
     Known protocol detectors may use their validated read/query handshake.
-    Unknown devices are inspected through :class:`ReadOnlyHidProbe` only.
+    Unknown devices are inspected through :class:`ReadOnlyHidProbe` only and
+    matched against the protocol repertoire for read-only family hypotheses.
     """
 
     def __init__(
@@ -59,6 +61,7 @@ class DiscoveryEngine:
         self._save_profiles = save_profiles
         self._descriptors: dict[DeviceNode, ParsedHidDescriptor] = {}
         self._feature_snapshots: dict[DeviceNode, dict[int, bytes]] = {}
+        self._repertoire_candidates: tuple[FamilyCandidate, ...] = ()
         self._observations: list[DiscoveryEvidence] = []
         self._phases: list[DiscoveryPhase] = []
         self._profile_path: Path | None = None
@@ -70,6 +73,10 @@ class DiscoveryEngine:
     @property
     def feature_snapshots(self) -> dict[DeviceNode, dict[int, bytes]]:
         return {node: dict(snapshot) for node, snapshot in self._feature_snapshots.items()}
+
+    @property
+    def repertoire_candidates(self) -> tuple[FamilyCandidate, ...]:
+        return self._repertoire_candidates
 
     @property
     def profile_path(self) -> Path | None:
@@ -86,6 +93,7 @@ class DiscoveryEngine:
 
         self._descriptors.clear()
         self._feature_snapshots.clear()
+        self._repertoire_candidates = ()
         self._observations.clear()
         self._phases.clear()
         self._profile_path = None
@@ -206,7 +214,7 @@ class DiscoveryEngine:
     def observe_unknown_device(
         self, physical: PhysicalDevice
     ) -> dict[str, DiscoveredCapability]:
-        """Take a safe baseline snapshot; do not guess DPI/polling semantics."""
+        """Take a safe baseline snapshot and classify structure without writes."""
 
         for node, descriptor in self._descriptors.items():
             vendor_reports = vendor_defined_reports(descriptor)
@@ -259,8 +267,34 @@ class DiscoveryEngine:
                     )
                 )
 
-        # Descriptor structure and changing bytes are evidence, not semantics.
-        # No generic DPI/report-rate capability is invented here.
+        self._repertoire_candidates = match_repertoire(physical, self._descriptors)
+        for candidate in self._repertoire_candidates:
+            family = candidate.family
+            self._observations.append(
+                DiscoveryEvidence(
+                    EvidenceLevel.CORRELATED,
+                    "protocol-family-candidate",
+                    (
+                        f"HID structure is compatible with {family.name}/{family.revision} "
+                        f"(score {candidate.score}); classification does not authorize writes"
+                    ),
+                    source="protocol_repertoire",
+                    details={
+                        "family": family.name,
+                        "revision": family.revision,
+                        "score": candidate.score,
+                        "matched": candidate.matched,
+                        "missing": candidate.missing,
+                        "strongest_source_trust": family.strongest_trust.value,
+                        "exact_identity": candidate.exact_identity,
+                        "write_authorized": candidate.write_authorized,
+                    },
+                )
+            )
+
+        # Descriptor structure, family resemblance, feature snapshots and
+        # changing bytes are evidence, not semantics.  Guided correlation may
+        # later promote them, but no generic writable capability is invented.
         return {}
 
     def validate(
