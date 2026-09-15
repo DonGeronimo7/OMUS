@@ -18,7 +18,7 @@ LOG = logging.getLogger(__name__)
 
 # Host-mode takeover changes who owns hardware behavior (notably DPI cycling).
 # Keep knowledge of validated identities separate from ordinary capability
-# reporting so setup can preserve native/onboard behavior by default.
+# reporting so discovery/reconnect paths can preserve native behavior.
 HOST_MODE_TRANSITION_ALLOWLIST = frozenset({(3, 0x046D, 0x4074)})
 
 
@@ -127,14 +127,24 @@ class NativeHidBackend(HardwareBackend):
         return self.get_capabilities(device).report_rate.readable
 
     def supports_polling_rate_writes(self, device: MouseDevice) -> bool:
-        """Report whether a rate write is safe *without changing control mode*.
+        """Return whether a proven post-discovery path can write report rate.
 
-        An Onboard -> Host transition changes ownership of physical behavior,
-        including the G305's native DPI-cycle handling.  Setup therefore must
-        not advertise a write merely because mouse-control knows a validated
-        way to take over Host mode.  Explicit takeover can be offered separately
-        when the user intentionally remaps/replaces native behavior.
+        This includes a hardware-validated Onboard -> Host transition. Automatic
+        discovery/reconnect code must instead call
+        ``supports_polling_rate_writes_without_takeover``.
         """
+
+        driver = self._driver(device)
+        if not driver.capabilities.report_rate.writable:
+            return False
+        try:
+            mode = driver.get_control_mode()
+        except HidppError:
+            return False
+        return mode == HOST_MODE or self._may_enter_host_mode(device)
+
+    def supports_polling_rate_writes_without_takeover(self, device: MouseDevice) -> bool:
+        """Return whether report rate can change without changing control ownership."""
 
         driver = self._driver(device)
         if not driver.capabilities.report_rate.writable:
@@ -146,7 +156,7 @@ class NativeHidBackend(HardwareBackend):
 
     @staticmethod
     def _may_enter_host_mode(device: MouseDevice) -> bool:
-        """Whether an explicit future takeover is hardware-validated."""
+        """Whether an explicit post-discovery Host takeover is hardware-validated."""
         return (device.bustype, device.vendor, device.product) in HOST_MODE_TRANSITION_ALLOWLIST
 
     def get_polling_rates(self, device: MouseDevice) -> list[int]:
@@ -159,31 +169,59 @@ class NativeHidBackend(HardwareBackend):
             raise HardwareError(f"Native HID: {exc}") from exc
 
     def set_polling_rate(self, device: MouseDevice, hz: int) -> None:
-        """Set report rate only when the device is already in Host mode.
+        """Execute a proven polling write, taking Host mode only when authorized.
 
-        This method deliberately never performs an implicit Onboard -> Host
-        transition.  Taking over Host mode changes native button/DPI behavior
-        and therefore requires a separate explicit user action.
+        Ordinary discovery and automatic reconciliation never call this while
+        takeover would be required. The transition remains available as a
+        post-discovery execution primitive for an explicit user configuration.
         """
 
         driver = self._driver(device)
         caps = driver.capabilities.report_rate
         if not caps.readable or not caps.writable or not caps.values or hz not in caps.values:
             raise HardwareError(f"Native HID: unsupported polling rate {hz} Hz")
+        original_mode: int | None = None
+        transition_attempted = False
         try:
-            mode = driver.get_control_mode()
-            if mode == ONBOARD_MODE:
+            original_mode = driver.get_control_mode()
+            if original_mode == ONBOARD_MODE:
+                if not self._may_enter_host_mode(device):
+                    raise HardwareError(
+                        "Native HID: automatic Onboard -> Host transition is not "
+                        "validated for this transport and VID:PID")
+                transition_attempted = True
+                driver.set_control_mode(HOST_MODE)
+                actual_mode = driver.get_control_mode()
+                if actual_mode != HOST_MODE:
+                    raise HardwareError(
+                        f"Native HID: Host mode verification failed; read 0x{actual_mode:02x}")
+            elif original_mode != HOST_MODE:
                 raise HardwareError(
-                    "Native HID: polling-rate write requires explicit Host-mode takeover; "
-                    "native onboard DPI behavior was preserved"
-                )
-            if mode != HOST_MODE:
-                raise HardwareError(
-                    f"Native HID: unsupported control mode 0x{mode:02x}"
-                )
+                    f"Native HID: unsupported control mode 0x{original_mode:02x}")
             driver.set_report_rate(hz)
         except HidppError as exc:
-            raise HardwareError(f"Native HID: {exc}") from exc
+            failure: Exception = HardwareError(f"Native HID: {exc}")
+        except HardwareError as exc:
+            failure = exc
+        except Exception as exc:
+            failure = HardwareError(f"Native HID: polling-rate transaction failed: {exc}")
+        else:
+            # Explicit post-discovery takeover intentionally remains in Host mode.
+            return
+
+        if transition_attempted and original_mode is not None:
+            try:
+                driver.set_control_mode(original_mode)
+                restored = driver.get_control_mode()
+                if restored != original_mode:
+                    raise HidppError(
+                        f"mode rollback verification read 0x{restored:02x}, "
+                        f"expected 0x{original_mode:02x}")
+            except Exception as rollback_exc:
+                raise HardwareError(
+                    f"{failure}; additionally failed to restore original control mode: "
+                    f"{rollback_exc}") from failure
+        raise failure
 
     def watch_dpi_events(self, device: MouseDevice, callback,
                          shutdown_event, ready_callback=None) -> None:
