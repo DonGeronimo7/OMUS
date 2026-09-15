@@ -20,7 +20,6 @@ from .discovery_models import (
 )
 from .hid_session import HidSession
 from .hidpp import HidppError, LOGITECH_VENDOR_ID
-from .hidpp_driver import Hidpp20Driver, connect_hidpp20
 
 
 class ProtocolDetectionError(RuntimeError):
@@ -38,7 +37,7 @@ class ProtocolDetector(Protocol):
         ...
 
 
-def _dpi_capability(driver: Hidpp20Driver) -> DiscoveredCapability | None:
+def _dpi_capability(driver: Any) -> DiscoveredCapability | None:
     caps = driver.capabilities.dpi
     if not (caps.readable or caps.writable or caps.values or caps.ranges):
         return None
@@ -72,7 +71,7 @@ def _dpi_capability(driver: Hidpp20Driver) -> DiscoveredCapability | None:
     )
 
 
-def _report_rate_capability(driver: Hidpp20Driver) -> DiscoveredCapability | None:
+def _report_rate_capability(driver: Any) -> DiscoveredCapability | None:
     caps = driver.capabilities.report_rate
     if not (caps.readable or caps.writable or caps.values):
         return None
@@ -96,7 +95,7 @@ def _report_rate_capability(driver: Hidpp20Driver) -> DiscoveredCapability | Non
     )
 
 
-def _battery_capability(driver: Hidpp20Driver) -> DiscoveredCapability | None:
+def _battery_capability(driver: Any) -> DiscoveredCapability | None:
     caps = driver.capabilities.battery
     if not caps.readable:
         return None
@@ -115,7 +114,7 @@ def _battery_capability(driver: Hidpp20Driver) -> DiscoveredCapability | None:
     )
 
 
-def capabilities_from_hidpp(driver: Hidpp20Driver) -> dict[str, DiscoveredCapability]:
+def capabilities_from_hidpp(driver: Any) -> dict[str, DiscoveredCapability]:
     """Convert independent HID++ capabilities without coupling failures."""
 
     capabilities: dict[str, DiscoveredCapability] = {}
@@ -131,13 +130,30 @@ class Hidpp20Detector:
 
     The detector reuses the project's already-validated ROOT discovery.  It
     never hard-codes feature indexes, and every unsuccessful session is closed.
+
+    The HID++ driver import is intentionally lazy.  ``hidpp_driver`` imports
+    protocol-neutral types from ``mouse_control.hardware``; importing it while
+    this discovery module itself is being imported would otherwise re-enter the
+    hardware registry through ``hardware.__init__`` and create a package import
+    cycle in installed console-script startup.
     """
 
     name = "hidpp2"
 
-    def __init__(self, *, session_factory=HidSession, connector=connect_hidpp20) -> None:
+    def __init__(self, *, session_factory=HidSession, connector=None) -> None:
         self._session_factory = session_factory
         self._connector = connector
+
+    def _connect(self, session):
+        connector = self._connector
+        if connector is None:
+            # Delay this import until hardware package initialization has
+            # completed.  Tests may inject a connector without importing the
+            # concrete HID++ driver at all.
+            from .hidpp_driver import connect_hidpp20
+
+            connector = connect_hidpp20
+        return connector(session)
 
     def detect(self, device: PhysicalDevice) -> ProtocolMatch | None:
         if device.ambiguous:
@@ -153,7 +169,7 @@ class Hidpp20Detector:
             session = None
             try:
                 session = self._session_factory(interface.path)
-                driver = self._connector(session)
+                driver = self._connect(session)
                 raw_version = driver.protocol_version
                 version = (
                     ".".join(str(part) for part in raw_version)
