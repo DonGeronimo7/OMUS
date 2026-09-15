@@ -10,7 +10,8 @@ import subprocess
 import sys
 import threading
 
-from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_config, get_config_path, load_config, save_config
+from .config import (DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_config, get_config_path,
+                     load_config, merge_setup_config, save_config)
 from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
 from .hardware import (DesiredHardwareState, HardwareBackend, HardwareError,
                        HardwareSupervisor, get_backend)
@@ -81,18 +82,45 @@ def _default_mappings() -> dict[str, str]:
     }
 
 
-def _initial_mappings() -> dict[str, str]:
-    """Keep an existing remap table intact until the wizard edits a button."""
+def _load_setup_config() -> dict[str, object]:
+    """Load an existing configuration once; absence means first-run defaults."""
     path = get_config_path()
     if not path.exists():
-        return _default_mappings()
+        return {}
     existing = load_config(path)
-    mappings = existing.get("remap", {})
+    if not isinstance(existing, dict):
+        raise ValueError("Existing configuration is invalid")
+    return existing
+
+
+def _initial_mappings(existing: dict[str, object]) -> dict[str, str]:
+    """Keep an existing remap table intact until the wizard edits a button."""
+    if "remap" not in existing:
+        return _default_mappings()
+    mappings = existing["remap"]
     if not isinstance(mappings, dict) or not all(
             isinstance(button, str) and isinstance(action, str)
             for button, action in mappings.items()):
         raise ValueError("Existing [remap] configuration is invalid")
     return dict(mappings)
+
+
+def _initial_choices(existing: dict[str, object]) -> SetupChoices:
+    dpi = existing.get("dpi", {})
+    polling = existing.get("polling", {})
+    if not isinstance(dpi, dict) or not isinstance(polling, dict):
+        raise ValueError("Existing DPI or polling configuration is invalid")
+    stages = dpi.get("stages", DEFAULT_DPI_STAGES)
+    active = dpi.get("active", DEFAULT_DPI)
+    if (not isinstance(stages, list) or
+            any(not isinstance(value, int) or value <= 0 for value in stages) or
+            not isinstance(active, int) or active <= 0):
+        raise ValueError("Existing DPI configuration is invalid")
+    rate = polling.get("rate_hz")
+    if rate is not None and (not isinstance(rate, int) or rate <= 0):
+        raise ValueError("Existing polling configuration is invalid")
+    return SetupChoices(stages=list(stages), active_dpi=active, polling_rate=rate,
+                        mappings=_initial_mappings(existing))
 
 
 def debug_hid(seconds: float = 10.0) -> int:
@@ -279,8 +307,8 @@ def run_setup_wizard() -> int:
                 print(f"Hardware name: {hardware_name}{identity}")
         except HardwareError as exc:
             logging.info("Hardware name lookup unavailable: %s", exc)
-        initial_mappings = _initial_mappings()
-        choices = SetupChoices(mappings=initial_mappings)
+        existing_config = _load_setup_config()
+        choices = _initial_choices(existing_config)
         discover_choices(backend, selected, choices)
         page = 'buttons'
         review_return = False
@@ -300,7 +328,7 @@ def run_setup_wizard() -> int:
                         restore_dpi(backend, selected, choices.original_dpi)
                         selected = replacement
                         backend = get_backend(selected)
-                        choices = SetupChoices(mappings=dict(initial_mappings))
+                        choices = _initial_choices(existing_config)
                         discover_choices(backend, selected, choices)
                         review_return = False
                     continue
@@ -354,18 +382,21 @@ def run_setup_wizard() -> int:
         polling_rate_hz = choices.polling_rate
         mappings = choices.mappings
         enable_service = choices.enable_service
-        if len(dpi_stages) != 5 or any(not isinstance(v, int) or v <= 0 for v in dpi_stages):
+        if any(not isinstance(v, int) or v <= 0 for v in dpi_stages):
             raise ValueError('Invalid DPI stages')
-        if choices.dpi_values and any(v not in choices.dpi_values for v in dpi_stages):
+        if (choices.dpi_changed and choices.dpi_values and
+                any(v not in choices.dpi_values for v in dpi_stages)):
             raise ValueError('One or more DPI stages are unsupported by this mouse')
-        if polling_rate_hz is not None and polling_rate_hz not in choices.polling_rates:
+        if (choices.polling_changed and polling_rate_hz is not None and
+                polling_rate_hz not in choices.polling_rates):
             raise ValueError('Polling rate is unsupported by this mouse')
-        content = generate_config(
-            selected, mappings, dpi_stages=dpi_stages, active_dpi=active_dpi,
-            polling_rate_hz=polling_rate_hz,
-        )
+        content = merge_setup_config(existing_config, selected, mappings=mappings,
+                                     dpi_stages=dpi_stages, active_dpi=active_dpi,
+                                     polling_rate_hz=polling_rate_hz)
         _apply_hardware(
-            backend, selected, dpi_stages, active_dpi, polling_rate_hz, setup=True
+            backend, selected, dpi_stages if choices.dpi_changed else [],
+            active_dpi if choices.dpi_changed else 0,
+            polling_rate_hz if choices.polling_changed else None, setup=True
         )
         path = save_config(content)
         saved = True

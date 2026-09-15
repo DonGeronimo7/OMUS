@@ -114,3 +114,19 @@ The G305 physical validation sequence remains pending: confirm the
 `BTN_FORWARD = 'dpi-cycle'` mapping survives setup, restart Mouse Control, and
 verify physical DPI cycling before attempting the verified `500 -> 250 Hz`
 polling transition.
+
+## 2026-09-15 setup configuration preservation
+
+Setup now loads persisted desired DPI stages, active DPI, polling rate, remaps,
+and notifications before probing hardware. Capability discovery is display-only:
+it reports supported/current hardware state without replacing valid preferences.
+Only an explicit DPI or polling selection results in the corresponding hardware
+write. Setup merges its owned fields into the parsed TOML and retains unknown
+forward-compatible tables. The prior physical polling persistence observation
+is therefore **inconclusive**: setup's destructive initialization, not Native
+HID/HID++ behavior, could have restored 1000 Hz.
+
+Physical acceptance remains required after installing this build: verify
+custom DPI/active DPI, `BTN_FORWARD = 'dpi-cycle'`, other mappings, and a
+configured 500 Hz rate survive setup; then run the documented 1000→500→250→125→1000
+polling sequence and separate reconnect acceptance.

@@ -21,6 +21,8 @@ class SetupChoices:
     polling_readable: bool = False
     polling_writable: bool = False
     current_polling_rate: int | None = None
+    dpi_changed: bool = False
+    polling_changed: bool = False
 
 
 def _dpi_number(value):
@@ -44,12 +46,10 @@ def discover_choices(backend, device, choices):
                     choices.dpi_increment = increments.pop()
             choices.original_dpi = _dpi_number(backend.get_dpi(device))
             if choices.dpi_values:
-                for index, stage in enumerate(choices.stages):
-                    if stage not in choices.dpi_values:
-                        replacement = min(choices.dpi_values, key=lambda value: abs(value - stage))
-                        print(f'Preferred {stage} DPI is unsupported; using {replacement} DPI for stage {index + 1}.')
-                        choices.stages[index] = replacement
-                choices.active_dpi = choices.stages[0]
+                unsupported = [stage for stage in choices.stages if stage not in choices.dpi_values]
+                if unsupported:
+                    print('Some configured DPI stages are not currently reported by the mouse; '
+                          'they will be preserved unless you edit them.')
     except (HardwareError, TypeError, ValueError) as exc:
         print(f'DPI tuning unavailable: {exc}')
         choices.dpi_writable = False
@@ -59,7 +59,10 @@ def discover_choices(backend, device, choices):
         if choices.polling_readable:
             choices.polling_rates = sorted(set(backend.get_polling_rates(device)), reverse=True)
             choices.current_polling_rate = backend.get_polling_rate(device)
-        if choices.polling_writable and choices.polling_rates:
+        if choices.polling_writable and choices.polling_rates and choices.polling_rate is None:
+            # There is no persisted preference for this field, so the legacy
+            # setup default remains appropriate.  Existing values are never
+            # replaced by discovery.
             choices.polling_rate = choices.polling_rates[0]
     except HardwareError as exc:
         print(f'Polling capability query unavailable: {exc}')
@@ -99,6 +102,7 @@ def tune_stage(backend, device, choices, index):
             choices.stages[index] = current
             if index == 0:
                 choices.active_dpi = current
+            choices.dpi_changed = True
             return 'accept'
         if raw in ('b', 'esc'):
             restore_dpi(backend, device, accepted)
@@ -159,10 +163,12 @@ def polling_screen(choices):
             print('Supported rates were not reported by the mouse.')
         if choices.current_polling_rate is not None:
             print(f'Current hardware rate: {choices.current_polling_rate} Hz')
+        if choices.polling_rate is not None:
+            print(f'Configured rate: {choices.polling_rate} Hz')
         if choices.polling_writable and choices.polling_rates:
             for i, hz in enumerate(choices.polling_rates, 1):
                 print(f'  {i}. {hz} Hz' + (' [selected]' if hz == choices.polling_rate else ''))
-            print(f'[Enter] Continue with {choices.polling_rate} Hz  [number] Select  '
+            print(f'[Enter] Continue with configured {choices.polling_rate} Hz  [number] Select  '
                   '[B] Back  [Q] Cancel setup')
         else:
             print('Report-rate changes are unavailable; the current hardware rate will be kept.')
@@ -175,6 +181,7 @@ def polling_screen(choices):
         if (choices.polling_writable and raw.isdigit() and
                 1 <= int(raw) <= len(choices.polling_rates)):
             choices.polling_rate = choices.polling_rates[int(raw) - 1]
+            choices.polling_changed = True
             continue
         print('Choose a listed rate, Enter, B, or Q.' if choices.polling_writable
               else 'Choose Enter, B, or Q.')

@@ -26,6 +26,15 @@ def hardware():
     return backend
 
 
+def polling_hardware():
+    backend = hardware()
+    backend.supports_polling_rate.return_value = True
+    backend.supports_polling_rate_writes.return_value = True
+    backend.get_polling_rates.return_value = [125, 500, 1000]
+    backend.get_polling_rate.return_value = 1000
+    return backend
+
+
 def run_wizard(path, backend, answers, capsys):
     with patch.object(config, 'get_config_path', return_value=path), \
          patch.object(cli, 'get_config_path', return_value=path), \
@@ -130,3 +139,98 @@ def test_setup_does_not_infer_a_dpi_action_for_btn_forward(tmp_path, capsys):
     result, _ = run_wizard(path, hardware(), ['s', '', '', 'n', ''], capsys)
     assert result == 0
     assert config.load_config(path)['remap'].get('BTN_FORWARD') is None
+
+
+def test_no_change_setup_preserves_all_existing_preferences_twice(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    path.write_text('''[device]
+name = "G305 test"
+event_path = "/dev/input/test"
+phys = ""
+vendor = 1133
+product = 16500
+
+[dpi]
+active = 2500
+stages = [800, 1500, 2000, 2500, 3000]
+
+[polling]
+rate_hz = 500
+
+[notifications]
+dpi_changes = false
+
+[remap]
+BTN_FORWARD = "dpi-cycle"
+BTN_EXTRA = "key:KEY_LEFTMETA"
+BTN_SIDE = "chord:KEY_LEFTCTRL+KEY_LEFTSHIFT+KEY_S"
+
+[future]
+retain_me = "yes"
+
+[future.nested]
+also_retain_me = 7
+''')
+    expected = config.load_config(path)
+    backend = polling_hardware()
+    for _ in range(2):
+        result, output = run_wizard(path, backend, ['s', '', '', 'n', ''], capsys)
+        assert result == 0
+        assert config.load_config(path) == expected
+        assert 'Configured rate: 500 Hz' in output
+        assert 'Current hardware rate: 1000 Hz' in output
+    backend.set_dpi.assert_not_called()
+    backend.set_polling_rate.assert_not_called()
+
+
+def test_isolated_dpi_edit_preserves_polling_active_and_remaps(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    remaps = {'BTN_FORWARD': 'dpi-cycle', 'BTN_EXTRA': 'key:KEY_LEFTMETA'}
+    path.write_text(config.generate_config(MOUSE, remaps, [800, 1500, 2000, 2500, 3000],
+                                            active_dpi=2500, polling_rate_hz=500))
+    result, _ = run_wizard(path, polling_hardware(),
+                           ['s', '2', '1450', '', '', '', 'n', ''], capsys)
+    assert result == 0
+    saved = config.load_config(path)
+    assert saved['dpi'] == {'active': 2500, 'stages': [800, 1450, 2000, 2500, 3000]}
+    assert saved['polling']['rate_hz'] == 500
+    assert saved['remap'] == remaps
+
+
+def test_isolated_polling_edit_preserves_dpi_and_remaps(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    remaps = {'BTN_FORWARD': 'dpi-cycle', 'BTN_EXTRA': 'key:KEY_LEFTMETA'}
+    path.write_text(config.generate_config(MOUSE, remaps, [800, 1500, 2000, 2500, 3000],
+                                            active_dpi=2500, polling_rate_hz=500))
+    backend = polling_hardware()
+    result, _ = run_wizard(path, backend, ['s', '', '3', '', 'n', ''], capsys)
+    assert result == 0
+    saved = config.load_config(path)
+    assert saved['dpi'] == {'active': 2500, 'stages': [800, 1500, 2000, 2500, 3000]}
+    assert saved['polling']['rate_hz'] == 125
+    assert saved['remap'] == remaps
+    backend.set_dpi.assert_not_called()
+    backend.set_polling_rate.assert_called_once_with(MOUSE, 125)
+
+
+def test_isolated_remap_edit_preserves_dpi_and_polling(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    remaps = {'BTN_FORWARD': 'dpi-cycle', 'BTN_EXTRA': 'key:KEY_LEFTMETA'}
+    path.write_text(config.generate_config(MOUSE, remaps, [800, 1500, 2000, 2500, 3000],
+                                            active_dpi=2500, polling_rate_hz=500))
+    backend = polling_hardware()
+    with patch.object(config, 'get_config_path', return_value=path), \
+         patch.object(cli, 'get_config_path', return_value=path), \
+         patch.object(cli, 'is_service_active', return_value=False), \
+         patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
+         patch.object(cli, 'select_mouse_device', return_value=MOUSE), \
+         patch.object(cli, 'get_backend', return_value=backend), \
+         patch.object(cli, 'map_mouse_buttons', return_value={'BTN_EXTRA': 'disable'}), \
+         patch('builtins.input', side_effect=['', '', '', 'n', '']):
+        assert cli.run_setup_wizard() == 0
+    saved = config.load_config(path)
+    assert saved['dpi'] == {'active': 2500, 'stages': [800, 1500, 2000, 2500, 3000]}
+    assert saved['polling']['rate_hz'] == 500
+    assert saved['remap'] == {'BTN_FORWARD': 'dpi-cycle', 'BTN_EXTRA': 'disable'}
+    backend.set_dpi.assert_not_called()
+    backend.set_polling_rate.assert_not_called()

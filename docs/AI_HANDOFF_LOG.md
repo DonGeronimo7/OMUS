@@ -75,3 +75,22 @@ task; no memory/runtime optimization has begun.
 - Physical follow-up: confirm `BTN_FORWARD = 'dpi-cycle'`, run setup with
   Skip/keep mappings, confirm it remains, restart Mouse Control, and verify
   physical DPI cycling. Only then proceed from verified 500 Hz to 250 Hz.
+
+## 2026-09-15 — Lossless setup configuration editing
+
+- Root cause: in addition to rebuilding remaps, setup discovery replaced
+  configured DPI stages/active DPI and chose the maximum supported polling
+  rate. It then saved and applied those discovery-derived values.
+- Correction: setup now seeds the wizard from parsed persisted values, uses
+  defaults only for missing fields, separates configured polling from observed
+  current polling, and merges changed setup-owned fields while retaining
+  notifications and unknown TOML tables. Hardware discovery is informational;
+  DPI and polling writes occur only after their respective explicit edits.
+- Regression: repeated no-change setup preserves non-default DPI active/stages,
+  500 Hz polling, `dpi-cycle`/key/chord mappings, notifications, and nested
+  future configuration. Isolated DPI, polling, and remap edits preserve the
+  other preferences.
+- Acceptance interpretation: the earlier 500 Hz persistence result remains
+  **inconclusive because setup was still destructive**, not a confirmed Native
+  HID/HID++ regression. Install this build before repeating the physical
+  polling acceptance sequence.
