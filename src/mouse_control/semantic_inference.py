@@ -1,7 +1,7 @@
 """Evidence-producing semantic inference for unknown mouse protocols.
 
 Inference is deliberately conservative: it labels hypotheses and candidate
-codecs, never writable capabilities.  Guided discovery can accumulate these
+codecs, never writable capabilities. Guided discovery can accumulate these
 hypotheses until repeated observations or a proven repertoire family validates
 them.
 """
@@ -55,6 +55,37 @@ def infer_stage_hypotheses(
                 reason=(
                     f"field changed across {candidate.observations} repeated physical actions "
                     f"within a small {len(candidate.values)}-value state set"
+                ),
+                report_key=candidate.report_key,
+                offset=candidate.offset,
+            )
+        )
+    return tuple(result)
+
+
+def infer_trigger_hypotheses(
+    candidates: Iterable[CorrelationCandidate],
+    *,
+    behavior: SemanticBehavior,
+) -> tuple[SemanticHypothesis, ...]:
+    """Label repeated momentary transitions using an explicitly guided action.
+
+    This does not infer what a random button means. The caller supplies the
+    semantic label because the user was explicitly asked to perform that action
+    (for example, press the physical DPI-cycle button once per sample).
+    """
+
+    result: list[SemanticHypothesis] = []
+    for candidate in candidates:
+        if candidate.observations < 2 or len(candidate.values) < 2:
+            continue
+        result.append(
+            SemanticHypothesis(
+                behavior=behavior,
+                confidence="correlated",
+                reason=(
+                    f"momentary raw transition repeated in {candidate.observations} "
+                    "guided samples of the labelled physical action"
                 ),
                 report_key=candidate.report_key,
                 offset=candidate.offset,
