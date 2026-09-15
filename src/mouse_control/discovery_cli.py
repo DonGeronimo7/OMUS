@@ -144,6 +144,11 @@ def _run_guided_learning(selected, result, engine, *, seconds: float, teacher: b
             f"{len(sample.action.feature_changes)} Feature byte change(s)"
             + (f"; teacher={dict(sample.teacher_state)}" if sample.teacher_state else "")
         )
+        if sample.unreadable_hidraw_paths:
+            print(
+                "  skipped unreadable hidraw sibling(s): "
+                + ", ".join(sample.unreadable_hidraw_paths)
+            )
     print(_render_guided_learning(session.analyze(samples)))
 
 
