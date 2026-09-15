@@ -45,7 +45,7 @@ class HardwareSupervisor(HardwareBackend):
         self._discovery_pending = discovery_pending
         # A Generic backend is a safe fallback, but it is not an equivalent
         # replacement for a backend which has already demonstrated native
-        # hardware control for this device.  Keep probing in that case: hotplug
+        # hardware control for this device. Keep probing in that case: hotplug
         # enumeration may expose evdev before the protocol hidraw interface.
         self._has_preferred_backend = not isinstance(backend, GenericBackend)
         self._lock = threading.RLock()
@@ -91,12 +91,17 @@ class HardwareSupervisor(HardwareBackend):
 
     def _reconcile_backend(self, backend: HardwareBackend,
                            device: MouseDevice | None = None) -> None:
-        """Apply desired state without making optional hardware fatal."""
+        """Apply desired state without changing native control ownership.
+
+        Reconnect/startup reconciliation is automatic lifecycle work, not an
+        explicit user takeover. A backend may know how to enter a Host/software
+        control mode, but that transition is intentionally ineligible here.
+        """
         desired = self.desired
         device = device or self.device
         if desired.polling_rate_hz is not None:
             try:
-                if backend.supports_polling_rate_writes(device):
+                if backend.supports_polling_rate_writes_without_takeover(device):
                     backend.set_polling_rate(device, desired.polling_rate_hz)
                     actual = backend.get_polling_rate(device)
                     if actual != desired.polling_rate_hz:
@@ -105,6 +110,11 @@ class HardwareSupervisor(HardwareBackend):
                             f"read {actual} Hz")
                     LOG.info("Reconciled hardware polling rate to %s Hz through %s",
                              actual, backend.name)
+                elif backend.supports_polling_rate(device):
+                    LOG.info(
+                        "Preserved native control mode; skipped automatic polling write through %s",
+                        backend.name,
+                    )
             except Exception as exc:
                 LOG.warning("Could not reconcile %s polling state: %s", backend.name, exc)
 
@@ -157,7 +167,7 @@ class HardwareSupervisor(HardwareBackend):
                 raise
             if (isinstance(old, GenericBackend) and
                     isinstance(replacement, GenericBackend)):
-                # The fallback remains usable while discovery settles.  Do not
+                # The fallback remains usable while discovery settles. Do not
                 # manufacture generations or repeatedly close/reopen it when
                 # a probe has not yet found a better backend.
                 close = getattr(replacement, "close", None)
@@ -172,7 +182,7 @@ class HardwareSupervisor(HardwareBackend):
                 self._discovery_pending = False
             elif self._has_preferred_backend:
                 # A previously selected native/vendor backend may return after
-                # partial hotplug enumeration.  Generic is provisional until
+                # partial hotplug enumeration. Generic is provisional until
                 # discovery can safely reacquire that capability.
                 self._discovery_pending = True
             self._generation += 1
@@ -199,6 +209,7 @@ class HardwareSupervisor(HardwareBackend):
     def apply_dpi_stages(self, device, stages, active_dpi): return self._call("apply_dpi_stages", device, stages, active_dpi)
     def supports_polling_rate(self, device): return self._call("supports_polling_rate", device)
     def supports_polling_rate_writes(self, device): return self._call("supports_polling_rate_writes", device)
+    def supports_polling_rate_writes_without_takeover(self, device): return self._call("supports_polling_rate_writes_without_takeover", device)
     def get_polling_rate(self, device): return self._call("get_polling_rate", device)
     def get_polling_rates(self, device): return self._call("get_polling_rates", device)
     def set_polling_rate(self, device, hz): return self._call("set_polling_rate", device, hz)
