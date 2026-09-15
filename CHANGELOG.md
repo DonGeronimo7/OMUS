@@ -6,6 +6,9 @@
   behavior without interrupting normal remapping.
 - Preserve existing remaps and setup configuration while hardware choices are
   reviewed.
+- Known temporary UX issue: the built-in updater can pause without displaying
+  its confirmation prompt; type `y` and Enter to continue. Planned for the
+  next development cycle.
 
 ## 0.8.1 — 2026-09-14
 

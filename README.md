@@ -55,6 +55,12 @@ documented installation methods and delegates to the owning native mechanism
 (DNF, APT, a user-owned AppImage, or the active Python environment). Use
 `mouse-control update --check` for a non-modifying availability check.
 
+**Updater note:** When updating through Mouse Control's built-in updater, the
+installation may pause without displaying a confirmation prompt. If this
+happens, type `y` and press Enter. The update will then continue and finish
+normally. This is a temporary known UX issue planned for the next development
+cycle.
+
 Repository packages can intentionally lag behind the newest GitHub release.
 Editable/source and unsupported installation methods are reported with safe
 next steps rather than changed automatically.
@@ -98,7 +104,7 @@ installation shadows the command, use `/usr/bin/mouse-control`.
 Download `mouse-control_0.8.2-1_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.8.2), then let APT resolve its declared dependencies:
 
 ```bash
-sudo apt install ./mouse-control_0.7.11-1_all.deb
+sudo apt install ./mouse-control_0.8.2-1_all.deb
 ```
 
 ### AppImage and other distributions
@@ -106,8 +112,8 @@ sudo apt install ./mouse-control_0.7.11-1_all.deb
 Download [Mouse-Control-0.8.2-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.2/Mouse-Control-0.8.2-x86_64.AppImage), make it executable, and run it:
 
 ```bash
-chmod +x Mouse-Control-0.7.11-x86_64.AppImage
-./Mouse-Control-0.7.11-x86_64.AppImage setup
+chmod +x Mouse-Control-0.8.2-x86_64.AppImage
+./Mouse-Control-0.8.2-x86_64.AppImage setup
 ```
 
 The AppImage can contain the Python application and user-space libraries such
@@ -126,7 +132,7 @@ publish an AUR package. OpenRazer remains an optional dependency.
 ### Source installation
 
 For developers and advanced users, download the source distribution from the
-[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.7.11), or clone this repository:
+[release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.8.2), or clone this repository:
 
 ```bash
 git clone https://github.com/DonGeronimo7/mouse-control.git

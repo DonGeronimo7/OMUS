@@ -5,6 +5,12 @@ more resilient while keeping ordinary evdev/uinput remapping independent of
 optional hardware backends. Setup now preserves existing remaps and accepted
 configuration while hardware choices are reviewed.
 
+**Updater note:** When updating through Mouse Control's built-in updater, the
+installation may pause without displaying a confirmation prompt. If this
+happens, type `y` and press Enter. The update will then continue and finish
+normally. This temporary known UX issue is planned for the next development
+cycle.
+
 ---
 
 # Mouse Control v0.8.1
