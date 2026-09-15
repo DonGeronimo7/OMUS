@@ -1,4 +1,4 @@
-"""Dedicated CLI for the first automatic-hardware-discovery acceptance cycle.
+"""Dedicated CLI for automatic-hardware-discovery acceptance and learning.
 
 Keeping this command separate from the normal setup/runtime path lets us test
 real hardware without silently changing the behavior of ``mouse-control run``.
@@ -10,10 +10,12 @@ import argparse
 import json
 import sys
 
+from .backend_teacher import read_backend_teacher_state
 from .device_topology import TopologyError
 from .discovery import get_mouse_devices, select_mouse_device
 from .discovery_engine import DiscoveryEngine
 from .discovery_ui import render_discovery_result, result_to_dict
+from .learning_session import ReadOnlyLearningSession
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -37,6 +39,37 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not cache the path-independent discovery profile",
     )
+    parser.add_argument(
+        "--generic-only",
+        action="store_true",
+        help=(
+            "skip known protocol detectors and exercise only topology, descriptor, "
+            "repertoire and read-only learning paths"
+        ),
+    )
+    parser.add_argument(
+        "--learn-dpi-button",
+        action="store_true",
+        help=(
+            "after discovery, capture three read-only DPI-button actions and infer "
+            "changing raw state fields"
+        ),
+    )
+    parser.add_argument(
+        "--teacher",
+        action="store_true",
+        help=(
+            "during guided learning, read semantic ground truth after each action "
+            "from an already-proven backend such as HID++; packet details are not shared"
+        ),
+    )
+    parser.add_argument(
+        "--learn-window",
+        type=float,
+        default=1.5,
+        metavar="SECONDS",
+        help="capture window for each guided action (default: 1.5)",
+    )
     return parser
 
 
@@ -53,19 +86,93 @@ def _pick_mouse(index: int | None):
     return mice[index - 1], 0
 
 
+def _render_guided_learning(learned) -> str:
+    lines = [
+        "",
+        "Guided DPI-button learning",
+        "==========================",
+        f"Samples: {len(learned.samples)}",
+        f"Feature-field candidates: {len(learned.feature_candidates)}",
+        f"Raw-report field candidates: {len(learned.report_candidates)}",
+    ]
+
+    if learned.hypotheses:
+        lines.append("Semantic hypotheses:")
+        for hypothesis in learned.hypotheses:
+            location = (
+                f" report={hypothesis.report_key!r} byte={hypothesis.offset}"
+                if hypothesis.report_key is not None
+                else ""
+            )
+            mapping = f" mapping={dict(hypothesis.mapping)}" if hypothesis.mapping else ""
+            lines.append(
+                f"  {hypothesis.confidence:10} {hypothesis.behavior.value}{location}{mapping}"
+            )
+            lines.append(f"               {hypothesis.reason}")
+    else:
+        lines.append(
+            "Semantic hypotheses: none yet — the action produced no repeatable raw/Feature field."
+        )
+
+    teacher_states = [dict(sample.teacher_state) for sample in learned.samples if sample.teacher_state]
+    if teacher_states:
+        lines.append(f"Teacher labels: {teacher_states}")
+    lines.append(
+        "Write status: forbidden — guided learning produces observations/correlations only."
+    )
+    return "\n".join(lines)
+
+
+def _run_guided_learning(selected, result, engine, *, seconds: float, teacher: bool) -> None:
+    print(
+        "\nGuided learner is read-only. It will watch every correlated evdev/hidraw "
+        "interface while you press the physical DPI button exactly once per sample."
+    )
+    session = ReadOnlyLearningSession(result.device, engine.descriptors)
+    reader = (lambda: read_backend_teacher_state(selected)) if teacher else None
+    samples = []
+    for index in range(3):
+        input(
+            f"[{index + 1}/3] Press Enter, then press the DPI button exactly once "
+            f"within {seconds:g}s... "
+        )
+        sample = session.observe_action(seconds=seconds, teacher_reader=reader)
+        samples.append(sample)
+        print(
+            f"  captured {len(sample.action.hid_reports)} HID report(s), "
+            f"{len(sample.action.evdev_events)} evdev event(s), "
+            f"{len(sample.action.feature_changes)} Feature byte change(s)"
+            + (f"; teacher={dict(sample.teacher_state)}" if sample.teacher_state else "")
+        )
+    print(_render_guided_learning(session.analyze(samples)))
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.learn_window <= 0:
+        parser.error("--learn-window must be greater than zero")
+    if args.json and args.learn_dpi_button:
+        parser.error("--json cannot be combined with interactive --learn-dpi-button")
+    if args.teacher and not args.learn_dpi_button:
+        parser.error("--teacher requires --learn-dpi-button")
+
     selected, status = _pick_mouse(args.device)
     if selected is None:
         return status
 
     if not args.json:
-        print(
-            "Discovery test mode: unknown HID is read-only and the normal "
-            "mouse-control runtime is not being reconfigured.\n"
+        mode = (
+            "Known protocol detectors are disabled; unknown HID remains read-only."
+            if args.generic_only
+            else "Unknown HID is read-only and the normal mouse-control runtime is not being reconfigured."
         )
+        print(f"Discovery test mode: {mode}\n")
 
-    engine = DiscoveryEngine(save_profiles=not args.no_save)
+    engine = DiscoveryEngine(
+        detectors=() if args.generic_only else None,
+        save_profiles=not args.no_save,
+    )
     try:
         result = engine.discover(selected)
     except TopologyError as exc:
@@ -89,6 +196,22 @@ def main(argv: list[str] | None = None) -> int:
             profile_path=engine.profile_path,
             verbose=args.verbose,
         ))
+
+    if args.learn_dpi_button:
+        try:
+            _run_guided_learning(
+                selected,
+                result,
+                engine,
+                seconds=args.learn_window,
+                teacher=args.teacher,
+            )
+        except KeyboardInterrupt:
+            print("\nGuided learning cancelled.", file=sys.stderr)
+            return 130
+        except (OSError, PermissionError) as exc:
+            print(f"Guided learning hardware error: {exc}", file=sys.stderr)
+            return 1
 
     if result.device.ambiguous:
         return 2
