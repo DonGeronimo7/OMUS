@@ -1,7 +1,7 @@
 """Declarative protocol grammar used by automatic hardware discovery.
 
 The grammar describes *how* a mouse protocol is shaped without coupling that
-shape to a particular runtime backend.  Known backends (HID++, OpenRazer,
+shape to a particular runtime backend. Known backends (HID++, OpenRazer,
 etc.) can act as high-confidence teachers, while unknown devices can be
 classified against the same vocabulary without receiving speculative writes.
 
@@ -50,6 +50,13 @@ class SafetyClass(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ControlOwnership(str, Enum):
+    """Who currently owns behaviors normally implemented by device firmware."""
+
+    NATIVE = "native"
+    HOST = "host"
+
+
 class TransportKind(str, Enum):
     HID_INPUT = "hid_input"
     HID_OUTPUT = "hid_output"
@@ -82,6 +89,7 @@ class SemanticBehavior(str, Enum):
     DPI_STAGE_INDEX = "dpi_stage_index"
     DPI_STAGE_COUNT = "dpi_stage_count"
     DPI_STAGE_ENABLED = "dpi_stage_enabled"
+    DPI_CYCLE_TRIGGER = "dpi_cycle_trigger"
     REPORT_RATE_HZ = "report_rate_hz"
     BATTERY_PERCENT = "battery_percent"
     BUTTON_BINDING = "button_binding"
@@ -212,6 +220,8 @@ class TransactionSpec:
     checksum: str | None = None
     verification: tuple[str, ...] = ()
     prerequisite: tuple[str, ...] = ()
+    required_control: ControlOwnership | None = None
+    resulting_control: ControlOwnership | None = None
 
 
 @dataclass(frozen=True)
@@ -219,7 +229,7 @@ class ProtocolFamily:
     """Reusable protocol-family knowledge.
 
     ``vendor_ids`` and ``product_ids`` are only hints unless a write gate says
-    otherwise.  The matcher is expected to prefer structural signatures over
+    otherwise. The matcher is expected to prefer structural signatures over
     identity so protocol knowledge can transfer across brands/ODMs.
     """
 
@@ -264,8 +274,8 @@ class ProtocolFamily:
     ) -> bool:
         """Return whether this family is strong enough to authorize writes.
 
-        A descriptor/family match alone is deliberately insufficient.  A
-        backend that has already proved the semantics may write.  Otherwise the
+        A descriptor/family match alone is deliberately insufficient. A
+        backend that has already proved the semantics may write. Otherwise the
         repertoire must have hardware-verified provenance and satisfy the
         declared write scope.
         """
