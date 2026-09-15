@@ -1,3 +1,12 @@
+# Mouse Control v0.8.2
+
+This stabilization release makes native hardware control and reconnect fallback
+more resilient while keeping ordinary evdev/uinput remapping independent of
+optional hardware backends. Setup now preserves existing remaps and accepted
+configuration while hardware choices are reviewed.
+
+---
+
 # Mouse Control v0.8.1
 
 The setup wizard now lets you revisit DPI, polling, and button choices from

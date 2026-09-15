@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.8.1
+Version:        0.8.2
 Release:        1%{?dist}
 Summary:        Mouse remapping with optional hardware backends
 License:        GPL-3.0-or-later
@@ -71,6 +71,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
+* Mon Sep 15 2026 Marc-Anthony Geronimo - 0.8.2-1
+- Stabilize native hardware control and reconnect fallback behavior.
+- Preserve remaps and setup configuration while hardware options are reviewed.
+
 * Mon Sep 14 2026 Marc-Anthony Geronimo - 0.8.1-1
 - Add revisitable wizard navigation, live numeric DPI testing, and safe rollback.
 - Show readable polling rates and select only when writes are supported.

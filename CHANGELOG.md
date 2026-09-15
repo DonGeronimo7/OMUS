@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2 — 2026-09-15
+
+- Stabilize native hardware control, reconnect fallback, and optional-backend
+  behavior without interrupting normal remapping.
+- Preserve existing remaps and setup configuration while hardware choices are
+  reviewed.
+
 ## 0.8.1 — 2026-09-14
 
 - Make setup revisitable, with numeric live DPI testing and Back/Cancel rollback.
