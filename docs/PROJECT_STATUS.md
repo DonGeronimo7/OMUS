@@ -1,6 +1,6 @@
 # Mouse Control Project Status
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 ## Current architecture
 
@@ -78,3 +78,28 @@ Future hardware support should supply a capability adapter for an exactly
 identified and validated protocol, then pass the universal behavior suite.
 Hardware additions should not redesign established remapping, notification,
 lifecycle, or service behavior.
+
+## 2026-09-15 acceptance blocker investigation
+
+Automated validation: 295 tests pass, including 11 new cases spanning actual
+HID++ ROOT discovery, native policy, optional supervisor forwarding, setup
+choices, and verified/failed transactions. Compile and whitespace checks pass.
+Python sdist/wheel and local Fedora RPM builds pass; RPM `%check` also passes
+295 tests, compileall, and the staged CLI smoke test. A wheel installed in an
+isolated virtual environment passes `mouse-control --help`.
+No polling implementation change was required: reviewed commit `1c7b23f`
+already contains the correction to the old capability policy.
+
+Physical validation: the user reported a passing initial doctor/environment
+checkpoint and a blocked first polling screen. No polling write occurred in
+that checkpoint; no physical writes were performed in this investigation.
+The system-installed 0.8.1 still contains the old discovery-time Host-only
+writability flag and lacks the new transaction, while the checkout uses the
+G305-specific policy. An isolated fixture against that installed package
+reproduced readable `1000/500/250/125`, current `1000`, writable `False`.
+
+Remaining physical acceptance: execute the explicit source command in
+`G305_HARDWARE_ACCEPTANCE.md` for `1000 -> 500 Hz`; install matching code for
+the service before continuing lifecycle acceptance. Package version alone is
+not proof of source parity. All rate transitions, combined Host-mode behavior,
+and reconnect acceptance remain pending.

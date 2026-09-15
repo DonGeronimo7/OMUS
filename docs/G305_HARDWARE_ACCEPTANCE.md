@@ -90,3 +90,44 @@ After `restart`, confirm configured polling, active DPI, physical/software DPI
 cycling, remapping, keyboard mappings, notifications, and battery reporting all
 return. Review the journal for rollback failures, ambiguity refusals, reader
 errors, or repeated reconnect loops before accepting the branch.
+
+## Resume after the 2026-09-15 polling-choice blocker
+
+The initial doctor checkpoint passed, but the first `1000 -> 500 Hz` step
+stopped at "Report-rate changes are unavailable", before any polling write.
+Investigation found `/usr/bin/mouse-control` loading the older system package
+from `/usr/lib/python3.14/site-packages/mouse_control`, not this checkout.
+Both report version `0.8.1`; a branch/HEAD check and version number alone do
+not establish which implementation setup is executing.
+
+The installed driver's discovery cached `writable = (mode == Host)`. Its
+backend forwarded that boolean and had no Onboard -> Host transaction.
+The reviewed checkout already separates protocol capability from the exact
+USB G305 transition policy. Deterministic fixtures reproduce the installed
+failure and exercise the checkout's selectable and verified transaction.
+The actual physical control mode was not captured by this investigation;
+Onboard mode reproduces the observed output, but is not a new physical reading.
+
+To resume setup against the tested checkout, first run this exact command:
+
+```sh
+PYTHONPATH=/home/mgeronimo/Mouse-control/src python3 -m mouse_control.cli setup
+```
+
+Retain the existing mappings and stages `800, 1500, 2000, 2500, 3000`.
+At Polling rate, confirm current hardware readback is `1000 Hz`, choose
+`2. 500 Hz`, and accept the reviewed configuration. Require the message
+`Hardware polling rate set and verified at 500 Hz through Native HID.`
+If choices remain unavailable or verification fails, stop and preserve the
+error; do not advance to the next rate. No physical rate transition has been
+validated by this engineering session.
+
+Before using ordinary `mouse-control setup` or continuing service/reconnect
+acceptance, install the locally built stabilization package and restart the
+service so both CLI and daemon use it. The source command above selects code
+for that invocation only; it does not upgrade the installed service. A local
+RPM with the same NEVRA as the installed `0.8.1-1` needs a reinstall operation,
+not an ordinary upgrade. Verify the loaded module path and compare the installed
+`hidpp_driver.py` and `hardware/native_hid.py` against this checkout; a shared
+version string is insufficient. Continue `500 -> 250 -> 125 -> 1000` only after
+the first physical transition succeeds, then complete all sections above.

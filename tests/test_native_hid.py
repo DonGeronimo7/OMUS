@@ -320,3 +320,108 @@ def test_zero_responders_are_rejected():
 
     with pytest.raises(HidppError, match=r"no HID\+\+ 2 device index responded"):
         connect_hidpp20(NoResponders())
+
+
+@pytest.mark.parametrize("supervised", [False, True])
+@pytest.mark.parametrize("failure", [None, "host", "write", "readback"])
+def test_g305_onboard_polling_choices_reach_verified_transaction(
+        monkeypatch, capsys, caplog, supervised, failure):
+    """Exercise ROOT discovery through setup, without replacing capability booleans."""
+    from types import SimpleNamespace
+    from mouse_control.cli import _apply_hardware
+    from mouse_control.discovery import MouseDevice
+    from mouse_control.hardware import HardwareSupervisor
+    from mouse_control.hardware.native_hid import NativeHidBackend
+    from mouse_control.setup_flow import SetupChoices, discover_choices, polling_screen
+
+    class AcceptanceSession(FakeSession):
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0x12 and function == 1 and parameters == bytes((HOST_MODE,)) and failure == "host":
+                raise HidppError("Host transition failed")
+            if feature == 0x17 and function == 2:
+                if failure == "write":
+                    raise HidppError("report-rate write failed")
+                if failure == "readback":
+                    self.calls.append((device, feature, function, parameters))
+                    return HidppReport(0x11, device, feature, function, 0x0a, b"\0")
+            return super().request(device, feature, function, parameters)
+
+    session = AcceptanceSession(profile_mode=ONBOARD_MODE)
+    session.rate_ms = 1
+    device = MouseDevice("G305", "/dev/fake", vendor=0x046d, product=0x4074, bustype=3)
+    backend = NativeHidBackend(
+        discovery=lambda _device: [SimpleNamespace(path="/dev/fake")],
+        session_factory=lambda _path: session,
+        connectors=(lambda selected: Hidpp20Driver(selected, 4),))
+    if supervised:
+        backend = HardwareSupervisor(backend, device, lambda _device: pytest.fail("unexpected rebind"))
+    try:
+        choices = SetupChoices()
+        discover_choices(backend, device, choices)
+        assert choices.polling_rates == [1000, 500, 250, 125]
+        assert choices.current_polling_rate == 1000
+        assert choices.polling_writable
+        assert session.profile_mode == ONBOARD_MODE
+        assert not any(c[1:3] in ((0x12, 1), (0x17, 2)) for c in session.calls)
+        answers = iter(("2", ""))
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+        polling_screen(choices)
+        output = capsys.readouterr().out
+        assert "2. 500 Hz" in output
+        assert "changes are unavailable" not in output
+        assert choices.polling_rate == 500
+        session.calls.clear()
+        _apply_hardware(backend, device, [], 0, choices.polling_rate, setup=True)
+        output = capsys.readouterr().out
+        if failure:
+            assert "set and verified" not in output
+            assert "Could not apply Native HID polling settings" in caplog.text
+            assert session.profile_mode == ONBOARD_MODE
+            assert session.calls[-2:] == [(4, 0x12, 1, b"\x01"), (4, 0x12, 2, b"")]
+            if failure == "host":
+                assert not any(c[1:3] == (0x17, 2) for c in session.calls)
+        else:
+            assert "set and verified at 500 Hz" in output
+            assert session.profile_mode == HOST_MODE
+            assert session.rate_ms == 2
+            assert session.calls == [
+                (4, 0x12, 2, b""),  # capability policy
+                (4, 0x12, 2, b""),  # transaction rechecks mode
+                (4, 0x12, 1, b"\x02"), (4, 0x12, 2, b""),
+                (4, 0x17, 2, b"\x02"), (4, 0x17, 1, b""),
+                (4, 0x17, 1, b""),  # setup verifies independently
+            ]
+    finally:
+        backend.close()
+    assert session.closed
+
+
+@pytest.mark.parametrize("product,bustype", [(0x9999, 3), (0x4074, 5), (0x4074, None)])
+def test_onboard_polling_choices_require_exact_validated_identity(product, bustype):
+    from types import SimpleNamespace
+    from mouse_control.discovery import MouseDevice
+    from mouse_control.hardware.native_hid import NativeHidBackend
+    from mouse_control.setup_flow import SetupChoices, discover_choices
+
+    session = FakeSession(profile_mode=ONBOARD_MODE)
+    driver = Hidpp20Driver(session, 4)
+    device = MouseDevice("G305", "/dev/fake", vendor=0x046d, product=product, bustype=bustype)
+    backend = NativeHidBackend(
+        discovery=lambda _device: [SimpleNamespace(path="/dev/fake")],
+        session_factory=lambda _path: SimpleNamespace(closed=False, close=lambda: None),
+        connectors=(lambda _session: driver,))
+    try:
+        choices = SetupChoices()
+        discover_choices(backend, device, choices)
+        assert choices.polling_readable
+        assert not choices.polling_writable
+        assert choices.polling_rate is None
+        assert session.profile_mode == ONBOARD_MODE
+        assert not any(c[1:3] in ((0x12, 1), (0x17, 2)) for c in session.calls)
+    finally:
+        backend.close()
