@@ -24,12 +24,17 @@ from .event_correlation import (
     capture_action_window,
     detect_repeated_changes,
     detect_repeated_report_fields,
+    detect_repeated_report_transitions,
     diff_feature_snapshots,
 )
 from .hid_descriptor import ParsedHidDescriptor
 from .hid_probe import ReadOnlyHidProbe
 from .protocol_grammar import SemanticBehavior
-from .semantic_inference import SemanticHypothesis, infer_stage_hypotheses
+from .semantic_inference import (
+    SemanticHypothesis,
+    infer_stage_hypotheses,
+    infer_trigger_hypotheses,
+)
 
 
 TeacherReader = Callable[[], Mapping[str, int | tuple[int, int] | None]]
@@ -47,6 +52,7 @@ class LearningResult:
     samples: tuple[LearningSample, ...]
     feature_candidates: tuple[CorrelationCandidate, ...]
     report_candidates: tuple[CorrelationCandidate, ...]
+    trigger_candidates: tuple[CorrelationCandidate, ...]
     hypotheses: tuple[SemanticHypothesis, ...]
 
 
@@ -142,10 +148,16 @@ class ReadOnlyLearningSession:
             unreadable_hidraw_paths=unreadable_hidraw,
         )
 
-    def analyze(self, samples: list[LearningSample] | tuple[LearningSample, ...]) -> LearningResult:
+    def analyze(
+        self,
+        samples: list[LearningSample] | tuple[LearningSample, ...],
+        *,
+        trigger_behavior: SemanticBehavior | None = None,
+    ) -> LearningResult:
         actions = tuple(sample.action for sample in samples)
         feature_candidates = tuple(detect_repeated_changes(actions))
         report_candidates = tuple(detect_repeated_report_fields(actions))
+        trigger_candidates = tuple(detect_repeated_report_transitions(actions))
 
         stage_hypotheses = [
             *infer_stage_hypotheses(feature_candidates),
@@ -154,11 +166,16 @@ class ReadOnlyLearningSession:
         teacher_hypotheses = self._teacher_dpi_hypotheses(
             samples, (*feature_candidates, *report_candidates)
         )
+        trigger_hypotheses = (
+            infer_trigger_hypotheses(trigger_candidates, behavior=trigger_behavior)
+            if trigger_behavior is not None
+            else ()
+        )
 
         # Deduplicate equivalent semantic locations while preserving the more
         # useful teacher-labelled hypothesis when both paths found the same field.
         merged: dict[tuple[object, object, object], SemanticHypothesis] = {}
-        for hypothesis in (*stage_hypotheses, *teacher_hypotheses):
+        for hypothesis in (*stage_hypotheses, *teacher_hypotheses, *trigger_hypotheses):
             key = (hypothesis.behavior, repr(hypothesis.report_key), hypothesis.offset)
             previous = merged.get(key)
             if previous is None or (
@@ -170,6 +187,7 @@ class ReadOnlyLearningSession:
             samples=tuple(samples),
             feature_candidates=feature_candidates,
             report_candidates=report_candidates,
+            trigger_candidates=trigger_candidates,
             hypotheses=tuple(merged.values()),
         )
 
@@ -178,10 +196,11 @@ class ReadOnlyLearningSession:
         samples: list[LearningSample] | tuple[LearningSample, ...],
         candidates: tuple[CorrelationCandidate, ...],
     ) -> tuple[SemanticHypothesis, ...]:
-        """Label candidate raw states when a proven backend supplies current DPI.
+        """Label persistent raw states when a proven backend supplies current DPI.
 
         This does not prove that writing the candidate field changes DPI. It
-        only validates a *read-side* raw-state -> DPI relationship.
+        only validates a *read-side* raw-state -> DPI relationship. Momentary
+        trigger candidates are deliberately excluded from this mapping.
         """
 
         teacher_dpi: list[int] = []
@@ -215,7 +234,7 @@ class ReadOnlyLearningSession:
                     behavior=SemanticBehavior.DPI_VALUE,
                     confidence="validated",
                     reason=(
-                        "raw state consistently mapped to teacher-confirmed current DPI "
+                        "persistent raw state consistently mapped to teacher-confirmed current DPI "
                         f"across {len(teacher_dpi)} guided actions"
                     ),
                     report_key=candidate.report_key,
