@@ -1,6 +1,5 @@
 """Revisitable, backend-neutral setup choices. Hardware writes here are temporary."""
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES
 from .hardware import HardwareError
@@ -55,18 +54,13 @@ def discover_choices(backend, device, choices):
         choices.dpi_writable = False
     try:
         choices.polling_readable = bool(backend.supports_polling_rate(device))
-        # Setup/discovery must preserve firmware ownership. A backend may have a
-        # proven post-discovery Host/software takeover path, but that is not a
-        # normal wizard capability and must be offered explicitly elsewhere.
-        choices.polling_writable = bool(
-            backend.supports_polling_rate_writes_without_takeover(device)
-        )
+        choices.polling_writable = bool(backend.supports_polling_rate_writes(device))
         if choices.polling_readable:
             choices.polling_rates = sorted(set(backend.get_polling_rates(device)), reverse=True)
             choices.current_polling_rate = backend.get_polling_rate(device)
         if choices.polling_writable and choices.polling_rates and choices.polling_rate is None:
             # There is no persisted preference for this field, so the legacy
-            # setup default remains appropriate. Existing values are never
+            # setup default remains appropriate.  Existing values are never
             # replaced by discovery.
             choices.polling_rate = choices.polling_rates[0]
     except HardwareError as exc:
@@ -176,8 +170,7 @@ def polling_screen(choices):
             print(f'[Enter] Continue with configured {choices.polling_rate} Hz  [number] Select  '
                   '[B] Back  [Q] Cancel setup')
         else:
-            print('Report-rate changes are unavailable without changing native control; '
-                  'the current hardware rate will be kept.')
+            print('Report-rate changes are unavailable; the current hardware rate will be kept.')
             print('[Enter] Continue  [B] Back  [Q] Cancel setup')
         raw = input('> ').strip().lower()
         if raw == '':
