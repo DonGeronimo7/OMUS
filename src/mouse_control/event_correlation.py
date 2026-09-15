@@ -1,6 +1,6 @@
 """Correlate evdev actions, hidraw input reports, and feature-report changes.
 
-This module does not assign vendor semantics.  It can establish facts such as
+This module does not assign vendor semantics. It can establish facts such as
 "byte 3 of feature report 5 changes whenever this physical button is pressed";
 it cannot turn that observation into writable DPI support.
 """
@@ -108,7 +108,7 @@ def correlate_events(
     """Group HID activity around evdev key-down events.
 
     If no key-down event exists, the whole capture becomes one observational
-    action.  This is useful for devices whose DPI control is hidden from evdev.
+    action. This is useful for devices whose DPI control is hidden from evdev.
     """
 
     if window_ms <= 0:
@@ -182,17 +182,22 @@ def detect_repeated_changes(
     return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
 
 
+def _report_shape(report: TimedReport) -> tuple[str, int, int | None]:
+    data = bytes(report.data)
+    return (report.source, len(data), data[0] if data else None)
+
+
 def detect_repeated_report_fields(
     actions: Sequence[PhysicalAction],
     *,
     minimum_observations: int = 2,
 ) -> list[CorrelationCandidate]:
-    """Find changing byte positions in spontaneous raw HID reports.
+    """Find persistent changing byte positions in spontaneous raw HID reports.
 
     Reports are grouped by live source, length, and first byte (normally the
-    report ID).  The last report of each shape in each guided action is used so
-    repeated button presses can reveal small state fields even when the device
-    has no readable Feature report for that state.
+    report ID). The last report of each shape in each guided action is compared
+    across actions. This intentionally models *persistent state* and is kept
+    separate from momentary press/release transitions.
 
     The live source path is diagnostic only and must never become persistent
     identity; device profiles already redact volatile hidraw/event paths.
@@ -206,8 +211,7 @@ def detect_repeated_report_fields(
         latest: dict[tuple[str, int, int | None], bytes] = {}
         for report in action.hid_reports:
             data = bytes(report.data)
-            shape = (report.source, len(data), data[0] if data else None)
-            latest[shape] = data
+            latest[_report_shape(report)] = data
         for shape, data in latest.items():
             per_shape[shape].append((action_index, data))
 
@@ -239,6 +243,66 @@ def detect_repeated_report_fields(
     return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
 
 
+def detect_repeated_report_transitions(
+    actions: Sequence[PhysicalAction],
+    *,
+    minimum_observations: int = 2,
+) -> list[CorrelationCandidate]:
+    """Find momentary report-byte transitions repeated inside guided actions.
+
+    Cheap and gaming mice often expose a DPI button as a transient input field:
+    ``released -> pressed -> released``. Looking only at the final report makes
+    every sample appear identical and loses the useful behavior. This detector
+    keeps within-action transitions separate from persistent-state inference so
+    a momentary trigger is never mistaken for a DPI-stage register.
+    """
+
+    if minimum_observations < 1:
+        raise ValueError("minimum_observations must be at least one")
+
+    observed: dict[
+        tuple[tuple[str, int, int | None], int],
+        list[tuple[tuple[int, int], ...]],
+    ] = defaultdict(list)
+
+    for action in actions:
+        per_shape: dict[tuple[str, int, int | None], list[bytes]] = defaultdict(list)
+        for report in action.hid_reports:
+            per_shape[_report_shape(report)].append(bytes(report.data))
+
+        for shape, reports in per_shape.items():
+            if len(reports) < 2:
+                continue
+            width = min(len(data) for data in reports)
+            for offset in range(width):
+                sequence = [data[offset] for data in reports]
+                changes = tuple(
+                    (before, after)
+                    for before, after in zip(sequence, sequence[1:])
+                    if before != after
+                )
+                if changes:
+                    observed[(shape, offset)].append(changes)
+
+    result: list[CorrelationCandidate] = []
+    for (shape, offset), action_changes in observed.items():
+        if len(action_changes) < minimum_observations:
+            continue
+        flattened = tuple(change for changes in action_changes for change in changes)
+        values = tuple(sorted({value for change in flattened for value in change}))
+        result.append(
+            CorrelationCandidate(
+                report_key=shape,
+                offset=offset,
+                observations=len(action_changes),
+                values=values,
+                transitions=flattened,
+            )
+        )
+
+    return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
+
+
 def capture_action_window(
     *,
     evdev_paths: Iterable[str | Path] = (),
@@ -249,7 +313,7 @@ def capture_action_window(
 ) -> PhysicalAction:
     """Capture one bounded user action from evdev and hidraw simultaneously.
 
-    hidraw files are opened O_RDONLY|O_NONBLOCK.  No grab is performed on evdev
+    hidraw files are opened O_RDONLY|O_NONBLOCK. No grab is performed on evdev
     and no HID output/feature write operation exists in this capture path.
     """
 
