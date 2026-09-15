@@ -16,7 +16,12 @@ G305 = MouseDevice(
 )
 
 
-def native_backend(session: FakeSession) -> NativeHidBackend:
+class ClosableFakeSession(FakeSession):
+    def close(self):
+        pass
+
+
+def native_backend(session: ClosableFakeSession) -> NativeHidBackend:
     return NativeHidBackend(
         discovery=lambda _device: [SimpleNamespace(path="/dev/fake")],
         session_factory=lambda _path: session,
@@ -25,7 +30,7 @@ def native_backend(session: FakeSession) -> NativeHidBackend:
 
 
 def test_onboard_polling_is_not_safe_for_automatic_reconciliation():
-    session = FakeSession(profile_mode=ONBOARD_MODE)
+    session = ClosableFakeSession(profile_mode=ONBOARD_MODE)
     backend = native_backend(session)
     try:
         assert backend.supports_polling_rate_writes(G305)
@@ -36,7 +41,7 @@ def test_onboard_polling_is_not_safe_for_automatic_reconciliation():
 
 
 def test_existing_host_mode_is_safe_without_an_ownership_transition():
-    session = FakeSession(profile_mode=HOST_MODE)
+    session = ClosableFakeSession(profile_mode=HOST_MODE)
     backend = native_backend(session)
     try:
         assert backend.supports_polling_rate_writes_without_takeover(G305)
@@ -45,7 +50,7 @@ def test_existing_host_mode_is_safe_without_an_ownership_transition():
 
 
 def test_supervisor_preserves_onboard_mode_instead_of_replaying_polling_write():
-    session = FakeSession(profile_mode=ONBOARD_MODE)
+    session = ClosableFakeSession(profile_mode=ONBOARD_MODE)
     session.rate_ms = 1
     backend = native_backend(session)
     supervisor = HardwareSupervisor(
