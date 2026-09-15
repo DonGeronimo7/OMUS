@@ -60,12 +60,15 @@ sed -i '\|__pycache__|d' %{pyproject_files}
 /usr/bin/python3 -m compileall -q src tests
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
   %{buildroot}%{_bindir}/mouse-control --help
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
+  %{buildroot}%{_bindir}/mouse-control-discover --help
 
 %files -f %{pyproject_files}
 %license LICENSE
 %doc README.md CHANGELOG.md
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
+%{_bindir}/mouse-control-discover
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
@@ -101,7 +104,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 - Fall back to the validated GitHub package when native repositories do not
   actually upgrade a direct-release installation.
 
-* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.7-1
+* Mon Sep 14 2026 Marc-A. Geronimo - 0.7.7-1
 - Polish the terminal launcher mark and strengthen icon visibility at small sizes.
 
 * Mon Sep 14 2026 Marc-A. Geronimo - 0.7.6-1
