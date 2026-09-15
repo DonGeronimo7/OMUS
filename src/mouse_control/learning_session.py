@@ -1,9 +1,9 @@
 """Guided, read-only behavioral learning for unknown mouse protocols.
 
-A learning session observes repeated user actions across *all* correlated evdev
-and hidraw interfaces, takes safe Feature-report snapshots before/after each
-action, and asks semantic inference to identify repeated fields.  It never
-contains a HID write operation.
+A learning session observes repeated user actions across *all readable*
+correlated evdev and hidraw interfaces, takes safe Feature-report snapshots
+before/after each action, and asks semantic inference to identify repeated
+fields. It never contains a HID write operation.
 
 Known backends may optionally provide read-only teacher state after each action.
 That ground truth can label raw states without teaching the learner any
@@ -13,6 +13,8 @@ vendor-specific packet offsets or command IDs.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
+from pathlib import Path
 from typing import Callable, Mapping
 
 from .discovery_models import DeviceNode, PhysicalDevice
@@ -26,8 +28,8 @@ from .event_correlation import (
 )
 from .hid_descriptor import ParsedHidDescriptor
 from .hid_probe import ReadOnlyHidProbe
-from .semantic_inference import SemanticHypothesis, infer_stage_hypotheses
 from .protocol_grammar import SemanticBehavior
+from .semantic_inference import SemanticHypothesis, infer_stage_hypotheses
 
 
 TeacherReader = Callable[[], Mapping[str, int | tuple[int, int] | None]]
@@ -37,6 +39,7 @@ TeacherReader = Callable[[], Mapping[str, int | tuple[int, int] | None]]
 class LearningSample:
     action: PhysicalAction
     teacher_state: Mapping[str, int | tuple[int, int] | None] = field(default_factory=dict)
+    unreadable_hidraw_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,31 @@ class ReadOnlyLearningSession:
                 result[self._feature_key(node, report_id)] = bytes(data)
         return result
 
+    def _readable_hidraw_paths(self) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+        """Return hidraw nodes usable for passive capture plus skipped nodes.
+
+        Composite mice routinely expose sibling HID interfaces with different
+        kernel/udev permissions. One unreadable sibling is missing evidence,
+        not a reason to abort learning from every other readable interface.
+        The probe is O_RDONLY|O_NONBLOCK and closes immediately; no report is
+        written and no input is consumed here.
+        """
+
+        readable: list[Path] = []
+        skipped: list[str] = []
+        for node in self.physical.hidraw_nodes:
+            path = Path(node.path)
+            try:
+                fd = os.open(os.fspath(path), os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                skipped.append(os.fspath(path))
+                continue
+            try:
+                readable.append(path)
+            finally:
+                os.close(fd)
+        return tuple(readable), tuple(skipped)
+
     def observe_action(
         self,
         *,
@@ -99,15 +127,20 @@ class ReadOnlyLearningSession:
         """Capture one bounded physical action plus before/after Feature state."""
 
         before = self.snapshot_features()
+        readable_hidraw, unreadable_hidraw = self._readable_hidraw_paths()
         action = capture_action_window(
             evdev_paths=(node.path for node in self.physical.evdev_nodes),
-            hidraw_paths=(node.path for node in self.physical.hidraw_nodes),
+            hidraw_paths=readable_hidraw,
             seconds=seconds,
         )
         after = self.snapshot_features()
         action.feature_changes = diff_feature_snapshots(before, after)
         teacher_state = dict(teacher_reader()) if teacher_reader is not None else {}
-        return LearningSample(action=action, teacher_state=teacher_state)
+        return LearningSample(
+            action=action,
+            teacher_state=teacher_state,
+            unreadable_hidraw_paths=unreadable_hidraw,
+        )
 
     def analyze(self, samples: list[LearningSample] | tuple[LearningSample, ...]) -> LearningResult:
         actions = tuple(sample.action for sample in samples)
@@ -147,7 +180,7 @@ class ReadOnlyLearningSession:
     ) -> tuple[SemanticHypothesis, ...]:
         """Label candidate raw states when a proven backend supplies current DPI.
 
-        This does not prove that writing the candidate field changes DPI.  It
+        This does not prove that writing the candidate field changes DPI. It
         only validates a *read-side* raw-state -> DPI relationship.
         """
 
