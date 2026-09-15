@@ -9,11 +9,19 @@ from ..discovery import MouseDevice
 from ..generic_hid import discover_hid_devices
 from ..hid_session import HidSession
 from ..hidpp import HidppError, LOGITECH_VENDOR_ID
-from ..hidpp_driver import Hidpp20Driver, connect_hidpp20
+from ..hidpp_driver import (HOST_MODE, ONBOARD_MODE, Hidpp20Driver,
+                            connect_hidpp20)
 from .base import HardwareBackend, HardwareError
 from .capabilities import BatteryState, DpiState, HardwareCapabilities
 
 LOG = logging.getLogger(__name__)
+
+# Automatic profile-mode transitions are intentionally narrower than protocol
+# support.  Add hardware here only after the transition and report-rate write
+# have been physically validated on that model.
+_VALIDATED_HOST_MODE_PRODUCTS = frozenset({
+    0x4074,  # Logitech G305 Lightspeed
+})
 
 
 class NativeHidBackend(HardwareBackend):
@@ -68,6 +76,11 @@ class NativeHidBackend(HardwareBackend):
         if not self.supports_device(device):
             raise HardwareError("Native HID: no validated protocol driver")
         return self._bound[device][1]
+
+    @staticmethod
+    def _may_transition_to_host(device: MouseDevice) -> bool:
+        return (device.vendor == LOGITECH_VENDOR_ID and
+                device.product in _VALIDATED_HOST_MODE_PRODUCTS)
 
     def get_capabilities(self, device: MouseDevice) -> HardwareCapabilities:
         return self._driver(device).capabilities
@@ -135,9 +148,38 @@ class NativeHidBackend(HardwareBackend):
     def set_polling_rate(self, device: MouseDevice, hz: int) -> None:
         if not self.supports_polling_rate_writes(device):
             raise HardwareError("Native HID: polling-rate writes are unsupported")
+        driver = self._driver(device)
+        original_mode: int | None = None
+        changed_mode = False
         try:
-            self._driver(device).set_report_rate(hz)
-        except HidppError as exc:
+            if driver.supports_profile_mode_control():
+                original_mode = driver.get_profile_mode()
+                if original_mode == ONBOARD_MODE:
+                    if not self._may_transition_to_host(device):
+                        raise HardwareError(
+                            "Native HID: report-rate write requires a host-mode transition "
+                            "that has not been validated for this mouse"
+                        )
+                    driver.set_profile_mode(HOST_MODE)
+                    changed_mode = True
+                elif original_mode != HOST_MODE:
+                    raise HidppError(
+                        f"unsupported onboard-profiles mode 0x{original_mode:02x}"
+                    )
+            driver.set_report_rate(hz)
+        except (HidppError, HardwareError) as exc:
+            # A failed transaction must not leave a validated mouse in a mode
+            # different from the one in which Mouse Control found it.
+            if changed_mode and original_mode is not None:
+                try:
+                    driver.set_profile_mode(original_mode)
+                except HidppError as rollback_exc:
+                    raise HardwareError(
+                        f"Native HID: report-rate update failed ({exc}); "
+                        f"profile-mode rollback also failed ({rollback_exc})"
+                    ) from rollback_exc
+            if isinstance(exc, HardwareError):
+                raise
             raise HardwareError(f"Native HID: {exc}") from exc
 
     def watch_dpi_events(self, device: MouseDevice, callback,
