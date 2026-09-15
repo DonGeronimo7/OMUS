@@ -55,11 +55,12 @@ documented installation methods and delegates to the owning native mechanism
 (DNF, APT, a user-owned AppImage, or the active Python environment). Use
 `mouse-control update --check` for a non-modifying availability check.
 
-**Updater note:** When updating through Mouse Control's built-in updater, the
-installation may pause without displaying a confirmation prompt. If this
-happens, type `y` and press Enter. The update will then continue and finish
-normally. This is a temporary known UX issue planned for the next development
-cycle.
+**Updater note:** When updating through Mouse Control's built-in updater,
+installation may pause without displaying the package manager's confirmation
+prompt. If this happens, type `y` and press Enter. The update will then
+continue and finish normally. This temporary known UX issue—waiting for
+invisible user input—is planned for correction in the next development cycle.
+This does not apply to `mouse-control update --yes`.
 
 Repository packages can intentionally lag behind the newest GitHub release.
 Editable/source and unsupported installation methods are reported with safe

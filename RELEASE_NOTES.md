@@ -1,15 +1,22 @@
 # Mouse Control v0.8.2
 
-This stabilization release makes native hardware control and reconnect fallback
-more resilient while keeping ordinary evdev/uinput remapping independent of
-optional hardware backends. Setup now preserves existing remaps and accepted
-configuration while hardware choices are reviewed.
+This stabilization release keeps ordinary evdev/uinput remapping independent
+of optional hardware backends while native hardware control recovers cleanly.
 
-**Updater note:** When updating through Mouse Control's built-in updater, the
-installation may pause without displaying a confirmation prompt. If this
-happens, type `y` and press Enter. The update will then continue and finish
-normally. This temporary known UX issue is planned for the next development
-cycle.
+- Setup preserves valid remaps, including the configurable `dpi-cycle` action,
+  and retains untouched DPI/polling settings.
+- Setup writes hardware settings only for explicit relevant edits and merges
+  configuration without discarding unrelated or unknown entries.
+- On reconnect, Mouse Control can temporarily use Generic HID/evdev, then
+  promote back to the preferred native or vendor backend. Native promotion
+  restores DPI monitoring, notifications, and DPI/polling reconciliation.
+
+**Updater note:** When updating through Mouse Control's built-in updater,
+installation may pause without displaying the package manager's confirmation
+prompt. If this happens, type `y` and press Enter. The update will then
+continue and finish normally. This does not apply to `mouse-control update
+--yes`. This temporary known UX issue—waiting for invisible user input—is
+planned for correction in the next development cycle.
 
 ---
 

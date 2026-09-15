@@ -2,13 +2,14 @@
 
 ## 0.8.2 — 2026-09-15
 
-- Stabilize native hardware control, reconnect fallback, and optional-backend
-  behavior without interrupting normal remapping.
-- Preserve existing remaps and setup configuration while hardware choices are
-  reviewed.
-- Known temporary UX issue: the built-in updater can pause without displaying
-  its confirmation prompt; type `y` and Enter to continue. Planned for the
-  next development cycle.
+- Preserve valid remaps, configurable `dpi-cycle`, untouched DPI/polling
+  settings, and unrelated configuration through setup.
+- Restrict setup hardware writes to explicit relevant edits; recover from a
+  temporary Generic HID/evdev fallback by promoting back to the preferred
+  backend with DPI monitoring, notifications, and state reconciliation.
+- Known temporary UX issue: the built-in updater can wait for invisible input.
+  Type `y` and Enter to continue; this does not apply to `update --yes`.
+  Planned for correction in the next development cycle.
 
 ## 0.8.1 — 2026-09-14
 
