@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mouse_control.discovery_models import PhysicalDevice
+from mouse_control.discovery_models import DeviceNode, PhysicalDevice
 from mouse_control.event_correlation import PhysicalAction, TimedReport
 from mouse_control.learning_session import LearningSample, ReadOnlyLearningSession
 from mouse_control.protocol_grammar import (
@@ -18,7 +18,6 @@ from mouse_control.protocol_grammar import (
 from mouse_control.transaction_engine import (
     RetryableTransactionError,
     StepResult,
-    TransactionAdapter,
     TransactionAuthorization,
     TransactionAuthorizationError,
     TransactionContext,
@@ -41,6 +40,19 @@ def action(value: int, timestamp: int) -> PhysicalAction:
     )
 
 
+def hidraw_node(path: str) -> DeviceNode:
+    return DeviceNode(
+        path=Path(path),
+        sysfs_path=None,
+        subsystem="hidraw",
+        node_type="hidraw",
+        bus=3,
+        vendor_id=0x1234,
+        product_id=0x5678,
+        interface_number=2,
+    )
+
+
 def test_guided_learning_finds_raw_stage_field_and_teacher_mapping():
     session = ReadOnlyLearningSession(physical(), {})
     samples = [
@@ -59,6 +71,27 @@ def test_guided_learning_finds_raw_stage_field_and_teacher_mapping():
         and hypothesis.confidence == "validated"
         for hypothesis in learned.hypotheses
     )
+
+
+def test_guided_learning_skips_unreadable_hidraw_sibling(monkeypatch):
+    device = physical()
+    device.hidraw_nodes = [hidraw_node("/dev/hidraw1"), hidraw_node("/dev/hidraw8")]
+    session = ReadOnlyLearningSession(device, {})
+    closed: list[int] = []
+
+    def fake_open(path, _flags):
+        if path == "/dev/hidraw1":
+            raise PermissionError(13, "Permission denied", path)
+        assert path == "/dev/hidraw8"
+        return 88
+
+    monkeypatch.setattr("mouse_control.learning_session.os.open", fake_open)
+    monkeypatch.setattr("mouse_control.learning_session.os.close", closed.append)
+
+    readable, skipped = session._readable_hidraw_paths()
+    assert readable == (Path("/dev/hidraw8"),)
+    assert skipped == ("/dev/hidraw1",)
+    assert closed == [88]
 
 
 class Adapter:
