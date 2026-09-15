@@ -81,6 +81,20 @@ def _default_mappings() -> dict[str, str]:
     }
 
 
+def _initial_mappings() -> dict[str, str]:
+    """Keep an existing remap table intact until the wizard edits a button."""
+    path = get_config_path()
+    if not path.exists():
+        return _default_mappings()
+    existing = load_config(path)
+    mappings = existing.get("remap", {})
+    if not isinstance(mappings, dict) or not all(
+            isinstance(button, str) and isinstance(action, str)
+            for button, action in mappings.items()):
+        raise ValueError("Existing [remap] configuration is invalid")
+    return dict(mappings)
+
+
 def debug_hid(seconds: float = 10.0) -> int:
     """Identify matching HID interfaces and capture reports without writes."""
     if seconds <= 0:
@@ -265,7 +279,8 @@ def run_setup_wizard() -> int:
                 print(f"Hardware name: {hardware_name}{identity}")
         except HardwareError as exc:
             logging.info("Hardware name lookup unavailable: %s", exc)
-        choices = SetupChoices(mappings=_default_mappings())
+        initial_mappings = _initial_mappings()
+        choices = SetupChoices(mappings=initial_mappings)
         discover_choices(backend, selected, choices)
         page = 'buttons'
         review_return = False
@@ -285,7 +300,7 @@ def run_setup_wizard() -> int:
                         restore_dpi(backend, selected, choices.original_dpi)
                         selected = replacement
                         backend = get_backend(selected)
-                        choices = SetupChoices(mappings=_default_mappings())
+                        choices = SetupChoices(mappings=dict(initial_mappings))
                         discover_choices(backend, selected, choices)
                         review_return = False
                     continue

@@ -28,6 +28,7 @@ def hardware():
 
 def run_wizard(path, backend, answers, capsys):
     with patch.object(config, 'get_config_path', return_value=path), \
+         patch.object(cli, 'get_config_path', return_value=path), \
          patch.object(cli, 'is_service_active', return_value=False), \
          patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
          patch.object(cli, 'select_mouse_device', return_value=MOUSE), \
@@ -87,3 +88,45 @@ def test_back_keeps_accepted_stage_and_cancel_does_not_save(tmp_path, capsys):
     assert '2. 1450 DPI' in output
     assert path.read_bytes() == original
     assert backend.set_dpi.call_args.args[-1] == 800
+
+
+def test_skip_preserves_existing_remaps_and_is_idempotent(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    remaps = {
+        'BTN_FORWARD': 'dpi-cycle',
+        'BTN_SIDE': 'mouse:BTN_MIDDLE',
+        'BTN_EXTRA': 'key:KEY_F13',
+        'BTN_TASK': 'chord:KEY_LEFTCTRL+KEY_C',
+        'BTN_MIDDLE': 'passthrough',
+        'BTN_BACK': 'disable',
+    }
+    path.write_text(config.generate_config(MOUSE, remaps))
+    backend = hardware()
+
+    for _ in range(2):
+        result, _ = run_wizard(path, backend, ['s', '', '', 'n', ''], capsys)
+        assert result == 0
+        assert config.load_config(path)['remap'] == remaps
+
+
+def test_edit_explicitly_replaces_existing_dpi_cycle_mapping(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    path.write_text(config.generate_config(MOUSE, {'BTN_FORWARD': 'dpi-cycle'}))
+    backend = hardware()
+    with patch.object(config, 'get_config_path', return_value=path), \
+         patch.object(cli, 'get_config_path', return_value=path), \
+         patch.object(cli, 'is_service_active', return_value=False), \
+         patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
+         patch.object(cli, 'select_mouse_device', return_value=MOUSE), \
+         patch.object(cli, 'get_backend', return_value=backend), \
+         patch.object(cli, 'map_mouse_buttons', return_value={'BTN_FORWARD': 'key:KEY_F13'}), \
+         patch('builtins.input', side_effect=['', '', '', 'n', '']):
+        assert cli.run_setup_wizard() == 0
+    assert config.load_config(path)['remap'] == {'BTN_FORWARD': 'key:KEY_F13'}
+
+
+def test_setup_does_not_infer_a_dpi_action_for_btn_forward(tmp_path, capsys):
+    path = tmp_path / 'config.toml'
+    result, _ = run_wizard(path, hardware(), ['s', '', '', 'n', ''], capsys)
+    assert result == 0
+    assert config.load_config(path)['remap'].get('BTN_FORWARD') is None

@@ -58,3 +58,20 @@ continuously merely to maintain configuration. Safe persistent profile
 programming is not a prerequisite for this optimization. A few resident state
 values are acceptable. This work remains **HOLD** pending a separate bounded
 task; no memory/runtime optimization has begun.
+
+## 2026-09-15 — Setup remap preservation and DPI-cycle selection
+
+- Root cause: setup initialized every run from built-in left/right/middle
+  defaults, so Skip/keep mappings regenerated `[remap]` and removed other
+  valid entries such as `BTN_FORWARD = 'dpi-cycle'`. The action menu also did
+  not expose the already-supported `dpi-cycle` action.
+- Correction: seed setup from an existing valid `[remap]` table, overlay only
+  deliberately captured buttons, and offer canonical `dpi-cycle` as action 8.
+  No HID++, Host-mode, polling, backend, or runtime remapping behavior changed;
+  no global `BTN_FORWARD` meaning was added.
+- Validation: targeted setup/wizard/runtime suite passes 58 tests; full suite
+  passes 299 tests (one existing GLib deprecation warning). Compileall and
+  whitespace checks pass.
+- Physical follow-up: confirm `BTN_FORWARD = 'dpi-cycle'`, run setup with
+  Skip/keep mappings, confirm it remains, restart Mouse Control, and verify
+  physical DPI cycling. Only then proceed from verified 500 Hz to 250 Hz.

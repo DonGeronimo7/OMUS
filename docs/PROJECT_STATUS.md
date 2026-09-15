@@ -103,3 +103,14 @@ Remaining physical acceptance: execute the explicit source command in
 the service before continuing lifecycle acceptance. Package version alone is
 not proof of source parity. All rate transitions, combined Host-mode behavior,
 and reconnect acceptance remain pending.
+
+## 2026-09-15 setup remap preservation
+
+Setup now begins with the existing valid `[remap]` table and changes only
+buttons explicitly captured in the wizard. Skip/keep mappings is idempotent,
+including the canonical `dpi-cycle` action. The button-action menu offers
+`dpi-cycle` directly; no device or button code receives an implicit DPI role.
+The G305 physical validation sequence remains pending: confirm the
+`BTN_FORWARD = 'dpi-cycle'` mapping survives setup, restart Mouse Control, and
+verify physical DPI cycling before attempting the verified `500 -> 250 Hz`
+polling transition.
