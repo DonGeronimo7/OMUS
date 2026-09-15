@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 mouse-control = "mouse_control.cli:main"
+mouse-control-discover = "mouse_control.discovery_cli:main"
 
 [tool.setuptools.package-data]
 mouse_control = ["udev/*.rules"]
