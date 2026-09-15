@@ -71,7 +71,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 
 %changelog
-* Mon Sep 15 2026 Marc-Anthony Geronimo - 0.8.2-1
+* Tue Sep 15 2026 Marc-Anthony Geronimo - 0.8.2-1
 - Stabilize native hardware control and reconnect fallback behavior.
 - Preserve remaps and setup configuration while hardware options are reviewed.
 
@@ -101,10 +101,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 - Fall back to the validated GitHub package when native repositories do not
   actually upgrade a direct-release installation.
 
-* Sun Sep 14 2026 Marc-Anthony Geronimo - 0.7.7-1
+* Mon Sep 14 2026 Marc-Anthony Geronimo - 0.7.7-1
 - Polish the terminal launcher mark and strengthen icon visibility at small sizes.
 
-* Sun Sep 14 2026 Marc-A. Geronimo - 0.7.6-1
+* Mon Sep 14 2026 Marc-A. Geronimo - 0.7.6-1
 - Fix Arch build dependencies for the updater release.
 
 * Sun Sep 13 2026 Marc-A. Geronimo - 0.7.5-1
