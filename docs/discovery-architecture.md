@@ -4,21 +4,48 @@ Mouse Control discovery treats a mouse as a physical graph of evdev and hidraw
 interfaces rather than as one `/dev` node. Device paths are live interfaces,
 not persistent identities.
 
+The long-term design goal is not a larger hard-coded device table. It is a
+repeatable learning pipeline that can observe an unknown mouse, let the user
+supply semantic demonstrations, validate those demonstrations with physical
+behavior, persist only the evidence that was actually learned, and reuse that
+knowledge at runtime.
+
+## Core rule
+
+**Discovery learns hardware; it does not guess hardware.**
+
+Root access increases visibility only. It never increases semantic confidence
+or write authority.
+
 ## Safety model
 
 1. Enumerate evdev, hidraw, and sysfs identity.
 2. Correlate interfaces into one physical-device graph.
 3. Parse HID descriptors for report structure only.
-4. Try validated protocol detectors, currently Logitech HID++ 2.
-5. If no known protocol claims the device, inspect unknown HID read-only.
-6. Keep observations, correlations, validated behavior, and proven protocol
-   semantics as distinct evidence levels.
-7. Persist only path-independent profiles.
+4. Observe passive Input traffic and safe GET Feature traffic where available.
+5. Collect negative controls for ordinary movement/click activity.
+6. Ask the user to demonstrate a specific behavior such as a DPI-cycle press.
+7. Physically calibrate the resulting state when a measurable behavior exists.
+8. Correlate raw state with the independently validated semantic state.
+9. Persist only path-independent read-side evidence.
+10. Rebind learned report identities at runtime and expose only validated reads/events.
+11. Promote writes only through a separate proof process.
 
-Unknown hardware never gains writable support from descriptor shape or changing
-bytes alone. `ReadOnlyHidProbe` intentionally exposes no SET_REPORT or raw-write
-API. A writable capability must carry PROVEN evidence from a validated protocol
-implementation; runtime backends still enforce their own write policy.
+Unknown hardware never gains writable support from descriptor shape, brand,
+VID:PID, a changing byte, or a successful read-side correlation alone.
+`ReadOnlyHidProbe` intentionally exposes no SET_REPORT or raw-write API.
+
+## Evidence levels
+
+Mouse Control keeps four evidence levels distinct:
+
+- `OBSERVED`: a fact was directly seen.
+- `CORRELATED`: a raw field/report repeatedly tracks a demonstrated behavior.
+- `VALIDATED`: the semantic behavior was independently confirmed, for example by physical CPI calibration and cycle wrap.
+- `PROVEN`: a protocol transaction is established strongly enough to authorize the specific operation it describes.
+
+A read-side calibrated profile is intentionally unable to become write authority.
+Its root object and every raw mapping carry `write_authorized: false`.
 
 ## Identity rules
 
@@ -28,18 +55,125 @@ implementation; runtime backends still enforce their own write policy.
 - A USB port/sysfs parent is a connection location, not an instance identity.
 - A true HID unique identifier may identify one physical instance.
 - Model fingerprints describe the stable interface/descriptor layout.
+- Runtime rebind uses stable report facts such as bus, VID:PID, interface number,
+  descriptor fingerprint, report length, and report ID.
 
-## First acceptance target: Logitech G305
+## Physical semantic calibration
 
-The G305 is the golden reference because its existing native HID++ backend is
-already physically validated. Acceptance expects HID++ 4.2, dynamic ROOT lookup,
-ADJUSTABLE_DPI `0x2201`, REPORT_RATE `0x8060`, ONBOARD_PROFILES `0x8100`, DPI
-200–12000 in steps of 50, and report rates 125/250/500/1000 Hz. The observed
-feature IDs are test facts, not hard-coded feature indexes.
+DPI learning uses the physical sensor as an independent oracle rather than
+assuming a vendor register is available.
 
-## First hardware-test boundary
+For a ruler pass, Mouse Control:
 
-The discovery core is exposed through `mouse-control-discover` while the normal
-`mouse-control setup` and `mouse-control run` paths remain unchanged. Runtime
-profile-driven backend selection is intentionally deferred until the physical
-G305 acceptance run validates topology grouping and single-responder behavior.
+- exclusively captures the selected physical evdev stream;
+- preserves kernel event timestamps for polling estimation;
+- isolates the strongest deliberate motion segment;
+- uses two-dimensional displacement rather than assuming Linux `REL_X` matches
+  the user's physical ruler direction;
+- estimates measured CPI internally from device units and the supplied physical
+  distance;
+- repeats passes and uses median/MAD plus worst-pass spread for confidence;
+- automatically requests more evidence when the initial pass set is unstable;
+- reports configured DPI labels separately from measured physical CPI instead
+  of applying a correction factor.
+
+The user may provide a configured DPI value as a semantic label. That label and
+the physical CPI measurement are retained as separate facts.
+
+## Contrastive HID learning
+
+Ordinary ruler movement is recorded as a negative control. DPI-button captures
+are recorded separately with the mouse still. This allows the learner to
+separate pointer traffic from action-specific traffic.
+
+A report may be classified as:
+
+- `state-bearing`: a stable raw field maps across calibrated semantic states;
+- `transition-only`: the report reliably appears for the demonstrated action but
+  does not itself provide a durable calibrated state mapping.
+
+Individual raw fields remain correlated evidence even when the overall semantic
+DPI-cycle behavior is validated.
+
+## Persisted read-side profiles
+
+A successful calibrated run may persist:
+
+- stable model/instance fingerprints;
+- configured DPI cycle order;
+- measured physical CPI and polling evidence;
+- cycle-wrap confirmation;
+- state-bearing and transition-only report identities;
+- raw-to-configured-DPI lookup tables;
+- raw-to-measured-CPI observations;
+- descriptor roles and observation counts.
+
+Volatile `/dev` paths are rejected from persisted profiles.
+
+## Runtime backend selection
+
+The old inert `GenericBackend` is retired as a runtime concept. Backend selection
+is now:
+
+1. a proven native backend when one confidently claims the device;
+2. `DiscoveryBackend` as the universal safe fallback.
+
+`GenericBackend` remains only as a compatibility alias to `DiscoveryBackend` so
+older imports do not break.
+
+When Discovery has a matching calibrated profile, it re-finds the current hidraw
+interface from stable identity facts and emits confirmed `DpiState` events from
+the learned mapping. It does not expose a synchronous vendor GET-DPI transaction
+that was never learned, and it does not expose DPI writes.
+
+When no calibrated profile exists, Discovery remains the safe fallback and
+ordinary evdev/uinput remapping continues without guessed hardware controls.
+
+## G305 controlled proof
+
+The Logitech G305 is the golden reference because its native HID++ behavior was
+already independently mastered before the generic experiment.
+
+For the controlled Discovery acceptance test, the HID++ teacher was disabled.
+The learner used physical calibration plus read-only raw HID capture and learned
+this five-stage mapping from the G305 state-bearing report:
+
+```text
+raw 0 ->  800 DPI
+raw 1 -> 1500 DPI
+raw 2 -> 2000 DPI
+raw 3 -> 2500 DPI
+raw 4 -> 3000 DPI
+```
+
+The complete cycle wrap back to raw `0` / 800 DPI was independently confirmed by
+physical CPI measurement. Polling measured approximately 1000 Hz at every stage.
+
+The persisted profile was then loaded by `DiscoveryBackend` with every
+vendor/native backend explicitly bypassed. Repeated physical DPI-button presses
+produced the live runtime sequence:
+
+```text
+800 -> 1500 -> 2000 -> 2500 -> 3000
+```
+
+The acceptance monitor uses the normal Freedesktop DPI notifier, so this proof
+covers the path from learned raw state through `DpiState` into the existing Mouse
+Control notification layer.
+
+This proves the architecture on the G305. It does not by itself prove that every
+mouse exposes a similarly simple state field; other devices may require wider
+fields, encoded values, checksums, Feature reports, transition-only learning, or
+other grammar patterns already represented by the discovery/repertoire system.
+
+## Write promotion remains separate
+
+Read-side success never authorizes SET-DPI.
+
+A future write grammar must independently establish the exact writable protocol
+through constrained evidence such as known repertoire grammar, reversible
+candidate transactions, readback, physical behavioral verification, rollback,
+and any required ownership transition. A failed or ambiguous proof leaves the
+learned read-side profile intact and read-only.
+
+Host/software-control takeover is post-discovery only.
