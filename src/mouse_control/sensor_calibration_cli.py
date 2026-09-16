@@ -16,11 +16,14 @@ from .sensor_calibration import (
 )
 
 
+_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mouse-control-sensor-calibrate",
         description=(
-            "Measure current mouse DPI and polling from raw Linux evdev motion without "
+            "Measure current mouse CPI/DPI and polling from raw Linux evdev motion without "
             "using a vendor protocol backend."
         ),
     )
@@ -56,7 +59,10 @@ def _parser() -> argparse.ArgumentParser:
         "--known-dpi",
         type=int,
         metavar="DPI",
-        help="optional known current DPI label used only to validate measurement accuracy",
+        help=(
+            "optional configured DPI stage label; used only to report physical CPI "
+            "deviation and never to calculate the measurement"
+        ),
     )
     return parser
 
@@ -79,6 +85,33 @@ def _polling_label(result) -> str:
     if result.peak_polling_hz is not None:
         return f"{result.peak_polling_hz:.1f} Hz"
     return "insufficient data"
+
+
+def _polling_consensus(results) -> tuple[int | None, int, str]:
+    """Return modal standard rate, matching-pass count, and confidence."""
+
+    rates = [result.standard_polling_hz for result in results]
+    known = [rate for rate in rates if rate is not None]
+    if not known:
+        return None, 0, "low"
+
+    rate = max(
+        sorted(set(known)),
+        key=lambda candidate: (known.count(candidate), -candidate),
+    )
+    matches = sum(candidate == rate for candidate in rates)
+    fraction = matches / len(results)
+    if len(results) >= 3 and matches == len(results):
+        confidence = "high"
+    elif len(results) >= 2 and fraction >= 2 / 3:
+        confidence = "medium"
+    else:
+        confidence = "low"
+    return rate, matches, confidence
+
+
+def _weaker_confidence(first: str, second: str) -> str:
+    return min((first, second), key=lambda value: _CONFIDENCE_RANK[value])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -107,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         f"For each pass, start at the ruler mark and move the mouse exactly "
         f"{args.distance_mm:g} mm ({inches:g} in) in one straight direction, then stop."
     )
-    print("Mouse Control isolates the deliberate motion segment and performs all DPI math internally.")
+    print("Mouse Control isolates the deliberate motion segment and performs all CPI/DPI math internally.")
     if args.axis == "auto":
         print("Linux X/Y orientation is detected automatically from two-dimensional motion.")
     else:
@@ -117,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         "If mouse-control is currently remapping it, stop the service first."
     )
     if args.known_dpi is not None:
-        print(f"Known semantic label for validation: {args.known_dpi} DPI")
+        print(f"Configured DPI stage label for comparison: {args.known_dpi} DPI")
 
     results = []
     for pass_index in range(1, args.passes + 1):
@@ -137,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         results.append(result)
         print(
-            f"  pass {pass_index}: ~{result.rounded_dpi} DPI, {_polling_label(result)}, "
+            f"  pass {pass_index}: ~{result.rounded_dpi} measured CPI, {_polling_label(result)}, "
             f"straightness {result.straightness * 100:.1f}%"
         )
         if result.segment_count > 1:
@@ -147,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = summarize_calibrations(results)
     representative = min(results, key=lambda item: abs(item.estimated_dpi - summary.estimated_dpi))
+    polling_rate, polling_matches, polling_confidence = _polling_consensus(results)
+    overall_confidence = _weaker_confidence(summary.confidence, polling_confidence)
 
     print("\nMeasured sensor state")
     print("---------------------")
@@ -155,22 +190,29 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Representative net displacement: {representative.net_counts} device units")
     print(f"Representative path: {representative.path_counts} device units")
     print(f"Movement straightness: {representative.straightness * 100:.1f}%")
-    print(f"Estimated DPI: {summary.estimated_dpi:.1f} (~{summary.rounded_dpi})")
+    print(f"Measured physical CPI: {summary.estimated_dpi:.1f} (~{summary.rounded_dpi})")
     print(
-        f"Pass consistency: median absolute deviation {summary.median_absolute_deviation:.1f} DPI "
+        f"Pass consistency: median absolute deviation {summary.median_absolute_deviation:.1f} CPI "
         f"({summary.relative_mad * 100:.1f}%)"
     )
-    if summary.standard_polling_hz is not None:
-        print(f"Observed polling: ~{summary.standard_polling_hz} Hz")
+    if polling_rate is not None:
+        print(f"Observed polling: ~{polling_rate} Hz")
+        print(
+            f"Polling agreement: {polling_matches}/{len(results)} passes matched "
+            f"~{polling_rate} Hz ({polling_confidence})"
+        )
     else:
         print(f"Observed polling: {_polling_label(representative)}")
-    print(f"Calibration confidence: {summary.confidence}")
+        print("Polling agreement: insufficient repeated standard-rate observations (low)")
+    print(f"CPI repeatability confidence: {summary.confidence}")
+    print(f"Overall calibration confidence: {overall_confidence}")
 
     if args.known_dpi is not None:
-        error = (summary.estimated_dpi - args.known_dpi) / args.known_dpi
+        deviation = (summary.estimated_dpi - args.known_dpi) / args.known_dpi
+        print(f"Configured DPI stage label: {args.known_dpi} DPI")
         print(
-            f"Known-DPI validation: {args.known_dpi} DPI; "
-            f"measurement error {error * 100:+.1f}%"
+            f"Physical CPI deviation from configured label: {deviation * 100:+.1f}% "
+            "(reported, not corrected)"
         )
 
     print("Vendor protocol used for measurement: none")
