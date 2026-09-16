@@ -1,3 +1,12 @@
+mouse-control (0.9.1-1) unstable; urgency=medium
+
+  * Add the keyboard-driven setup TUI and integrated guided discovery.
+  * Separate live DPI testing from explicit stage acceptance with rollback.
+  * Fix interactive updater input visibility and exclusive keyboard capture.
+  * Preserve the complete v0.9.0 runtime and safety contract.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Wed, 16 Sep 2026 22:00:00 +0000
+
 mouse-control (0.9.0-1) unstable; urgency=medium
 
   * Release the Automatic Discovery runtime and learned exact-model DPI/polling support.
@@ -35,7 +44,7 @@ mouse-control (0.7.11-1) unstable; urgency=medium
 
 mouse-control (0.7.10-1) unstable; urgency=medium
 
-  * Keep the battery tray visible through transient HID++ read timeouts.
+  * Keep the battery tray visible through transient HID++ battery read timeouts.
   * Remove the redundant device name from the tray menu.
   * Refresh terminal branding.
 
