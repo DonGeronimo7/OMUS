@@ -283,9 +283,10 @@ class DiscoveryBackend(HardwareBackend):
         return self._protocol_backend.get_battery_state(device)
 
     def supports_dpi(self, device: MouseDevice) -> bool:
-        return self._binding is not None or bool(
-            self._protocol_backend and self._protocol_backend.supports_dpi(device)
-        )
+        # Historical contract: this means a proven writable DPI control path,
+        # not merely that DPI can be observed. Learned profiles therefore stay
+        # read/event-only and are exposed through get_capabilities/events.
+        return bool(self._protocol_backend and self._protocol_backend.supports_dpi(device))
 
     def supports_dpi_monitoring(self, device: MouseDevice) -> bool:
         return bool(
