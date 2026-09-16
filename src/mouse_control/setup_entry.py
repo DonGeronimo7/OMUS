@@ -6,7 +6,7 @@ import logging
 import sys
 
 from .setup_flow import restore_dpi
-from .setup_tui_integrated import run_integrated_setup_tui
+from .setup_tui_complete import run_complete_setup_tui
 from .wizard import ButtonCaptureError
 
 
@@ -32,7 +32,7 @@ def _preference_exists(existing_config, table: str, *keys: str) -> bool:
 
 
 def run_tui_setup_wizard() -> int:
-    """Run setup through the integrated TUI while preserving commit/rollback."""
+    """Run setup through the complete TUI while preserving commit/rollback."""
 
     from . import cli
 
@@ -57,7 +57,7 @@ def run_tui_setup_wizard() -> int:
             return 1
 
         existing_config = cli._load_setup_config()
-        result = run_integrated_setup_tui(
+        result = run_complete_setup_tui(
             mice,
             existing_config,
             choices_factory=cli._initial_choices,
