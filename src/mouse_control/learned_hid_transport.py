@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-import time
 
 from .hid_session import HidrawIo
+from .learned_hid_session import LearnedHidSession, LearnedHidSessionError
 from .learned_operations import LearnedOperation, LearnedOperationError
 from .protocol_grammar import SafetyClass, TransactionSpec, TransactionStep, TransportKind
 from .transaction_engine import (
@@ -24,6 +23,14 @@ class LearnedHidTransportError(TransactionError):
 
 
 class LearnedHidAdapter(TransactionAdapter):
+    """Transaction-engine adapter backed by one single-reader learned session.
+
+    By default the adapter owns its session, preserving the historical public
+    constructor/close behavior.  A caller may instead inject a shared session;
+    that is the production bridge used when DPI queries/writes and unsolicited
+    learned events must coexist on the same hidraw stream.
+    """
+
     def __init__(
         self,
         path: str | Path,
@@ -31,39 +38,47 @@ class LearnedHidAdapter(TransactionAdapter):
         *,
         io_factory=HidrawIo,
         timeout: float = 0.25,
+        session: LearnedHidSession | None = None,
     ) -> None:
         self.path = Path(path)
         self.operation = operation
         self.timeout = float(timeout)
-        self._io = io_factory(self.path)
         self.closed = False
+        self._owns_session = session is None
+        if session is None:
+            self._session = LearnedHidSession(
+                self.path,
+                io_factory=io_factory,
+                timeout=self.timeout,
+            )
+        else:
+            if Path(session.path) != self.path:
+                raise LearnedHidTransportError(
+                    "shared learned HID session is bound to a different interface"
+                )
+            self._session = session
+
+    @property
+    def session(self) -> LearnedHidSession:
+        return self._session
 
     def close(self) -> None:
         if not self.closed:
-            self._io.close()
+            if self._owns_session:
+                self._session.close()
             self.closed = True
 
     def _exchange(self, request: bytes, pattern) -> bytes:
         if self.closed:
             raise LearnedHidTransportError("learned HID adapter is closed")
-        self._io.write(request)
-        deadline = time.monotonic() + self.timeout
-        seen = 0
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise LearnedHidTransportError(
-                    f"timed out waiting for learned reply after {seen} unrelated packet(s)"
-                )
-            data = self._io.read(remaining)
-            if data == b"":
-                raise LearnedHidTransportError("hidraw interface disconnected")
-            if data is None:
-                continue
-            seen += 1
-            packet = bytes(data)
-            if pattern.matches(packet):
-                return packet
+        try:
+            return self._session.exchange(
+                request,
+                pattern,
+                timeout=self.timeout,
+            )
+        except LearnedHidSessionError as exc:
+            raise LearnedHidTransportError(str(exc)) from exc
 
     def execute(self, step: TransactionStep, context: TransactionContext):
         if step.frame == "write":
@@ -119,7 +134,6 @@ def learned_dpi_transaction_spec() -> TransactionSpec:
     )
 
 
-
 def learned_dpi_read_spec() -> TransactionSpec:
     return TransactionSpec(
         name="learned-dpi-read",
@@ -141,6 +155,7 @@ def read_learned_dpi(
     authorization: TransactionAuthorization | None = None,
     io_factory=HidrawIo,
     timeout: float = 0.25,
+    session: LearnedHidSession | None = None,
 ) -> int:
     """Read current DPI through a PROVEN learned active-query grammar."""
 
@@ -159,6 +174,7 @@ def read_learned_dpi(
         operation,
         io_factory=io_factory,
         timeout=timeout,
+        session=session,
     )
     try:
         TransactionEngine().run(
@@ -183,6 +199,7 @@ def execute_learned_dpi(
     authorization: TransactionAuthorization | None = None,
     io_factory=HidrawIo,
     timeout: float = 0.25,
+    session: LearnedHidSession | None = None,
 ) -> TransactionContext:
     """Execute one exact demonstrated DPI transaction.
 
@@ -208,7 +225,9 @@ def execute_learned_dpi(
             "explicit reversible-write authorization is required"
         )
     if not operation.write_authorized and not promotion:
-        raise LearnedHidTransportError("unproven operation cannot execute outside promotion")
+        raise LearnedHidTransportError(
+            "unproven operation cannot execute outside promotion"
+        )
 
     context = TransactionContext(values={"target": int(target)})
     adapter = LearnedHidAdapter(
@@ -216,6 +235,7 @@ def execute_learned_dpi(
         operation,
         io_factory=io_factory,
         timeout=timeout,
+        session=session,
     )
     try:
         return TransactionEngine().run(
