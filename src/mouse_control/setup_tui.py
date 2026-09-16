@@ -1,7 +1,7 @@
 """State-driven, dependency-free setup TUI for Mouse Control.
 
 The controller is deliberately independent of curses so navigation and state
-transitions can be unit-tested without a real terminal.  Curses is only the
+transitions can be unit-tested without a real terminal. Curses is only the
 presentation/input adapter; existing setup choices, hardware backends, and
 Automatic Discovery remain the source of truth.
 """
@@ -14,9 +14,8 @@ from enum import Enum, auto
 import io
 from typing import Any, Callable
 
-from .guided_discovery import (
-    GuidedDiscoveryOutcome,
-)
+from .discovery_lab import DiscoveryTool, discovery_tool_specs
+from .guided_discovery import GuidedDiscoveryOutcome
 from .hardware import HardwareError, get_backend
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 
@@ -41,6 +40,7 @@ class ActionKind(Enum):
     EDIT_DPI = auto()
     CAPTURE_BUTTONS = auto()
     GUIDED_DISCOVERY = auto()
+    RUN_DISCOVERY_TOOL = auto()
     SAVE = auto()
 
 
@@ -134,8 +134,6 @@ class SetupController:
             try:
                 restore_dpi(self.backend, self.selected, self.choices.original_dpi)
             except OSError:
-                # A disconnected old mouse must not strand the terminal or block
-                # selecting another device. The persisted config is still untouched.
                 pass
             try:
                 self.backend.close()
@@ -156,8 +154,6 @@ class SetupController:
         try:
             restore_dpi(self.backend, self.selected, self.choices.original_dpi)
         except OSError:
-            # Device removal can make rollback physically impossible; never let
-            # that secondary failure prevent curses/service cleanup.
             pass
 
     @property
@@ -176,17 +172,37 @@ class SetupController:
 
     @property
     def guided_discovery_available(self) -> bool:
-        # The currently safe generic guided workflow is read-only DPI-action
-        # learning. Polling discovery is surfaced only when already PROVEN; the
-        # wizard never invents a generic polling writer.
         return not self.choices.dpi_writable and not self.discovery_skipped
 
+    def hardware_actions(self) -> tuple[tuple[str, str, Any], ...]:
+        """Return the complete evidence ladder exposed by the discovery screen."""
+        actions: list[tuple[str, str, Any]] = []
+        if self.guided_discovery_available:
+            actions.append((
+                "guided",
+                "Observe / learn DPI-button behavior (read-only)",
+                None,
+            ))
+        for spec in discovery_tool_specs():
+            prefix = "PROVE" if spec.promotion else "LAB"
+            actions.append(("tool", f"{prefix}: {spec.label}", spec.tool))
+        actions.append(("continue", "Continue to button mapping", None))
+        return tuple(actions)
+
     def hardware_lines(self) -> list[str]:
-        lines = ["✓ Automatic Discovery", "✓ Mouse detected", "✓ Button remapping available"]
+        lines = [
+            "✓ Automatic Discovery",
+            "✓ Physical topology + descriptor grammar",
+            "✓ Physical CPI / polling measurement",
+            "✓ Reversible exact-model write promotion pipeline",
+            "✓ Stateful polling promotion pipeline",
+            "✓ Mouse detected",
+            "✓ Button remapping available",
+        ]
         if self.protocol_adapter_name:
-            lines.insert(1, f"✓ {self.protocol_adapter_name}")
+            lines.insert(2, f"✓ {self.protocol_adapter_name}")
         elif self.has_proven_learned_adapter:
-            lines.insert(1, "✓ Learned exact-model support")
+            lines.insert(2, "✓ Learned exact-model support")
 
         if self.choices.dpi_writable:
             lines.append("✓ DPI control")
@@ -211,7 +227,7 @@ class SetupController:
         if self.section is SetupSection.DEVICE:
             return len(self.devices)
         if self.section is SetupSection.HARDWARE:
-            return 2 if self.guided_discovery_available else 1
+            return len(self.hardware_actions())
         if self.section is SetupSection.BUTTONS:
             return 1
         if self.section is SetupSection.DPI:
@@ -275,11 +291,11 @@ class SetupController:
             self.row_cursor = 0
             return ControllerAction()
         if self.section is SetupSection.HARDWARE:
-            if self.guided_discovery_available and self.row_cursor == 0:
+            kind, _label, payload = self.hardware_actions()[self.row_cursor]
+            if kind == "guided":
                 return ControllerAction(ActionKind.GUIDED_DISCOVERY)
-            if self.guided_discovery_available:
-                self.discovery_skipped = True
-                self.status = "Hardware discovery skipped; button remapping remains available."
+            if kind == "tool":
+                return ControllerAction(ActionKind.RUN_DISCOVERY_TOOL, payload)
             self.section_index = SECTIONS.index(SetupSection.BUTTONS)
             self.row_cursor = 0
             return ControllerAction()
@@ -351,20 +367,23 @@ class SetupController:
     def apply_guided_outcome(self, outcome: GuidedDiscoveryOutcome) -> None:
         self.guided_outcome = outcome
         if outcome.dpi_writable or outcome.polling_writable:
-            # Rebind through the normal production backend so only already
-            # PROVEN stores/adapters can become writable in setup.
-            try:
-                self.backend.close()
-            except Exception:
-                pass
-            self.backend = self._backend_factory(self.selected)
-            self._discover_into_choices()
+            self.refresh_discovery_backend(status="Guided discovery completed.")
         if outcome.dpi_action_identified and not self.choices.dpi_writable:
             self.status = "DPI button behavior identified; DPI writes remain disabled until safely proven."
         elif outcome.learning_skipped_reason:
             self.status = outcome.learning_skipped_reason
         else:
             self.status = "Guided observation finished; no write authority was added."
+
+    def refresh_discovery_backend(self, *, status: str = "Discovery evidence refreshed.") -> None:
+        """Rebind capability stores after a laboratory without discarding setup choices."""
+        try:
+            self.backend.close()
+        except Exception:
+            pass
+        self.backend = self._backend_factory(self.selected)
+        self._discover_into_choices()
+        self.status = status
 
     def detail_rows(self) -> list[DisplayRow]:
         if self.section is SetupSection.DEVICE:
@@ -374,17 +393,17 @@ class SetupController:
                 DisplayRow("Press Enter on a device in the left pane to bind it."),
             ]
         if self.section is SetupSection.HARDWARE:
-            rows = [DisplayRow("Hardware support")]
+            rows = [DisplayRow("Automatic Discovery — complete evidence ladder")]
             rows.extend(DisplayRow(line) for line in self.hardware_lines())
-            if self.guided_discovery_available:
-                rows.extend((
-                    DisplayRow(""),
-                    DisplayRow("Run Guided Discovery", 0),
-                    DisplayRow("Skip hardware discovery", 1),
-                    DisplayRow("Discovery starts read-only; unknown commands are never guessed.", dim=True),
-                ))
-            else:
-                rows.extend((DisplayRow(""), DisplayRow("Continue", 0)))
+            rows.extend((
+                DisplayRow(""),
+                DisplayRow("OBSERVE → CORRELATE → VALIDATE → PROVE", dim=True),
+                DisplayRow("Read-only measurement is never write authority.", dim=True),
+                DisplayRow("Write labs remain guarded and may refuse unsafe/incomplete evidence.", dim=True),
+                DisplayRow(""),
+            ))
+            for index, (_kind, label, _payload) in enumerate(self.hardware_actions()):
+                rows.append(DisplayRow(label, index))
             return rows
         if self.section is SetupSection.BUTTONS:
             return [
@@ -440,6 +459,7 @@ class SetupController:
             DisplayRow(""),
             DisplayRow("Save and Finish", 0),
         ]
+
 
 def run_setup_tui(
     devices: list[Any] | tuple[Any, ...],
