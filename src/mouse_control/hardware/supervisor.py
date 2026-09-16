@@ -10,7 +10,7 @@ from collections.abc import Callable
 from ..discovery import MouseDevice
 from .base import HardwareBackend, HardwareError
 from .capabilities import BatteryState, DpiState, HardwareCapabilities
-from .generic import GenericBackend
+from .discovery_backend import DiscoveryBackend
 
 LOG = logging.getLogger(__name__)
 
@@ -42,15 +42,23 @@ class HardwareSupervisor(HardwareBackend):
         self._backend_factory = backend_factory
         self.desired = desired
         self._device_resolver = device_resolver or (lambda selected: selected)
-        self._discovery_pending = discovery_pending
-        # A Generic backend is a safe fallback, but it is not an equivalent
-        # replacement for a backend which has already demonstrated native
-        # hardware control for this device. Keep probing in that case: hotplug
-        # enumeration may expose evdev before the protocol hidraw interface.
-        self._has_preferred_backend = not isinstance(backend, GenericBackend)
+        self._has_preferred_backend = self._backend_has_proven_adapter(backend)
+        # Callers from the pre-universal-backend era may conservatively mark
+        # every DiscoveryBackend as pending. A proven internal adapter means
+        # discovery has already reached the preferred hardware path.
+        self._discovery_pending = bool(discovery_pending and not self._has_preferred_backend)
         self._lock = threading.RLock()
         self._generation = 0
         self._closed = False
+
+    @staticmethod
+    def _backend_has_proven_adapter(backend: HardwareBackend) -> bool:
+        """Whether this backend already owns a proven hardware protocol path."""
+        if isinstance(backend, DiscoveryBackend):
+            return backend.protocol_adapter_name is not None
+        # Direct HardwareBackend objects remain supported in tests/extensions;
+        # production registry selection now wraps them behind DiscoveryBackend.
+        return True
 
     @property
     def generation(self) -> int:
@@ -165,25 +173,19 @@ class HardwareSupervisor(HardwareBackend):
                     if close:
                         close()
                 raise
-            if (isinstance(old, GenericBackend) and
-                    isinstance(replacement, GenericBackend)):
-                # The fallback remains usable while discovery settles. Do not
-                # manufacture generations or repeatedly close/reopen it when
-                # a probe has not yet found a better backend.
-                close = getattr(replacement, "close", None)
-                if close:
-                    close()
-                self.device = resolved_device
-                return False
+
+            # A Discovery -> Discovery rebind is meaningful: the replacement may
+            # have rebound a new hidraw path, acquired a newly available protocol
+            # adapter, or loaded newly learned evidence. Do not collapse it merely
+            # because the outer backend type stayed the same.
             self.device = resolved_device
             self._backend = replacement
-            if not isinstance(replacement, GenericBackend):
+            replacement_preferred = self._backend_has_proven_adapter(replacement)
+            if replacement_preferred:
                 self._has_preferred_backend = True
                 self._discovery_pending = False
             elif self._has_preferred_backend:
-                # A previously selected native/vendor backend may return after
-                # partial hotplug enumeration. Generic is provisional until
-                # discovery can safely reacquire that capability.
+                # A proven adapter may return after partial hotplug enumeration.
                 self._discovery_pending = True
             self._generation += 1
             if old is not replacement:
