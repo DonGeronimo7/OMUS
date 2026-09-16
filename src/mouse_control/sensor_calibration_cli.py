@@ -110,6 +110,44 @@ def _polling_consensus(results) -> tuple[int | None, int, str]:
     return rate, matches, confidence
 
 
+def _cpi_consistency(results, summary) -> tuple[float, float, str]:
+    """Score repeated CPI passes without letting a single outlier hide behind MAD.
+
+    Median absolute deviation is robust, but with only three passes one bad
+    sample can still leave a deceptively small MAD. Keep the median as the
+    estimate while also checking the worst pass and total observed spread.
+    """
+
+    if not results or summary.estimated_dpi <= 0:
+        return 1.0, 1.0, "low"
+
+    relative_errors = [
+        abs(result.estimated_dpi - summary.estimated_dpi) / summary.estimated_dpi
+        for result in results
+    ]
+    worst_relative_deviation = max(relative_errors)
+    dpis = [result.estimated_dpi for result in results]
+    relative_range = (max(dpis) - min(dpis)) / summary.estimated_dpi
+
+    if (
+        len(results) >= 3
+        and summary.confidence == "high"
+        and worst_relative_deviation <= 0.05
+        and relative_range <= 0.08
+    ):
+        confidence = "high"
+    elif (
+        summary.confidence != "low"
+        and worst_relative_deviation <= 0.12
+        and relative_range <= 0.20
+    ):
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    return worst_relative_deviation, relative_range, confidence
+
+
 def _weaker_confidence(first: str, second: str) -> str:
     return min((first, second), key=lambda value: _CONFIDENCE_RANK[value])
 
@@ -181,7 +219,8 @@ def main(argv: list[str] | None = None) -> int:
     summary = summarize_calibrations(results)
     representative = min(results, key=lambda item: abs(item.estimated_dpi - summary.estimated_dpi))
     polling_rate, polling_matches, polling_confidence = _polling_consensus(results)
-    overall_confidence = _weaker_confidence(summary.confidence, polling_confidence)
+    worst_cpi_deviation, cpi_range, cpi_confidence = _cpi_consistency(results, summary)
+    overall_confidence = _weaker_confidence(cpi_confidence, polling_confidence)
 
     print("\nMeasured sensor state")
     print("---------------------")
@@ -195,6 +234,10 @@ def main(argv: list[str] | None = None) -> int:
         f"Pass consistency: median absolute deviation {summary.median_absolute_deviation:.1f} CPI "
         f"({summary.relative_mad * 100:.1f}%)"
     )
+    print(
+        f"Worst-pass CPI deviation from median: {worst_cpi_deviation * 100:.1f}%; "
+        f"full pass range: {cpi_range * 100:.1f}%"
+    )
     if polling_rate is not None:
         print(f"Observed polling: ~{polling_rate} Hz")
         print(
@@ -204,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"Observed polling: {_polling_label(representative)}")
         print("Polling agreement: insufficient repeated standard-rate observations (low)")
-    print(f"CPI repeatability confidence: {summary.confidence}")
+    print(f"CPI repeatability confidence: {cpi_confidence}")
     print(f"Overall calibration confidence: {overall_confidence}")
 
     if args.known_dpi is not None:
