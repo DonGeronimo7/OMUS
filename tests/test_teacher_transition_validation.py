@@ -30,7 +30,7 @@ def _trigger_action(timestamp: int, *, final_state: int = 0) -> PhysicalAction:
     )
 
 
-def test_teacher_before_after_promotes_dpi_trigger_to_validated():
+def test_teacher_validates_semantic_event_without_claiming_raw_byte():
     session = _session()
     samples = [
         LearningSample(
@@ -55,14 +55,23 @@ def test_teacher_before_after_promotes_dpi_trigger_to_validated():
         trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
     )
 
-    trigger = next(
+    semantic_event = next(
+        hypothesis
+        for hypothesis in learned.hypotheses
+        if hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER
+        and hypothesis.confidence == "validated"
+    )
+    assert semantic_event.report_key is None
+    assert semantic_event.offset is None
+    assert "raw locations remain candidates" in semantic_event.reason
+
+    raw_candidate = next(
         hypothesis
         for hypothesis in learned.hypotheses
         if hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER
         and hypothesis.offset == 3
     )
-    assert trigger.confidence == "validated"
-    assert "teacher independently confirmed DPI changed" in trigger.reason
+    assert raw_candidate.confidence == "correlated"
 
 
 def test_teacher_does_not_validate_trigger_when_dpi_did_not_change():
@@ -85,13 +94,18 @@ def test_teacher_does_not_validate_trigger_when_dpi_did_not_change():
         trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
     )
 
-    trigger = next(
+    assert not any(
+        hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER
+        and hypothesis.confidence == "validated"
+        for hypothesis in learned.hypotheses
+    )
+    raw_candidate = next(
         hypothesis
         for hypothesis in learned.hypotheses
         if hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER
         and hypothesis.offset == 3
     )
-    assert trigger.confidence == "correlated"
+    assert raw_candidate.confidence == "correlated"
 
 
 def test_teacher_does_not_invent_raw_dpi_mapping_from_two_state_event_field():
