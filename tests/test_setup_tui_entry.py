@@ -69,6 +69,16 @@ def test_installed_entrypoint_routes_interactive_setup_to_tui(monkeypatch):
     legacy.assert_not_called()
 
 
+def test_interactive_launcher_opens_tui_directly_without_legacy_home(monkeypatch):
+    monkeypatch.setattr(app.sys, "stdin", Tty())
+    monkeypatch.setattr(app.sys, "stdout", Tty())
+    with patch.object(app, "run_tui_setup_wizard", return_value=31) as tui, \
+         patch.object(cli, "main", return_value=99) as legacy_home:
+        assert app.main([]) == 31
+    tui.assert_called_once_with()
+    legacy_home.assert_not_called()
+
+
 def test_installed_entrypoint_preserves_non_tty_legacy_compatibility(monkeypatch):
     monkeypatch.setattr(app.sys, "stdin", NotTty())
     monkeypatch.setattr(app.sys, "stdout", NotTty())
