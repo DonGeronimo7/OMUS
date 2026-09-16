@@ -70,8 +70,8 @@ def _parser() -> argparse.ArgumentParser:
         "--teacher",
         action="store_true",
         help=(
-            "during guided learning, read semantic ground truth after each action "
-            "from a native protocol teacher such as HID++; packet details are not shared"
+            "during guided learning, read semantic ground truth before and after each "
+            "action from a native protocol teacher such as HID++; packet details are not shared"
         ),
     )
     parser.add_argument(
@@ -126,9 +126,16 @@ def _render_guided_learning(learned) -> str:
             "Semantic hypotheses: none yet — no repeatable persistent or momentary field was found."
         )
 
-    teacher_states = [dict(sample.teacher_state) for sample in learned.samples if sample.teacher_state]
-    if teacher_states:
-        lines.append(f"Teacher labels: {teacher_states}")
+    teacher_transitions = [
+        {
+            "before": dict(sample.teacher_before_state),
+            "after": dict(sample.teacher_state),
+        }
+        for sample in learned.samples
+        if sample.teacher_before_state or sample.teacher_state
+    ]
+    if teacher_transitions:
+        lines.append(f"Teacher transitions: {teacher_transitions}")
     lines.append(
         "Write status: forbidden — guided learning produces observations/correlations only."
     )
@@ -170,22 +177,36 @@ def _run_guided_learning(
     reader = (lambda: read_teacher_labels(selected)) if teacher else None
     samples = []
     for index in range(3):
+        # Capture teacher ground truth before the prompt, not immediately before
+        # raw acquisition. This keeps native-teacher protocol traffic outside
+        # the blind learner's capture window.
+        teacher_before = dict(reader()) if reader is not None else {}
         input(
             f"[{index + 1}/3] Press Enter, then press the DPI button exactly once "
             f"within {seconds:g}s... "
         )
-        sample = session.observe_action(seconds=seconds, teacher_reader=reader)
+        sample = session.observe_action(
+            seconds=seconds,
+            teacher_reader=reader,
+            teacher_before_state=teacher_before,
+        )
         if require_complete_access and sample.unreadable_hidraw_paths:
             raise PermissionError(
                 "a hidraw sibling became unavailable during full-access capture: "
                 + ", ".join(sample.unreadable_hidraw_paths)
             )
         samples.append(sample)
+        teacher_suffix = ""
+        if sample.teacher_before_state or sample.teacher_state:
+            teacher_suffix = (
+                f"; teacher={dict(sample.teacher_before_state)} -> "
+                f"{dict(sample.teacher_state)}"
+            )
         print(
             f"  captured {len(sample.action.hid_reports)} HID report(s), "
             f"{len(sample.action.evdev_events)} evdev event(s), "
             f"{len(sample.action.feature_changes)} Feature byte change(s)"
-            + (f"; teacher={dict(sample.teacher_state)}" if sample.teacher_state else "")
+            + teacher_suffix
         )
         if sample.unreadable_hidraw_paths:
             print(

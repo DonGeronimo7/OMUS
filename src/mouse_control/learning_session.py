@@ -5,9 +5,9 @@ correlated evdev and hidraw interfaces, takes safe Feature-report snapshots
 before/after each action, and asks semantic inference to identify repeated
 fields. It never contains a HID write operation.
 
-Known native teachers may optionally provide semantic ground truth after each
-action. That ground truth can label raw states without teaching the learner any
-vendor-specific packet offsets or command IDs.
+Known native teachers may optionally provide semantic ground truth before and
+after each action. That ground truth can validate behavior without teaching the
+learner any vendor-specific packet offsets or command IDs.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ class LearningSample:
     action: PhysicalAction
     teacher_state: Mapping[str, object] = field(default_factory=dict)
     unreadable_hidraw_paths: tuple[str, ...] = ()
+    teacher_before_state: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,17 @@ class ReadOnlyLearningSession:
             interface_number=node.interface_number,
             descriptor_sha256=node.descriptor_sha256,
         )
+
+    @staticmethod
+    def _teacher_dpi_value(state: Mapping[str, object]) -> int | None:
+        """Extract a protocol-neutral scalar DPI label from teacher state."""
+
+        raw = state.get("dpi")
+        if isinstance(raw, tuple) and raw:
+            return int(raw[0])
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            return raw
+        return None
 
     def snapshot_features(self) -> dict[tuple[object, ...], bytes]:
         """Read every descriptor-declared Feature report that permits GET_FEATURE."""
@@ -167,8 +179,14 @@ class ReadOnlyLearningSession:
         *,
         seconds: float = 1.5,
         teacher_reader: TeacherReader | None = None,
+        teacher_before_state: Mapping[str, object] | None = None,
     ) -> LearningSample:
-        """Capture one bounded physical action plus before/after Feature state."""
+        """Capture one bounded physical action plus before/after semantic state.
+
+        ``teacher_before_state`` is intentionally supplied by the caller so a
+        native-teacher query can happen *before* the user prompt. This keeps the
+        teacher's protocol traffic outside the blind raw-capture window.
+        """
 
         before = self.snapshot_features()
         readable_hidraw, unreadable_hidraw = self._readable_hidraw_paths()
@@ -185,6 +203,7 @@ class ReadOnlyLearningSession:
             action=action,
             teacher_state=teacher_state,
             unreadable_hidraw_paths=unreadable_hidraw,
+            teacher_before_state=dict(teacher_before_state or {}),
         )
 
     def analyze(
@@ -210,11 +229,25 @@ class ReadOnlyLearningSession:
             if trigger_behavior is not None
             else ()
         )
+        teacher_trigger_hypotheses = (
+            self._teacher_dpi_trigger_hypotheses(
+                samples,
+                trigger_candidates,
+                behavior=trigger_behavior,
+            )
+            if trigger_behavior is not None
+            else ()
+        )
 
         # Deduplicate equivalent semantic locations while preserving the more
-        # useful teacher-labelled hypothesis when both paths found the same field.
+        # useful teacher-validated hypothesis when both paths found the same field.
         merged: dict[tuple[object, object, object], SemanticHypothesis] = {}
-        for hypothesis in (*stage_hypotheses, *teacher_hypotheses, *trigger_hypotheses):
+        for hypothesis in (
+            *stage_hypotheses,
+            *teacher_hypotheses,
+            *trigger_hypotheses,
+            *teacher_trigger_hypotheses,
+        ):
             key = (hypothesis.behavior, repr(hypothesis.report_key), hypothesis.offset)
             previous = merged.get(key)
             if previous is None or (
@@ -230,8 +263,9 @@ class ReadOnlyLearningSession:
             hypotheses=tuple(merged.values()),
         )
 
-    @staticmethod
+    @classmethod
     def _teacher_dpi_hypotheses(
+        cls,
         samples: list[LearningSample] | tuple[LearningSample, ...],
         candidates: tuple[CorrelationCandidate, ...],
     ) -> tuple[SemanticHypothesis, ...]:
@@ -244,12 +278,8 @@ class ReadOnlyLearningSession:
 
         teacher_dpi: list[int] = []
         for sample in samples:
-            raw = sample.teacher_state.get("dpi")
-            if isinstance(raw, tuple):
-                value = int(raw[0])
-            elif isinstance(raw, int) and not isinstance(raw, bool):
-                value = raw
-            else:
+            value = cls._teacher_dpi_value(sample.teacher_state)
+            if value is None:
                 return ()
             teacher_dpi.append(value)
 
@@ -279,6 +309,51 @@ class ReadOnlyLearningSession:
                     report_key=candidate.report_key,
                     offset=candidate.offset,
                     mapping=mapping,
+                )
+            )
+        return tuple(result)
+
+    @classmethod
+    def _teacher_dpi_trigger_hypotheses(
+        cls,
+        samples: list[LearningSample] | tuple[LearningSample, ...],
+        candidates: tuple[CorrelationCandidate, ...],
+        *,
+        behavior: SemanticBehavior,
+    ) -> tuple[SemanticHypothesis, ...]:
+        """Validate a raw trigger when the teacher independently confirms DPI moved.
+
+        The teacher proves only the semantic transition. It never identifies
+        which raw byte carries the event, and this method never invents a raw
+        DPI value when the device exposes only a momentary trigger.
+        """
+
+        transitions: list[tuple[int, int]] = []
+        for sample in samples:
+            before = cls._teacher_dpi_value(sample.teacher_before_state)
+            after = cls._teacher_dpi_value(sample.teacher_state)
+            if before is None or after is None:
+                continue
+            transitions.append((before, after))
+
+        if len(transitions) < 2 or any(before == after for before, after in transitions):
+            return ()
+
+        result: list[SemanticHypothesis] = []
+        for candidate in candidates:
+            if candidate.observations < 2 or len(candidate.values) < 2:
+                continue
+            result.append(
+                SemanticHypothesis(
+                    behavior=behavior,
+                    confidence="validated",
+                    reason=(
+                        f"momentary raw transition repeated in {candidate.observations} guided samples "
+                        f"while the native teacher independently confirmed DPI changed in "
+                        f"{len(transitions)} before/after action pairs"
+                    ),
+                    report_key=candidate.report_key,
+                    offset=candidate.offset,
                 )
             )
         return tuple(result)
