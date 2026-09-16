@@ -40,3 +40,15 @@ def test_hidpp_driver_imports_before_hardware_registry():
         "from mouse_control.hardware import get_backend; "
         "assert callable(get_backend)"
     )
+
+
+def test_full_access_requires_root_before_hardware_enumeration(monkeypatch, capsys):
+    """Full-evidence mode must not silently fall back to partial user access."""
+
+    from mouse_control import discovery_cli
+
+    monkeypatch.setattr(discovery_cli.os, "geteuid", lambda: 1000)
+    status = discovery_cli.main(["--full-access"])
+
+    assert status == 77
+    assert "requires root" in capsys.readouterr().err.lower()
