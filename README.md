@@ -182,14 +182,33 @@ installation owner rather than manually overwriting package-managed files.
 
 ## Quick start
 
-Run setup as your logged-in desktop user:
+Install Mouse Control, then run setup as your normal logged-in desktop user:
 
 ```bash
 mouse-control setup
 ```
 
-After reviewing and saving configuration, install the user service once if you
-want automatic background operation:
+You will see a full-screen setup screen. Use the arrow keys to move, Left/Right
+to switch sections, Enter to select or edit, and `?` whenever you want help.
+Nothing is saved until you choose **Review / Save**.
+
+The usual path is simple:
+
+1. Choose your mouse in **Device**.
+2. Open **Buttons** and press each extra button you want to change.
+3. Choose what it should do: keep its normal action, act like another mouse
+   button, send a keyboard key or shortcut, disable it, or cycle configured DPI
+   stages.
+4. In **DPI** and **Polling**, choose settings when Mouse Control has already
+   proved that it can safely control those features on this mouse.
+5. Choose whether to start Mouse Control automatically when you sign in, then
+   review and save.
+
+Your button mappings work independently of DPI and polling support. An unknown
+mouse can therefore be useful immediately.
+
+After saving, install the user service once if you want Mouse Control to run
+automatically after you sign in:
 
 ```bash
 mouse-control install-service
@@ -208,15 +227,16 @@ mouse-control status
 
 `mouse-control run` remains the explicit foreground/debug command.
 
-## Button mappings
+## Buttons and configuration
 
-The configuration is stored at:
+Setup stores your choices here:
 
 ```text
 ~/.config/mouse-control/config.toml
 ```
 
-Supported mapping actions include:
+You normally do not need to edit this file. If you do, the available actions
+are:
 
 - `passthrough`
 - `disable`
@@ -225,10 +245,9 @@ Supported mapping actions include:
 - `chord:KEY_*+KEY_*`
 - `dpi-cycle`
 
-Keyboard shortcut capture now grabs the selected keyboard exclusively while the
-capture is active, preventing the captured shortcut from also reaching the
-desktop. Manual Linux action entry remains available when keyboard-device
-permissions do not allow capture.
+When you capture a keyboard shortcut, Mouse Control temporarily keeps that
+shortcut from also reaching your desktop. If Linux does not let it read the
+keyboard, you can enter the key name manually instead.
 
 Example:
 
@@ -239,15 +258,40 @@ BTN_EXTRA = "chord:KEY_LEFTCTRL+KEY_LEFTSHIFT+KEY_S"
 
 ## Trying an unsupported mouse?
 
-Start with the normal setup wizard:
+Start exactly the same way:
 
 ```bash
 mouse-control setup
 ```
 
-If Automatic Discovery cannot already provide proven advanced hardware control,
-the Hardware / Discovery section can offer Guided Discovery. You may always
-skip it and continue with normal remapping.
+Select the mouse, configure its buttons, then visit **Hardware / Discovery**.
+If Mouse Control does not yet know how to safely change its DPI or polling
+rate, choose **Run Guided Discovery**. You can skip discovery at any time and
+keep using normal button remapping.
+
+Guided Discovery is a five-sample, read-only check. It asks you to:
+
+1. Leave the mouse still for a quiet/control sample.
+2. Move it normally and left-click once for a normal-use sample.
+3. Keep it still and press the DPI button once.
+4. Keep it still and press the DPI button once again.
+5. Keep it still and press the DPI button one final time.
+
+This lets Mouse Control tell ordinary mouse traffic apart from the action made
+by the DPI button. It only watches what the mouse already sends; it does not
+send a command to an unknown mouse.
+
+An identified DPI button is useful progress, but it is **not** proof that
+Mouse Control can safely set DPI. A button shows that the mouse can change DPI;
+a safe write command is the separate, device-specific instruction needed to
+ask it to do so. Mouse Control exposes writable DPI or polling controls only
+after that exact model and operation have been independently proven safe. It
+never guesses a command from a similar mouse, a product ID, or the bytes it
+observed during discovery.
+
+If discovery finds only the button behavior, setup will say **DPI write command
+not yet proven**. That is an honest result, not a failed setup: your mappings
+can still be saved and used normally.
 
 For developer diagnostics and community hardware acceptance, the lower-level
 commands remain available. For example:
@@ -265,24 +309,21 @@ Hardware reports can be attached to the repository's
 [hardware compatibility issue template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml).
 Review reports before posting and remove anything you do not want to share.
 
-## How Mouse Control chooses hardware support
+## How hardware support works
 
-Every selected mouse is represented through the Automatic Discovery hardware
-surface.
+Mouse Control starts safe and becomes more capable only when it has real
+evidence for your exact mouse:
 
-1. Mouse Control correlates the physical mouse with its Linux input and HID
-   interfaces.
-2. A validated protocol adapter such as Logitech HID++ may bind when identity
-   and ownership are unambiguous.
-3. Optional integrations such as OpenRazer may expose proven capabilities for a
-   matching device.
-4. Independently PROVEN learned operations for the exact model may expose DPI or
-   polling control through the same surface.
-5. If no proven hardware capability applies, Mouse Control keeps hardware
-   discovery conservative/read-only and ordinary remapping continues.
+1. It recognizes the physical mouse and its Linux connections.
+2. It checks for a built-in, validated driver such as Logitech HID++ or an
+   optional integration such as OpenRazer.
+3. If a feature is already proven for that exact model, setup offers it.
+4. Otherwise, it stays read-only, can offer Guided Discovery, and leaves
+   ordinary remapping fully available.
 
-Known backends are teachers/reference adapters, not the generic backbone. Their
-protocol bytes or write authority are not transferred to another mouse model.
+The technical name for the mouse's low-level conversation is a “protocol.”
+Mouse Control does not borrow a protocol command from another model just
+because the brand or connection looks similar.
 
 ## Hardware support
 
@@ -291,10 +332,10 @@ The detailed evidence-based record is in
 
 | Hardware / backend | Status | Notes |
 | --- | --- | --- |
-| Logitech G305 | Physically validated | Native HID++ automatic detection; 200–12000 DPI in 50-DPI steps; configured 800/1500/2000/2500/3000 stages; physical DPI events/OSD; 1000/500/250/125 Hz discovery; reconnect, late insertion, and side-button remapping. |
-| Logitech HID++ | Architecture available; device testing needed | Feature indexes are discovered live. The G305 is the primary physical reference; other Logitech mice are not automatically claimed as validated. |
-| OpenRazer-supported mice | Needs broader validation | Optional backend; broader physical Razer validation is still needed. |
-| Generic HID / evdev mice | Safe fallback | Exact identity/read-only diagnostics plus software remapping; no unvalidated DPI or polling writes. |
+| Logitech G305 | Fully tested reference | Button remapping, DPI, DPI notifications, and 1000/500/250/125 Hz polling have been tested on real hardware. |
+| Other Logitech HID++ mice | Promising, model-by-model | Mouse Control discovers the needed details live, but G305 results are not assumed to apply to another model. |
+| OpenRazer-compatible mice | Optional support | Availability depends on OpenRazer and each mouse's supported features; broader real-hardware testing is still welcome. |
+| Any other mouse | Safe fallback | Button remapping and read-only diagnostics can work even when DPI and polling controls are not yet proven. |
 
 ## Device permissions
 
@@ -304,9 +345,9 @@ The Fedora RPM installs:
 /usr/lib/udev/rules.d/71-mouse-control-uaccess.rules
 ```
 
-The rules grant the active local logind session the access Mouse Control needs
-for relevant mouse/uinput paths while avoiding a blanket world-readable input
-policy. For a source install, install the supplied rule and reload udev:
+The packaged rules give your signed-in desktop session the access Mouse Control
+needs for the selected mouse and for creating the remapped input device. For a
+source install, install the supplied rule and reload udev:
 
 ```bash
 sudo install -Dm644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
@@ -321,45 +362,37 @@ mouse-control check-permissions
 mouse-control setup
 ```
 
-Do not run the normal Mouse Control runtime as root.
+Do not run normal setup or the background service as root. Guided Discovery is
+safe by design, but the advanced diagnostic command shown above may request
+`sudo` so it can read every relevant hardware interface.
 
 ## Logitech G305 / HID++ reference
 
-The G305 remains the physically validated reference device for native HID++ and
-the learned-runtime safety model. Feature indexes are discovered dynamically
-where required; model-specific notification details are not generalized to
-unrelated hardware.
+The Logitech G305 is the reference mouse tested on real hardware for Mouse
+Control's built-in Logitech support and its safety model. Its results are not a
+promise for every Logitech mouse.
 
-The Adjustable DPI query/write path and passive physical DPI notification route
-remain deliberately distinct. Runtime owns a selected HID interface and
-multiplexes transaction replies with unsolicited events so competing readers do
-not consume each other's traffic.
+Mouse Control discovers the required device details live and keeps the DPI
+setting path separate from the notification sent when the physical DPI button
+is pressed. This prevents one kind of hardware message from being mistaken for
+another.
 
 ## Optional OpenRazer integration
 
-OpenRazer is optional. A missing client, daemon, or supported capability must not
-break ordinary remapping. Razer users should install OpenRazer through their
-Linux distribution according to upstream guidance, then run Mouse Control as
-the logged-in desktop user so both applications share the desktop session.
+OpenRazer is optional. If it is unavailable, or your Razer mouse lacks a
+supported feature, Mouse Control still keeps normal remapping available. Install
+OpenRazer through your Linux distribution, then run Mouse Control as your normal
+desktop user.
 
-## Safety and compatibility contract
+## What Mouse Control intentionally does not do
 
-The v0.9.0 runtime behavior remains the compatibility baseline for v0.9.1 and
-future releases. In particular, development must not regress:
+Mouse Control focuses on reliable button remapping plus DPI and polling where
+those controls are proven safe. It does not currently try to manage RGB
+lighting, lighting effects, hardware profiles, or every vendor-specific mouse
+feature.
 
-- ordinary evdev/uinput remapping;
-- keyboard keys and held chords;
-- configured `dpi-cycle` behavior;
-- direct DPI notifications;
-- native Logitech HID++;
-- learned DPI and learned polling;
-- learned-action triggering;
-- reconnect and late receiver insertion;
-- battery/tray behavior;
-- setup rollback and configuration preservation;
-- user-service behavior;
-- updater behavior; or
-- release packaging.
+That narrow focus is deliberate: it lets an unsupported mouse remain useful
+without risking a guessed hardware command.
 
 ## Development and validation
 
@@ -368,9 +401,9 @@ PYTHONPATH=src pytest -q
 python -m compileall -q src tests
 ```
 
-The v0.9.1 development branch reached 526 passing tests on Python 3.12, with the
-full suite and compile checks also passing on Python 3.13 and 3.14 before release
-packaging. Fedora 44 RPM building remains a CI release gate.
+v0.9.1 was released after 526 automated tests passed on Python 3.12; the full
+suite and compile checks also passed on Python 3.13 and 3.14. Fedora 44 RPM
+building remains part of the release check.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions and hardware reports.
 See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for release-specific details.
