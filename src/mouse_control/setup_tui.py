@@ -14,9 +14,7 @@ from enum import Enum, auto
 import io
 from typing import Any, Callable
 
-from .guided_discovery import (
-    GuidedDiscoveryOutcome,
-)
+from .guided_discovery import GuidedDiscoveryOutcome
 from .hardware import HardwareError, get_backend
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 
@@ -107,7 +105,8 @@ class SetupController:
         product = configured.get("product")
         phys = configured.get("phys")
         candidates = [
-            index for index, device in enumerate(self.devices)
+            index
+            for index, device in enumerate(self.devices)
             if device.vendor == vendor and device.product == product
         ]
         if phys:
@@ -176,13 +175,20 @@ class SetupController:
 
     @property
     def guided_discovery_available(self) -> bool:
-        # The currently safe generic guided workflow is read-only DPI-action
-        # learning. Polling discovery is surfaced only when already PROVEN; the
-        # wizard never invents a generic polling writer.
-        return not self.choices.dpi_writable and not self.discovery_skipped
+        # Automatic Discovery remains useful until both hardware-control
+        # capabilities are safely proven. A mouse with known/proven DPI but
+        # unknown polling must still be able to enter deep polling discovery.
+        return (
+            (not self.choices.dpi_writable or not self.choices.polling_writable)
+            and not self.discovery_skipped
+        )
 
     def hardware_lines(self) -> list[str]:
-        lines = ["✓ Automatic Discovery", "✓ Mouse detected", "✓ Button remapping available"]
+        lines = [
+            "✓ Automatic Discovery",
+            "✓ Mouse detected",
+            "✓ Button remapping available",
+        ]
         if self.protocol_adapter_name:
             lines.insert(1, f"✓ {self.protocol_adapter_name}")
         elif self.has_proven_learned_adapter:
@@ -217,9 +223,11 @@ class SetupController:
         if self.section is SetupSection.DPI:
             return len(self.choices.stages) if self.choices.dpi_writable else 1
         if self.section is SetupSection.POLLING:
-            return len(self.choices.polling_rates) if (
-                self.choices.polling_writable and self.choices.polling_rates
-            ) else 1
+            return (
+                len(self.choices.polling_rates)
+                if self.choices.polling_writable and self.choices.polling_rates
+                else 1
+            )
         if self.section is SetupSection.SERVICE:
             return 2
         return 1
@@ -245,18 +253,24 @@ class SetupController:
             return ControllerAction()
         if key == "LEFT":
             self.section_index = max(0, self.section_index - 1)
-            self.row_cursor = self.device_cursor if self.section is SetupSection.DEVICE else 0
+            self.row_cursor = (
+                self.device_cursor if self.section is SetupSection.DEVICE else 0
+            )
             self._clamp_cursor()
             return ControllerAction()
         if key == "RIGHT":
             self.section_index = min(len(SECTIONS) - 1, self.section_index + 1)
-            self.row_cursor = self.device_cursor if self.section is SetupSection.DEVICE else 0
+            self.row_cursor = (
+                self.device_cursor if self.section is SetupSection.DEVICE else 0
+            )
             self._clamp_cursor()
             return ControllerAction()
         if key in {"BACK", "ESC"}:
             if self.section_index > 0:
                 self.section_index -= 1
-                self.row_cursor = self.device_cursor if self.section is SetupSection.DEVICE else 0
+                self.row_cursor = (
+                    self.device_cursor if self.section is SetupSection.DEVICE else 0
+                )
                 self._clamp_cursor()
             return ControllerAction()
         if key == "HELP":
@@ -279,7 +293,9 @@ class SetupController:
                 return ControllerAction(ActionKind.GUIDED_DISCOVERY)
             if self.guided_discovery_available:
                 self.discovery_skipped = True
-                self.status = "Hardware discovery skipped; button remapping remains available."
+                self.status = (
+                    "Automatic Discovery skipped; button remapping remains available."
+                )
             self.section_index = SECTIONS.index(SetupSection.BUTTONS)
             self.row_cursor = 0
             return ControllerAction()
@@ -294,9 +310,14 @@ class SetupController:
             if self.choices.polling_writable and self.choices.polling_rates:
                 self.choices.polling_rate = self.choices.polling_rates[self.row_cursor]
                 self.choices.polling_changed = True
-                self.status = f"Polling preference set to {self.choices.polling_rate} Hz."
+                self.status = (
+                    f"Polling preference set to {self.choices.polling_rate} Hz."
+                )
             else:
-                self.status = "Polling-rate control is not yet safely proven; hardware remains unchanged."
+                self.status = (
+                    "Polling-rate control is not yet safely proven; hardware remains "
+                    "unchanged."
+                )
             return ControllerAction()
         if self.section is SetupSection.SERVICE:
             self.choices.enable_service = self.row_cursor == 0
@@ -317,9 +338,14 @@ class SetupController:
             return False
         if not values or requested not in values:
             if values:
-                self.status = f"{requested} DPI is unsupported; choose {values[0]}–{values[-1]} from reported values."
+                self.status = (
+                    f"{requested} DPI is unsupported; choose {values[0]}–{values[-1]} "
+                    "from reported values."
+                )
             else:
-                self.status = "The mouse did not report safe DPI values for live tuning."
+                self.status = (
+                    "The mouse did not report safe DPI values for live tuning."
+                )
             return False
         try:
             result = self.backend.set_dpi(self.selected, requested)
@@ -332,7 +358,9 @@ class SetupController:
                 confirmed = confirmed[0]
             confirmed = int(confirmed)
             if confirmed != requested:
-                self.status = f"Mouse reported {confirmed} DPI; requested value was not accepted."
+                self.status = (
+                    f"Mouse reported {confirmed} DPI; requested value was not accepted."
+                )
                 return False
         except (HardwareError, TypeError, ValueError, OSError) as exc:
             self.status = f"Could not test DPI: {exc}"
@@ -360,11 +388,17 @@ class SetupController:
             self.backend = self._backend_factory(self.selected)
             self._discover_into_choices()
         if outcome.dpi_action_identified and not self.choices.dpi_writable:
-            self.status = "DPI button behavior identified; DPI writes remain disabled until safely proven."
+            self.status = (
+                "DPI button behavior identified; DPI writes remain disabled until "
+                "safely proven."
+            )
         elif outcome.learning_skipped_reason:
             self.status = outcome.learning_skipped_reason
         else:
-            self.status = "Guided observation finished; no write authority was added."
+            self.status = (
+                "Automatic Discovery finished; unsupported controls remain safely "
+                "disabled."
+            )
 
     def detail_rows(self) -> list[DisplayRow]:
         if self.section is SetupSection.DEVICE:
@@ -377,12 +411,18 @@ class SetupController:
             rows = [DisplayRow("Hardware support")]
             rows.extend(DisplayRow(line) for line in self.hardware_lines())
             if self.guided_discovery_available:
-                rows.extend((
-                    DisplayRow(""),
-                    DisplayRow("Run Guided Discovery", 0),
-                    DisplayRow("Skip hardware discovery", 1),
-                    DisplayRow("Discovery starts read-only; unknown commands are never guessed.", dim=True),
-                ))
+                rows.extend(
+                    (
+                        DisplayRow(""),
+                        DisplayRow("Run Automatic Discovery", 0),
+                        DisplayRow("Skip hardware discovery", 1),
+                        DisplayRow(
+                            "Discovery starts read-only; unknown commands are never "
+                            "guessed.",
+                            dim=True,
+                        ),
+                    )
+                )
             else:
                 rows.extend((DisplayRow(""), DisplayRow("Continue", 0)))
             return rows
@@ -391,55 +431,91 @@ class SetupController:
                 DisplayRow("Button mappings"),
                 DisplayRow(f"{len(self.choices.mappings)} mapping(s) configured."),
                 DisplayRow("Configure / edit mouse buttons", 0),
-                DisplayRow("Existing mappings are preserved unless you change a button.", dim=True),
+                DisplayRow(
+                    "Existing mappings are preserved unless you change a button.",
+                    dim=True,
+                ),
             ]
         if self.section is SetupSection.DPI:
             rows = [DisplayRow("DPI stages")]
             if not self.choices.dpi_writable:
-                rows.extend((
-                    DisplayRow("? Hardware DPI control not yet learned"),
-                    DisplayRow("Configured stages are preserved and no DPI write will be attempted.", dim=True),
-                ))
+                rows.extend(
+                    (
+                        DisplayRow("? Hardware DPI control not yet learned"),
+                        DisplayRow(
+                            "Configured stages are preserved and no DPI write will be "
+                            "attempted.",
+                            dim=True,
+                        ),
+                    )
+                )
                 return rows
             for index, value in enumerate(self.choices.stages):
                 rows.append(DisplayRow(f"Stage {index + 1}: {value} DPI", index))
-            rows.append(DisplayRow("Enter edits a stage using hardware-reported safe values.", dim=True))
+            rows.append(
+                DisplayRow(
+                    "Enter edits a stage using hardware-reported safe values.",
+                    dim=True,
+                )
+            )
             return rows
         if self.section is SetupSection.POLLING:
             rows = [DisplayRow("Polling rate")]
             if self.choices.current_polling_rate is not None:
-                rows.append(DisplayRow(f"Current hardware rate: {self.choices.current_polling_rate} Hz"))
+                rows.append(
+                    DisplayRow(
+                        f"Current hardware rate: {self.choices.current_polling_rate} Hz"
+                    )
+                )
             if self.choices.polling_writable and self.choices.polling_rates:
                 for index, hz in enumerate(self.choices.polling_rates):
                     selected = "  ✓" if hz == self.choices.polling_rate else ""
                     rows.append(DisplayRow(f"{hz} Hz{selected}", index))
             else:
-                rows.extend((
-                    DisplayRow("? Polling control not yet learned"),
-                    DisplayRow("Current polling rate will remain unchanged.", dim=True),
-                ))
+                rows.extend(
+                    (
+                        DisplayRow("? Polling control not yet learned"),
+                        DisplayRow(
+                            "Current polling rate will remain unchanged.", dim=True
+                        ),
+                    )
+                )
             return rows
         if self.section is SetupSection.SERVICE:
             return [
                 DisplayRow("Background service"),
-                DisplayRow("Enable at login" + ("  ✓" if self.choices.enable_service else ""), 0),
-                DisplayRow("Keep disabled" + ("  ✓" if not self.choices.enable_service else ""), 1),
+                DisplayRow(
+                    "Enable at login"
+                    + ("  ✓" if self.choices.enable_service else ""),
+                    0,
+                ),
+                DisplayRow(
+                    "Keep disabled"
+                    + ("  ✓" if not self.choices.enable_service else ""),
+                    1,
+                ),
             ]
         return [
             DisplayRow("Review"),
             DisplayRow(f"Mouse:       {self.selected.name}"),
-            DisplayRow("DPI stages:  " + " → ".join(map(str, self.choices.stages))),
+            DisplayRow(
+                "DPI stages:  " + " → ".join(map(str, self.choices.stages))
+            ),
             DisplayRow(
                 f"Polling:     {self.choices.polling_rate} Hz"
-                if self.choices.polling_rate is not None else "Polling:     unchanged"
+                if self.choices.polling_rate is not None
+                else "Polling:     unchanged"
             ),
             DisplayRow(f"Buttons:     {len(self.choices.mappings)} mappings"),
-            DisplayRow(f"Service:     {'enabled' if self.choices.enable_service else 'disabled'}"),
+            DisplayRow(
+                f"Service:     {'enabled' if self.choices.enable_service else 'disabled'}"
+            ),
             DisplayRow(""),
             *[DisplayRow(line) for line in self.hardware_lines()],
             DisplayRow(""),
             DisplayRow("Save and Finish", 0),
         ]
+
 
 def run_setup_tui(
     devices: list[Any] | tuple[Any, ...],
@@ -450,7 +526,7 @@ def run_setup_tui(
 ) -> SetupTuiResult:
     """Run the full-screen setup interface and always restore terminal state."""
 
-    from .setup_tui_curses import CursesSetupApp, run_curses
+    from .production_setup_curses import CursesSetupApp, run_curses
 
     controller = SetupController(
         devices,
