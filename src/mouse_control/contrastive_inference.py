@@ -1,19 +1,22 @@
 """Teacher-free contrastive inference for guided HID discovery.
 
 The generic learner must not discard a byte merely because ordinary mouse
-traffic also uses that byte.  A HID report can multiplex buttons, motion and
-vendor events into the same report.  This module therefore compares *transition
-motifs* at a stable report/byte location across guided actions and negative
-controls.
+traffic also uses that byte. A HID report can multiplex buttons, motion and
+vendor events into the same report. This module therefore compares both:
 
-A semantic behavior may be validated when a transition motif repeats in every
-guided sample and is absent from the control captures.  This validates the
+* report-shape presence across guided actions versus negative controls; and
+* transition motifs at stable report/byte locations.
+
+A semantic behavior may be validated when either a report shape appears in
+every guided sample and in no control capture, or a transition motif repeats in
+every guided sample and is absent from the controls. This validates the
 behavior association supplied by the guided experiment; it does not prove a
 unique packet field, an absolute DPI value, or any write semantic.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from typing import Hashable, Iterable
 
@@ -38,11 +41,21 @@ class ContrastiveCandidate:
 
 
 @dataclass(frozen=True)
+class ContrastiveReportShape:
+    """One report shape emitted by every guided action and by no control."""
+
+    report_key: Hashable
+    guided_counts: tuple[int, ...]
+    control_counts: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class ContrastiveRefinement:
     """A teacher-free refinement of the broad correlation result."""
 
     candidates: tuple[ContrastiveCandidate, ...]
     hypotheses: tuple[SemanticHypothesis, ...]
+    report_shapes: tuple[ContrastiveReportShape, ...] = ()
     suppressed_stage_locations: tuple[CandidateLocation, ...] = ()
 
 
@@ -51,6 +64,52 @@ def _report_shape(source: Hashable, data: bytes) -> Hashable:
     if isinstance(source, RawStreamIdentity):
         return (*source.key, *layout)
     return (source, *layout)
+
+
+def _report_counts(action: PhysicalAction) -> Counter[Hashable]:
+    return Counter(
+        _report_shape(report.source, bytes(report.data))
+        for report in action.hid_reports
+    )
+
+
+def _guided_only_report_shapes(
+    guided_actions: tuple[PhysicalAction, ...],
+    control_actions: tuple[PhysicalAction, ...],
+) -> tuple[ContrastiveReportShape, ...]:
+    """Find report layouts present in every guided action and no control.
+
+    This is intentionally value-agnostic. Some devices emit exactly one status
+    or event report per physical button press, so there is no within-window
+    byte transition to detect. Repeated presence of the same stable report
+    shape under the labelled action, combined with absence from idle/ordinary
+    controls, is still strong teacher-free evidence of the behavior.
+    """
+
+    if not guided_actions:
+        return ()
+    guided_counts = tuple(_report_counts(action) for action in guided_actions)
+    control_counts = tuple(_report_counts(action) for action in control_actions)
+    common = set(guided_counts[0])
+    for counts in guided_counts[1:]:
+        common.intersection_update(counts)
+
+    result: list[ContrastiveReportShape] = []
+    for shape in sorted(common, key=repr):
+        per_guided = tuple(counts.get(shape, 0) for counts in guided_counts)
+        per_control = tuple(counts.get(shape, 0) for counts in control_counts)
+        if not per_guided or any(count <= 0 for count in per_guided):
+            continue
+        if any(count > 0 for count in per_control):
+            continue
+        result.append(
+            ContrastiveReportShape(
+                report_key=shape,
+                guided_counts=per_guided,
+                control_counts=per_control,
+            )
+        )
+    return tuple(result)
 
 
 def _transitions_for_action(
@@ -101,12 +160,16 @@ def _location(candidate: CorrelationCandidate) -> CandidateLocation:
 
 
 def refine_teacher_free(learned) -> ContrastiveRefinement:
-    """Refine broad guided correlations using transition-level negative evidence.
+    """Refine broad guided correlations using report- and transition-level controls.
 
-    The first-pass learner intentionally gathers broadly.  Here we require a raw
-    transition pair to occur in every guided action and never in either negative
-    control.  Location overlap by itself is not disqualifying: normal pointer
-    traffic and a vendor button can legitimately share a report byte.
+    The first-pass learner intentionally gathers broadly. A teacher-free action
+    can be isolated in two complementary ways:
+
+    * a stable report shape occurs in every guided action and never in controls;
+    * a raw transition pair occurs in every guided action and never in controls.
+
+    Location overlap by itself is not disqualifying: normal pointer traffic and
+    a vendor button can legitimately share a report byte.
     """
 
     if any(
@@ -119,6 +182,8 @@ def refine_teacher_free(learned) -> ContrastiveRefinement:
     control_actions = tuple(sample.action for sample in learned.control_samples)
     if len(guided_actions) < 3 or len(control_actions) < 2:
         return ContrastiveRefinement((), tuple(learned.hypotheses))
+
+    report_shapes = _guided_only_report_shapes(guided_actions, control_actions)
 
     refined: list[ContrastiveCandidate] = []
     for candidate in learned.trigger_candidates:
@@ -154,10 +219,10 @@ def refine_teacher_free(learned) -> ContrastiveRefinement:
     suppressed_stage_locations: set[CandidateLocation] = set()
     hypotheses: list[SemanticHypothesis] = []
 
-    # Rebuild teacher-free DPI-trigger claims from the stronger transition-level
-    # evidence.  Also suppress stage-index guesses at locations proven active in
-    # ordinary controls: a final pointer byte changing three times is not enough
-    # to call it a DPI stage register.
+    # Rebuild teacher-free DPI-trigger claims from stronger contrastive evidence.
+    # Also suppress stage-index guesses at locations proven active in ordinary
+    # controls: a final pointer byte changing three times is not enough to call
+    # it a DPI stage register.
     for hypothesis in learned.hypotheses:
         if hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER:
             continue
@@ -170,6 +235,20 @@ def refine_teacher_free(learned) -> ContrastiveRefinement:
             suppressed_stage_locations.add((hypothesis.report_key, hypothesis.offset))
             continue
         hypotheses.append(hypothesis)
+
+    for shape in report_shapes:
+        hypotheses.append(
+            SemanticHypothesis(
+                behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+                confidence="correlated",
+                reason=(
+                    "report shape appeared in every guided DPI-button action and in no "
+                    "negative control; report identity is associated with the action but "
+                    "no individual field or absolute DPI value is proven"
+                ),
+                report_key=shape.report_key,
+            )
+        )
 
     for item in refined:
         candidate = item.candidate
@@ -187,16 +266,22 @@ def refine_teacher_free(learned) -> ContrastiveRefinement:
             )
         )
 
-    if refined:
+    if report_shapes or refined:
+        channels: list[str] = []
+        if report_shapes:
+            channels.append(f"{len(report_shapes)} guided-only report shape(s)")
+        if refined:
+            channels.append(f"{len(refined)} repeated transition location(s)")
         hypotheses.append(
             SemanticHypothesis(
                 behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
                 confidence="validated",
                 reason=(
-                    f"teacher-free contrastive learning isolated {len(refined)} raw location(s) "
-                    f"with transition motifs repeated across all {len(guided_actions)} guided "
-                    f"DPI-button actions and absent from {len(control_actions)} negative controls; "
-                    "raw locations remain candidates and no absolute DPI value is inferred"
+                    "teacher-free contrastive learning isolated "
+                    + " and ".join(channels)
+                    + f" across all {len(guided_actions)} guided DPI-button actions while absent "
+                    f"from {len(control_actions)} negative controls; raw fields remain candidates "
+                    "and no absolute DPI value is inferred"
                 ),
             )
         )
@@ -204,5 +289,6 @@ def refine_teacher_free(learned) -> ContrastiveRefinement:
     return ContrastiveRefinement(
         candidates=tuple(refined),
         hypotheses=tuple(hypotheses),
+        report_shapes=report_shapes,
         suppressed_stage_locations=tuple(sorted(suppressed_stage_locations, key=repr)),
     )
