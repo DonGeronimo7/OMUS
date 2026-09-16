@@ -26,6 +26,12 @@ from .hid_descriptor import (
     vendor_defined_reports,
 )
 from .hid_probe import ReadOnlyHidProbe
+from .learned_operations import (
+    LearnedOperationError,
+    LearnedOperationStore,
+    matching_interface_node,
+)
+from .protocol_grammar import SemanticBehavior
 from .protocol_discovery import (
     ProtocolAmbiguityError,
     ProtocolDetectionError,
@@ -50,6 +56,7 @@ class DiscoveryEngine:
         detectors: Iterable[ProtocolDetector] | None = None,
         probe_factory: Callable[[DeviceNode], ReadOnlyHidProbe] | None = None,
         profile_store: DeviceProfileStore | None = None,
+        learned_operation_store: LearnedOperationStore | None = None,
         save_profiles: bool = True,
     ) -> None:
         self._topology_builder = topology_builder
@@ -58,6 +65,7 @@ class DiscoveryEngine:
             lambda node: ReadOnlyHidProbe(node.path, sysfs_path=node.sysfs_path)
         )
         self._profile_store = profile_store or DeviceProfileStore()
+        self._learned_operation_store = learned_operation_store or LearnedOperationStore()
         self._save_profiles = save_profiles
         self._descriptors: dict[DeviceNode, ParsedHidDescriptor] = {}
         self._feature_snapshots: dict[DeviceNode, dict[int, bytes]] = {}
@@ -292,9 +300,58 @@ class DiscoveryEngine:
                 )
             )
 
+        # A separately persisted learned operation may authorize a generic
+        # write only after explicit exact-model promotion. Calibrated read-side
+        # profiles themselves remain permanently non-writable.
+        learned = self._learned_operation_store.find_for_physical(
+            physical,
+            behavior=SemanticBehavior.DPI_VALUE,
+            proven_only=True,
+        )
+        if learned is not None:
+            _path, operation = learned
+            try:
+                node = matching_interface_node(operation, physical)
+            except LearnedOperationError as exc:
+                self._observations.append(
+                    DiscoveryEvidence(
+                        EvidenceLevel.VALIDATED,
+                        "learned-operation-interface-mismatch",
+                        str(exc),
+                        source="learned_operations",
+                    )
+                )
+            else:
+                evidence = DiscoveryEvidence(
+                    EvidenceLevel.PROVEN,
+                    "learned-operation-proven",
+                    (
+                        "Exact-model learned DPI transaction was independently "
+                        "promoted by raw readback plus physical CPI verification"
+                    ),
+                    source="learned_operations",
+                    details={
+                        "behavior": operation.behavior.value,
+                        "demonstrated_values": operation.demonstrated_values,
+                        "interface_number": node.interface_number,
+                        "descriptor_sha256": node.descriptor_sha256,
+                        "write_scope": operation.write_scope.value,
+                    },
+                )
+                self._observations.append(evidence)
+                return {
+                    "dpi": DiscoveredCapability(
+                        name="dpi",
+                        readable=True,
+                        writable=True,
+                        values=operation.demonstrated_values,
+                        evidence=[evidence],
+                    ).normalized()
+                }
+
         # Descriptor structure, family resemblance, feature snapshots and
-        # changing bytes are evidence, not semantics.  Guided correlation may
-        # later promote them, but no generic writable capability is invented.
+        # changing bytes remain evidence, not semantics. DEMONSTRATED learned
+        # operations are intentionally inert until promotion.
         return {}
 
     def validate(
@@ -327,21 +384,26 @@ class DiscoveryEngine:
                 )
             normalized[name] = item
 
-        if protocol is None and any(item.writable for item in normalized.values()):
-            # Defensive invariant: generic discovery can never create writes.
-            normalized = {
-                name: DiscoveredCapability(
-                    name=item.name,
-                    readable=item.readable,
-                    writable=False,
-                    values=item.values,
-                    minimum=item.minimum,
-                    maximum=item.maximum,
-                    step=item.step,
-                    evidence=list(item.evidence),
+        if protocol is None:
+            # Generic writes are still forbidden unless the capability carries
+            # explicit PROVEN learned-operation promotion evidence.
+            for name, item in tuple(normalized.items()):
+                learned_proven = any(
+                    evidence.level is EvidenceLevel.PROVEN
+                    and evidence.code == "learned-operation-proven"
+                    for evidence in item.evidence
                 )
-                for name, item in normalized.items()
-            }
+                if item.writable and not learned_proven:
+                    normalized[name] = DiscoveredCapability(
+                        name=item.name,
+                        readable=item.readable,
+                        writable=False,
+                        values=item.values,
+                        minimum=item.minimum,
+                        maximum=item.maximum,
+                        step=item.step,
+                        evidence=list(item.evidence),
+                    )
 
         return DiscoveryResult(
             device=physical,

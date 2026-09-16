@@ -370,7 +370,9 @@ def run_setup_wizard() -> int:
                 elif action in ('1', '2', '3'):
                     review_return = True
                     page = {'1': 'dpi', '2': 'polling', '3': 'buttons'}[action]
-                elif action == 's':
+                elif action in ('', 's'):
+                    # review_screen documents Enter as Finish and returns ''.
+                    # Keep 's' accepted for compatibility with any older caller.
                     finished = True
                 else:
                     print('Choose S, 1, 2, 3, B, or Q.')
@@ -386,15 +388,54 @@ def run_setup_wizard() -> int:
         mappings = choices.mappings
         enable_service = choices.enable_service
 
-        _apply_hardware(backend, selected, stages, active_dpi, polling_rate, setup=True)
+        existing_device = existing_config.get("device", {})
+        if not isinstance(existing_device, dict):
+            existing_device = {}
+        configured_phys = existing_device.get("phys")
+        selected_phys = selected.phys
+        device_changed = (
+            existing_device.get("vendor") != selected.vendor
+            or existing_device.get("product") != selected.product
+            or (
+                bool(configured_phys)
+                and bool(selected_phys)
+                and configured_phys != selected_phys
+            )
+        )
+
+        existing_dpi = existing_config.get("dpi")
+        dpi_preference_exists = (
+            isinstance(existing_dpi, dict)
+            and "active" in existing_dpi
+            and "stages" in existing_dpi
+        )
+        existing_polling = existing_config.get("polling")
+        polling_preference_exists = (
+            isinstance(existing_polling, dict)
+            and "rate_hz" in existing_polling
+        )
+
+        apply_dpi = choices.dpi_changed or not dpi_preference_exists or device_changed
+        apply_polling = (
+            choices.polling_changed
+            or not polling_preference_exists
+            or device_changed
+        )
+        _apply_hardware(
+            backend,
+            selected,
+            stages,
+            active_dpi if apply_dpi else 0,
+            polling_rate if apply_polling else None,
+            setup=True,
+        )
         content = merge_setup_config(
             existing_config,
             selected,
-            stages,
-            active_dpi,
-            polling_rate,
-            mappings,
-            enable_service,
+            mappings=mappings,
+            dpi_stages=stages,
+            active_dpi=active_dpi,
+            polling_rate_hz=polling_rate,
         )
         path = save_config(content)
         saved = True

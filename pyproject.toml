@@ -22,6 +22,9 @@ dependencies = [
 mouse-control = "mouse_control.cli:main"
 mouse-control-discover = "mouse_control.discovery_cli:main"
 mouse-control-sensor-calibrate = "mouse_control.sensor_calibration_cli:main"
+mouse-control-write-trace = "mouse_control.write_trace_cli:main"
+mouse-control-write-promote = "mouse_control.write_promotion_cli:main"
+mouse-control-discovery-monitor = "mouse_control.discovery_runtime_cli:main"
 
 [tool.setuptools.package-data]
 mouse_control = ["udev/*.rules"]

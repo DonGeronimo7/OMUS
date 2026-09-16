@@ -6,9 +6,10 @@ and capability exposure.  Proven vendor/protocol implementations are internal
 adapters: they may provide validated reads/writes, but callers no longer select
 a vendor backend directly.
 
-Physically learned profiles are observation authority only.  They can add
-read/event capabilities, but can never authorize a HID write.  Writable
-operations are delegated only to an already-proven protocol adapter.
+Physically calibrated read profiles are observation authority only and can
+never authorize a HID write. Separately promoted exact-model learned operations
+may provide writable support after raw readback plus physical verification.
+Known vendor/protocol adapters remain optional internal teachers/adapters.
 """
 
 from __future__ import annotations
@@ -29,6 +30,24 @@ from ..calibrated_profiles import (
     validate_calibrated_profile,
 )
 from ..device_topology import build_device_graph
+from ..learned_hid_transport import (
+    LearnedHidAdapter,
+    LearnedHidTransportError,
+    learned_dpi_read_spec,
+    learned_dpi_transaction_spec,
+)
+from ..learned_operations import (
+    LearnedOperation,
+    LearnedOperationError,
+    LearnedOperationStore,
+    matching_interface_node,
+)
+from ..transaction_engine import (
+    TransactionAuthorization,
+    TransactionContext,
+    TransactionEngine,
+    TransactionError,
+)
 from ..discovery import MouseDevice
 from ..discovery_models import DeviceNode, PhysicalDevice
 from .base import HardwareBackend, HardwareError
@@ -54,24 +73,31 @@ class DiscoveryBackend(HardwareBackend):
         self,
         *,
         profile_directory: Path | None = None,
+        learned_operation_store: LearnedOperationStore | None = None,
         topology_builder: Callable[[MouseDevice], PhysicalDevice] = build_device_graph,
         protocol_factories: Iterable[Callable[[], HardwareBackend]] = (),
         log_protocol_failures: bool = True,
     ) -> None:
         self.profile_directory = profile_directory or get_calibrated_profile_directory()
+        self._learned_operation_store = learned_operation_store or LearnedOperationStore()
         self._topology_builder = topology_builder
         self._protocol_factories = tuple(protocol_factories)
         self._log_protocol_failures = log_protocol_failures
         self._physical: PhysicalDevice | None = None
         self._binding: _LearnedDpiBinding | None = None
         self._protocol_backend: HardwareBackend | None = None
+        self._learned_operation: LearnedOperation | None = None
+        self._learned_write_node: DeviceNode | None = None
+        self._learned_adapter: LearnedHidAdapter | None = None
         self._last_dpi: int | None = None
 
     @property
     def name(self) -> str:
-        if self._protocol_backend is None:
-            return "Automatic Discovery"
-        return f"Automatic Discovery ({self._protocol_backend.name} adapter)"
+        if self._protocol_backend is not None:
+            return f"Automatic Discovery ({self._protocol_backend.name} adapter)"
+        if self._learned_operation is not None:
+            return "Automatic Discovery (PROVEN learned exact-model adapter)"
+        return "Automatic Discovery"
 
     @property
     def protocol_adapter_name(self) -> str | None:
@@ -206,8 +232,13 @@ class DiscoveryBackend(HardwareBackend):
     def supports_device(self, device: MouseDevice) -> bool:
         if self._protocol_backend is not None:
             self._protocol_backend.close()
+        if self._learned_adapter is not None:
+            self._learned_adapter.close()
+            self._learned_adapter = None
         self._physical = self._run_passive_discovery(device)
         self._binding = None
+        self._learned_operation = None
+        self._learned_write_node = None
         self._last_dpi = None
 
         if self._physical is not None and not self._physical.ambiguous:
@@ -219,8 +250,22 @@ class DiscoveryBackend(HardwareBackend):
             if len(matches) == 1:
                 self._binding = self._binding_from_profile(matches[0], self._physical)
 
-        # Proven vendor/protocol support is an implementation detail behind the
-        # universal Discovery contract, not an alternate backend visible to callers.
+            learned = self._learned_operation_store.find_for_physical(
+                self._physical,
+                proven_only=True,
+            )
+            if learned is not None:
+                _path, operation = learned
+                try:
+                    node = matching_interface_node(operation, self._physical)
+                except LearnedOperationError:
+                    pass
+                else:
+                    self._learned_operation = operation
+                    self._learned_write_node = node
+
+        # Proven vendor/protocol support is still an optional internal adapter.
+        # A PROVEN learned operation is an independent exact-model adapter.
         self._bind_protocol_adapter(device)
         return True
 
@@ -230,17 +275,26 @@ class DiscoveryBackend(HardwareBackend):
         return self._physical.name if self._physical is not None else device.name
 
     def _learned_dpi_capabilities(self) -> DpiCapabilities:
-        if self._binding is None:
+        values: set[int] = set()
+        readable = False
+        events = False
+        if self._binding is not None:
+            values.update(self._binding.raw_to_dpi.values())
+            readable = True
+            events = True
+        if self._learned_operation is not None:
+            values.update(self._learned_operation.demonstrated_values)
+            readable = True
+        if not readable:
             return DpiCapabilities()
-        values = tuple(sorted(set(self._binding.raw_to_dpi.values())))
         return DpiCapabilities(
             readable=True,
-            writable=False,
-            values=values,
-            stage_count=len(values),
-            stage_values_readable=True,
+            writable=self._learned_operation is not None,
+            values=tuple(sorted(values)) or None,
+            stage_count=len(values) if values else None,
+            stage_values_readable=self._binding is not None,
             active_stage_readable=False,
-            events=True,
+            events=events,
         )
 
     @staticmethod
@@ -250,7 +304,7 @@ class DiscoveryBackend(HardwareBackend):
         values = tuple(sorted(set((proven.values or ()) + (learned.values or ())))) or None
         return DpiCapabilities(
             readable=proven.readable or learned.readable,
-            writable=proven.writable,
+            writable=proven.writable or learned.writable,
             values=values,
             ranges=proven.ranges,
             independent_axes=proven.independent_axes,
@@ -283,43 +337,124 @@ class DiscoveryBackend(HardwareBackend):
         return self._protocol_backend.get_battery_state(device)
 
     def supports_dpi(self, device: MouseDevice) -> bool:
-        # Historical contract: this means a proven writable DPI control path,
-        # not merely that DPI can be observed. Learned profiles therefore stay
-        # read/event-only and are exposed through get_capabilities/events.
-        return bool(self._protocol_backend and self._protocol_backend.supports_dpi(device))
+        # Historical contract: this means a proven writable DPI control path.
+        return self._learned_operation is not None or bool(
+            self._protocol_backend and self._protocol_backend.supports_dpi(device)
+        )
 
     def supports_dpi_monitoring(self, device: MouseDevice) -> bool:
-        return bool(
+        return self._learned_operation is not None or bool(
             self._protocol_backend and self._protocol_backend.supports_dpi_monitoring(device)
         )
 
     def supports_dpi_events(self, device: MouseDevice) -> bool:
-        return self._binding is not None or bool(
+        # A PROVEN learned writer and the calibrated event watcher may resolve
+        # to the same hidraw interface. Until the protocol-neutral single-reader
+        # dispatcher owns both streams, never start a second reader that could
+        # steal transaction replies. Native/proven protocol adapters retain
+        # their existing event path.
+        learned_events = self._binding is not None and self._learned_operation is None
+        return learned_events or bool(
             self._protocol_backend and self._protocol_backend.supports_dpi_events(device)
         )
+
+    def _bound_learned_adapter(self) -> LearnedHidAdapter:
+        if self._learned_operation is None or self._learned_write_node is None:
+            raise HardwareError("Automatic Discovery: no PROVEN learned DPI adapter")
+        if self._learned_adapter is None or self._learned_adapter.closed:
+            try:
+                self._learned_adapter = LearnedHidAdapter(
+                    self._learned_write_node.path,
+                    self._learned_operation,
+                )
+            except OSError as exc:
+                raise HardwareError(
+                    f"Automatic Discovery: could not open learned DPI transport: {exc}"
+                ) from exc
+        return self._learned_adapter
+
+    def _drop_learned_adapter(self) -> None:
+        if self._learned_adapter is not None:
+            self._learned_adapter.close()
+            self._learned_adapter = None
 
     def get_dpi_state(self, device: MouseDevice) -> DpiState | None:
         if self._protocol_backend and self._protocol_backend.supports_dpi_monitoring(device):
             return self._protocol_backend.get_dpi_state(device)
+        if self._learned_operation is not None and self._learned_write_node is not None:
+            context = TransactionContext()
+            try:
+                TransactionEngine().run(
+                    learned_dpi_read_spec(),
+                    self._bound_learned_adapter(),
+                    authorization=TransactionAuthorization(
+                        active_queries=True,
+                        reason="PROVEN exact-model learned DPI readback",
+                    ),
+                    context=context,
+                )
+                value = int(context.values["raw_readback"])
+            except (OSError, LearnedOperationError, TransactionError) as exc:
+                self._drop_learned_adapter()
+                if self._last_dpi is None:
+                    raise HardwareError(
+                        f"Automatic Discovery learned DPI read failed: {exc}"
+                    ) from exc
+            else:
+                self._last_dpi = value
         if self._last_dpi is None:
             return None
         return DpiState(self._last_dpi, self._last_dpi, active_stage=None, confirmed=True)
 
     def get_dpi(self, device: MouseDevice) -> int | tuple[int, int] | None:
-        if self._protocol_backend and self._protocol_backend.supports_dpi_monitoring(device):
+        # Preserve the exact public return contract of an already-proven
+        # protocol adapter (including independent/equal X/Y tuples). Learned
+        # execution is only used when no native/vendor adapter is bound.
+        if self._protocol_backend is not None:
             return self._protocol_backend.get_dpi(device)
-        return self._last_dpi
+        state = self.get_dpi_state(device)
+        return state.display_value if state is not None else None
 
     def get_dpi_values(self, device: MouseDevice) -> list[int]:
         values = set(self._binding.raw_to_dpi.values()) if self._binding is not None else set()
+        if self._learned_operation is not None:
+            values.update(self._learned_operation.demonstrated_values)
         if self._protocol_backend is not None:
             values.update(self._protocol_backend.get_dpi_values(device))
         return sorted(values)
 
     def set_dpi(self, device: MouseDevice, dpi: int) -> DpiState | None:
-        if self._protocol_backend is None or not self._protocol_backend.get_capabilities(device).dpi.writable:
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.get_capabilities(device).dpi.writable
+        ):
+            return self._protocol_backend.set_dpi(device, dpi)
+
+        if self._learned_operation is None or self._learned_write_node is None:
             raise HardwareError("Automatic Discovery: no proven writable DPI adapter")
-        return self._protocol_backend.set_dpi(device, dpi)
+        context = TransactionContext(values={"target": int(dpi)})
+        try:
+            context = TransactionEngine().run(
+                learned_dpi_transaction_spec(),
+                self._bound_learned_adapter(),
+                authorization=TransactionAuthorization(
+                    reversible_writes=True,
+                    reason="PROVEN exact-model learned DPI operation",
+                ),
+                context=context,
+            )
+        except (OSError, LearnedOperationError, TransactionError) as exc:
+            self._drop_learned_adapter()
+            raise HardwareError(
+                f"Automatic Discovery learned DPI write failed: {exc}"
+            ) from exc
+        self._last_dpi = int(context.values["raw_readback"])
+        return DpiState(
+            self._last_dpi,
+            self._last_dpi,
+            active_stage=None,
+            confirmed=True,
+        )
 
     def supports_dpi_stages(self, device: MouseDevice) -> bool:
         return bool(self._protocol_backend and self._protocol_backend.supports_dpi_stages(device))
@@ -430,3 +565,6 @@ class DiscoveryBackend(HardwareBackend):
         if self._protocol_backend is not None:
             self._protocol_backend.close()
             self._protocol_backend = None
+        self._drop_learned_adapter()
+        self._learned_operation = None
+        self._learned_write_node = None

@@ -21,6 +21,15 @@ def _parser() -> argparse.ArgumentParser:
         description="Monitor DPI using only the persisted Automatic Discovery read-side profile.",
     )
     parser.add_argument("--device", type=int, metavar="N")
+    parser.add_argument(
+        "--set-dpi",
+        type=int,
+        metavar="DPI",
+        help=(
+            "execute one PROVEN learned DPI write with vendor/native adapters "
+            "bypassed, then read it back and exit"
+        ),
+    )
     return parser
 
 
@@ -43,8 +52,40 @@ def main(argv: list[str] | None = None) -> int:
     if device is None:
         return status
 
+    # DiscoveryBackend defaults to no protocol factories here: this is the
+    # teacher-free acceptance path for persisted calibrated/learned evidence.
     backend = DiscoveryBackend()
     backend.supports_device(device)
+
+    if args.set_dpi is not None:
+        print("Mouse Control — Teacher-Free Learned Write Acceptance")
+        print("=====================================================")
+        print(f"Device: {backend.get_device_name(device)}")
+        print("Vendor/native backend: BYPASSED")
+        print("Execution path: PROVEN learned operation -> TransactionEngine -> raw HID")
+        if not backend.supports_dpi(device):
+            print(
+                "Automatic Discovery has no PROVEN learned writable DPI operation.",
+                file=sys.stderr,
+            )
+            backend.close()
+            return 1
+        try:
+            state = backend.set_dpi(device, args.set_dpi)
+            readback = backend.get_dpi_state(device)
+        except Exception as exc:
+            print(f"Teacher-free learned write failed: {exc}", file=sys.stderr)
+            backend.close()
+            return 1
+        print(f"Requested DPI: {args.set_dpi}")
+        print(f"Write readback: {state.display_value if state else 'unavailable'}")
+        print(
+            f"Independent learned read query: "
+            f"{readback.display_value if readback else 'unavailable'}"
+        )
+        backend.close()
+        return 0
+
     if not backend.supports_dpi_events(device):
         print(
             "Automatic Discovery has no persisted calibrated DPI mapping for this device.",

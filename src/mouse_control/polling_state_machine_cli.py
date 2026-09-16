@@ -1,0 +1,401 @@
+"""Decisive teacher-free polling state-machine laboratory.
+
+Proves two consecutive generic transitions on one persistent raw HID session:
+
+    Onboard -> first target / Host
+    Host    -> second target / Host
+
+The native backend may establish the initial known Onboard state and restore the
+original state in finally, but it is closed for the entire generic write chain.
+No polling write authority is persisted by this command.
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+
+from .device_profiles import get_profile_directory
+from .device_topology import build_device_graph
+from .discovery import get_mouse_devices, select_mouse_device
+from .hardware.base import HardwareError
+from .hardware.native_hid import NativeHidBackend
+from .hidpp_driver import ONBOARD_MODE
+from .polling_measurement import (
+    PollingMeasurement,
+    analyze_polling_timestamps,
+    summarize_polling_measurements,
+)
+from .polling_replay import (
+    GenericPollingReplayAdapter,
+    PollingReplayError,
+    infer_polling_replay_grammar,
+    load_polling_corpus,
+    matching_interface_node,
+)
+from .sensor_calibration import (
+    EV_REL,
+    EV_SYN,
+    REL_X,
+    REL_Y,
+    SYN_REPORT,
+    capture_evdev_motion,
+    normalize_event,
+)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mouse-control-polling-chain",
+        description=(
+            "Prove consecutive Onboard-start and Host-start generic polling "
+            "transactions on one raw HID session."
+        ),
+    )
+    parser.add_argument("--device", type=int, metavar="N")
+    parser.add_argument("--first", type=int, default=500, metavar="HZ")
+    parser.add_argument("--second", type=int, default=250, metavar="HZ")
+    parser.add_argument("--passes", type=int, default=3)
+    parser.add_argument("--window", type=float, default=6.0)
+    parser.add_argument(
+        "--authorize-generic-chain",
+        action="store_true",
+        help="required explicit authorization for the reversible two-write experiment",
+    )
+    return parser
+
+
+def _pick(index: int | None):
+    mice = get_mouse_devices()
+    if not mice:
+        raise PollingReplayError("no mouse devices found")
+    if index is None:
+        return select_mouse_device(mice)
+    if index < 1 or index > len(mice):
+        raise PollingReplayError(f"--device must be between 1 and {len(mice)}")
+    return mice[index - 1]
+
+
+def _corpus_path(physical, directory: str) -> Path:
+    vendor = physical.vendor_id or 0
+    product = physical.product_id or 0
+    return (
+        get_profile_directory()
+        / directory
+        / f"{vendor:04x}-{product:04x}-{physical.model_fingerprint[:16]}.json"
+    )
+
+
+def _validate_profile_identity(profile, physical, *, label: str) -> None:
+    fingerprints = profile.get("fingerprints")
+    identity = profile.get("identity")
+    if not isinstance(fingerprints, dict) or not isinstance(identity, dict):
+        raise PollingReplayError(f"{label} corpus lacks stable device identity")
+    if fingerprints.get("model") != physical.model_fingerprint:
+        raise PollingReplayError(f"{label} corpus model fingerprint does not match")
+    for expected, actual, field in (
+        (identity.get("bus"), physical.bus, "bus"),
+        (identity.get("vendor_id"), physical.vendor_id, "vendor"),
+        (identity.get("product_id"), physical.product_id, "product"),
+    ):
+        if expected is not None and actual is not None and expected != actual:
+            raise PollingReplayError(
+                f"{label} corpus {field} identity does not match"
+            )
+
+
+def _motion_timestamps(events) -> tuple[int, ...]:
+    timestamps = []
+    motion = False
+    for raw in events:
+        event = normalize_event(raw)
+        if event.event_type == EV_REL and event.code in (REL_X, REL_Y):
+            motion = motion or event.value != 0
+        elif event.event_type == EV_SYN and event.code == SYN_REPORT:
+            if motion:
+                timestamps.append(event.timestamp_ns)
+            motion = False
+    return tuple(timestamps)
+
+
+def _ms(value: float | None) -> str:
+    return "n/a" if value is None else f"{value / 1_000_000:.3f} ms"
+
+
+def _pct(value: float | None) -> str:
+    return "n/a" if value is None else f"{value * 100:.1f}%"
+
+
+def _print_measurement(index: int, measurement: PollingMeasurement) -> None:
+    print(
+        f"  pass {index}: frames={measurement.frame_count}, "
+        f"intervals={measurement.interval_count}, confidence={measurement.confidence}"
+    )
+    print(
+        f"    p10={_ms(measurement.p10_interval_ns)}  "
+        f"p25={_ms(measurement.p25_interval_ns)}  "
+        f"p50={_ms(measurement.p50_interval_ns)}  "
+        f"mode={_ms(measurement.mode_interval_ns)}"
+    )
+    if measurement.inferred_hz is None:
+        print(f"    inferred=n/a; {measurement.rejection_reason or 'rejected'}")
+    else:
+        standard = (
+            f"{measurement.standard_hz} Hz"
+            if measurement.standard_hz is not None
+            else "no accepted standard"
+        )
+        print(
+            f"    inferred={measurement.inferred_hz:.1f} Hz -> {standard}; "
+            f"error={_pct(measurement.error_fraction)}, "
+            f"jitter={_pct(measurement.jitter_fraction)}, "
+            f"coverage={measurement.matched_fraction * 100:.1f}%, "
+            f"direct={measurement.direct_fraction * 100:.1f}%"
+        )
+
+
+def _measure_target(mouse, target: int, *, passes: int, window: float):
+    measurements = []
+    for index in range(1, passes + 1):
+        print(
+            f"Pass {index}/{passes}: move rapidly and continuously "
+            f"for {window:g} seconds."
+        )
+        input("Press Enter, then begin moving immediately... ")
+        captured = capture_evdev_motion(
+            mouse.path, seconds=window, exclusive=True
+        )
+        measurement = analyze_polling_timestamps(_motion_timestamps(captured))
+        measurements.append(measurement)
+        _print_measurement(index, measurement)
+    return summarize_polling_measurements(target, measurements)
+
+
+def _require_summary(target: int, summary) -> None:
+    if (
+        summary.consensus_hz != target
+        or summary.confidence not in {"high", "medium"}
+    ):
+        raise PollingReplayError(
+            summary.rejection_reason
+            or f"physical timing did not prove {target} Hz"
+        )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    if not args.authorize_generic_chain:
+        print("Refusing test without --authorize-generic-chain.", file=sys.stderr)
+        return 2
+    if (
+        args.first <= 0
+        or args.second <= 0
+        or args.first == args.second
+        or args.passes <= 0
+        or args.window <= 0
+    ):
+        print(
+            "--first/--second must be distinct positive rates; "
+            "--passes/--window must be positive",
+            file=sys.stderr,
+        )
+        return 2
+
+    mouse = None
+    adapter = None
+    original_rate = None
+    original_mode = None
+
+    try:
+        mouse = _pick(args.device)
+        if mouse is None:
+            return 0
+        physical = build_device_graph(mouse)
+        if physical.ambiguous:
+            raise PollingReplayError("physical identity is ambiguous")
+
+        onboard_path = _corpus_path(physical, "polling-demonstrations")
+        host_path = _corpus_path(physical, "polling-host-demonstrations")
+        onboard_profile = load_polling_corpus(onboard_path)
+        host_profile = load_polling_corpus(host_path)
+        _validate_profile_identity(onboard_profile, physical, label="Onboard-start")
+        _validate_profile_identity(host_profile, physical, label="Host-start")
+
+        onboard_grammar = infer_polling_replay_grammar(onboard_profile)
+        host_grammar = infer_polling_replay_grammar(host_profile)
+        onboard_grammar.raw_for_rate(args.first)
+        host_grammar.raw_for_rate(args.second)
+
+        onboard_node = matching_interface_node(onboard_profile, physical)
+        host_node = matching_interface_node(host_profile, physical)
+        if onboard_node.path != host_node.path:
+            raise PollingReplayError(
+                "Onboard-start and Host-start corpora resolved to different live interfaces"
+            )
+
+        print("Mouse Control — Chained Generic Polling State-Machine Test")
+        print("=========================================================")
+        print(
+            f"Device: {mouse.name} "
+            f"[{(mouse.vendor or 0):04x}:{(mouse.product or 0):04x}]"
+        )
+        print(f"Onboard-start corpus: {onboard_path}")
+        print(f"Host-start corpus:    {host_path}")
+        print(
+            f"Onboard grammar: {len(onboard_grammar.steps)} steps; "
+            f"write={onboard_grammar.write_step_index + 1}, "
+            f"readback={onboard_grammar.read_step_index + 1}"
+        )
+        print(
+            f"Host grammar: {len(host_grammar.steps)} steps; "
+            f"write={host_grammar.write_step_index + 1}, "
+            f"readback={host_grammar.read_step_index + 1}"
+        )
+        print(f"Planned generic chain: Onboard -> {args.first} Hz -> {args.second} Hz")
+        print("Generic persisted polling write authority: NONE")
+        print(
+            "Native backend role: establish initial Onboard state + final/emergency "
+            "restoration only"
+        )
+
+        # Establish the demonstrated initial control state, record rollback,
+        # then completely close the teacher before opening the generic session.
+        native = NativeHidBackend()
+        try:
+            if not native.supports_device(mouse):
+                raise PollingReplayError(
+                    "proven native backend is required for laboratory rollback"
+                )
+            driver = native._driver(mouse)
+            original_mode = driver.get_control_mode()
+            original_rate = driver.get_report_rate()
+            if driver.get_control_mode() != ONBOARD_MODE:
+                driver.set_control_mode(ONBOARD_MODE)
+                if driver.get_control_mode() != ONBOARD_MODE:
+                    raise PollingReplayError(
+                        "could not establish demonstrated Onboard start state"
+                    )
+            established_rate = driver.get_report_rate()
+        finally:
+            native.close()
+
+        print(
+            f"\nOriginal state recorded for restoration: "
+            f"{original_rate} Hz, mode 0x{original_mode:02x}"
+        )
+        print(
+            f"Known Onboard start established; observed rate before generic chain: "
+            f"{established_rate} Hz"
+        )
+        print("Native teacher closed.")
+        print("Opening ONE persistent generic raw HID session...")
+
+        adapter = GenericPollingReplayAdapter(
+            onboard_node.path, onboard_grammar
+        )
+
+        print(f"\n[1/2] Generic Onboard-start transition -> {args.first} Hz")
+        first_readback = adapter.execute(args.first)
+        print(f"Generic raw readback: {first_readback} Hz")
+        if first_readback != args.first:
+            raise PollingReplayError(
+                f"first generic transition requested {args.first}, "
+                f"read {first_readback}"
+            )
+        first_summary = _measure_target(
+            mouse, args.first, passes=args.passes, window=args.window
+        )
+        _require_summary(args.first, first_summary)
+        print(
+            f"First transition physical result: "
+            f"{first_summary.accepted_passes}/{len(first_summary.passes)} accepted, "
+            f"{first_summary.confidence}, "
+            f"median {first_summary.median_inferred_hz:.1f} Hz"
+        )
+
+        print(
+            f"\n[2/2] Generic Host-start transition "
+            f"{args.first} Hz -> {args.second} Hz"
+        )
+        print("Native backend has NOT been reopened between generic writes.")
+        second_readback = adapter.execute_with_grammar(
+            host_grammar, args.second
+        )
+        print(f"Generic raw readback: {second_readback} Hz")
+        if second_readback != args.second:
+            raise PollingReplayError(
+                f"second generic transition requested {args.second}, "
+                f"read {second_readback}"
+            )
+        second_summary = _measure_target(
+            mouse, args.second, passes=args.passes, window=args.window
+        )
+        _require_summary(args.second, second_summary)
+        print(
+            f"Second transition physical result: "
+            f"{second_summary.accepted_passes}/{len(second_summary.passes)} accepted, "
+            f"{second_summary.confidence}, "
+            f"median {second_summary.median_inferred_hz:.1f} Hz"
+        )
+
+        print("\nGENERIC POLLING STATE-MACHINE SUCCESS")
+        print("-------------------------------------")
+        print(
+            f"One persistent generic HID session proved "
+            f"Onboard -> {args.first} Hz -> {args.second} Hz."
+        )
+        print("Both generic readbacks and independent physical timing agree.")
+        print("No native teacher participated between the two generic writes.")
+        print("Persisted generic polling write authority remains NONE.")
+        return 0
+
+    except KeyboardInterrupt:
+        print("\nGeneric polling chain cancelled.", file=sys.stderr)
+        return 130
+    except (PollingReplayError, HardwareError, OSError, PermissionError) as exc:
+        print(f"Generic polling chain failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if adapter is not None:
+            try:
+                adapter.close()
+            except Exception:
+                pass
+
+        if (
+            mouse is not None
+            and original_rate is not None
+            and original_mode is not None
+        ):
+            native = NativeHidBackend()
+            try:
+                if not native.supports_device(mouse):
+                    raise PollingReplayError(
+                        "native restoration backend could not bind"
+                    )
+                driver = native._driver(mouse)
+                native.set_polling_rate(mouse, original_rate)
+                if driver.get_control_mode() != original_mode:
+                    driver.set_control_mode(original_mode)
+                restored_mode = driver.get_control_mode()
+                restored_rate = driver.get_report_rate()
+                if restored_mode != original_mode:
+                    raise PollingReplayError(
+                        f"restoration mode read 0x{restored_mode:02x}, "
+                        f"expected 0x{original_mode:02x}"
+                    )
+                print(
+                    f"\nRestored polling/control state: "
+                    f"{restored_rate} Hz, mode 0x{restored_mode:02x}"
+                )
+            except Exception as exc:
+                print(
+                    f"\nWARNING: failed to restore original polling/control state: {exc}",
+                    file=sys.stderr,
+                )
+            finally:
+                native.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

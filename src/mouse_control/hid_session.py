@@ -9,11 +9,22 @@ import logging
 from pathlib import Path
 import select
 import threading
+import time
 
 from .hidpp import (DISCOVERY_SOFTWARE_ID, HidppError, HidppReport,
                     parse_hidpp_report)
 
 LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RawHidTraceEvent:
+    """One protocol-neutral packet observed at the HidSession transport boundary."""
+
+    timestamp_ns: int
+    direction: str
+    path: str
+    data: bytes
 
 
 class HidrawIo:
@@ -46,9 +57,11 @@ class HidSession:
     """
 
     def __init__(self, path: Path, *, io_factory=HidrawIo,
-                 timeout: float = 0.75) -> None:
+                 timeout: float = 0.75,
+                 trace_callback: Callable[[RawHidTraceEvent], None] | None = None) -> None:
         self.path, self.timeout = path, timeout
         self._io = io_factory(path)
+        self._trace_callback = trace_callback
         self._request_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._waiter: tuple[tuple[int, int, int, int], _Waiter] | None = None
@@ -59,6 +72,22 @@ class HidSession:
         self._thread = threading.Thread(target=self._read_loop,
                                         name="hid-session", daemon=True)
         self._thread.start()
+
+    def _record_trace(self, direction: str, data: bytes) -> None:
+        callback = self._trace_callback
+        if callback is None:
+            return
+        event = RawHidTraceEvent(
+            timestamp_ns=time.monotonic_ns(),
+            direction=direction,
+            path=str(self.path),
+            data=bytes(data),
+        )
+        try:
+            callback(event)
+        except Exception:
+            # Diagnostics must never be able to break the transport they observe.
+            LOG.warning("raw HID trace callback failed", exc_info=True)
 
     def subscribe(self, callback: Callable[[HidppReport], None]) -> Callable[[], None]:
         with self._state_lock:
@@ -88,6 +117,7 @@ class HidSession:
             packet += parameters[:16].ljust(16, b"\0")
             try:
                 try:
+                    self._record_trace("tx", packet)
                     self._io.write(packet)
                 except OSError as exc:
                     raise HidppError(f"HID session write failed: {exc}") from exc
@@ -152,6 +182,8 @@ class HidSession:
                 data = self._io.read(0.25)
                 if data == b"":
                     raise OSError("hidraw device disconnected")
+                if data:
+                    self._record_trace("rx", data)
                 report = parse_hidpp_report(data) if data else None
                 if report is not None:
                     self._dispatch(report)
