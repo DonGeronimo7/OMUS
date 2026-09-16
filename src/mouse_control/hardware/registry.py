@@ -1,41 +1,37 @@
-"""Ordered factories with Automatic Discovery as the universal safe fallback."""
-import logging
+"""Universal hardware entry point.
+
+Callers always receive Automatic Discovery.  Proven vendor/protocol backends are
+internal adapters owned by Discovery rather than competing top-level backends.
+"""
 from collections.abc import Callable, Iterable
-from .base import HardwareBackend, HardwareError
+
+from .base import HardwareBackend
 from .discovery_backend import DiscoveryBackend
-from .openrazer import OpenRazerBackend
 from .native_hid import NativeHidBackend
+from .openrazer import OpenRazerBackend
 from ..discovery import MouseDevice
 
-BACKEND_FACTORIES = (NativeHidBackend, OpenRazerBackend)
+PROTOCOL_ADAPTER_FACTORIES = (NativeHidBackend, OpenRazerBackend)
+# Compatibility for code importing the former registry constant.
+BACKEND_FACTORIES = PROTOCOL_ADAPTER_FACTORIES
 
 
-def get_backend(device: MouseDevice, factories: Iterable[Callable[[], HardwareBackend]] | None = None,
-                *, log_failures: bool = True) -> HardwareBackend:
-    """Return the strongest proven backend, then fall back to Discovery.
+def get_backend(
+    device: MouseDevice,
+    factories: Iterable[Callable[[], HardwareBackend]] | None = None,
+    *,
+    log_failures: bool = True,
+) -> HardwareBackend:
+    """Return the universal Discovery backend for every mouse.
 
-    Native/proven protocol implementations keep priority because they may own
-    validated read/write transactions.  Anything not claimed by them enters the
-    Automatic Discovery path instead of the old inert GenericBackend.  Discovery
-    may reuse physically calibrated read-side evidence, but it never guesses or
-    promotes unknown HID writes.
+    ``factories`` now supplies proven protocol adapters *to* Discovery.  It no
+    longer changes the backend type returned to callers.  Unknown hardware gets
+    the same Discovery surface, with safe evdev/remapping behavior and any
+    physically learned read-side capabilities that can be rebound.
     """
-    for factory in BACKEND_FACTORIES if factories is None else factories:
-        backend = None
-        try:
-            backend = factory()
-            if backend.supports_device(device):
-                return backend
-        except (HardwareError, OSError) as exc:
-            if log_failures:
-                logging.getLogger(__name__).warning("Hardware discovery failed: %s", exc)
-        if backend is not None:
-            close = getattr(backend, "close", None)
-            if close:
-                close()
-
-    backend = DiscoveryBackend()
-    # DiscoveryBackend is intentionally fail-soft: passive discovery can lose
-    # hardware evidence without ever disabling normal evdev/uinput remapping.
+    backend = DiscoveryBackend(
+        protocol_factories=PROTOCOL_ADAPTER_FACTORIES if factories is None else tuple(factories),
+        log_protocol_failures=log_failures,
+    )
     backend.supports_device(device)
     return backend
