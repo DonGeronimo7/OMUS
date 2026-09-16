@@ -11,6 +11,7 @@ import json
 import os
 import sys
 
+from .contrastive_inference import refine_teacher_free
 from .device_topology import TopologyError
 from .discovery import get_mouse_devices, select_mouse_device
 from .discovery_engine import DiscoveryEngine
@@ -98,6 +99,30 @@ def _pick_mouse(index: int | None):
 
 
 def _render_guided_learning(learned) -> str:
+    teacher_transitions = [
+        {
+            "before": dict(sample.teacher_before_state),
+            "after": dict(sample.teacher_state),
+        }
+        for sample in learned.samples
+        if sample.teacher_before_state or sample.teacher_state
+    ]
+    refinement = None if teacher_transitions else refine_teacher_free(learned)
+    action_specific = (
+        tuple(item.candidate for item in refinement.candidates)
+        if refinement is not None
+        else learned.discriminative_trigger_candidates
+    )
+    refined_by_location = (
+        {
+            (item.candidate.report_key, item.candidate.offset): item
+            for item in refinement.candidates
+        }
+        if refinement is not None
+        else {}
+    )
+    hypotheses = refinement.hypotheses if refinement is not None else learned.hypotheses
+
     lines = [
         "",
         "Guided DPI-button learning",
@@ -108,24 +133,34 @@ def _render_guided_learning(learned) -> str:
         f"Persistent raw-state candidates: {len(learned.report_candidates)}",
         f"Raw trigger candidates before controls: {len(learned.trigger_candidates)}",
         f"Raw trigger locations seen in controls: {len(learned.control_trigger_candidates)}",
-        f"Action-specific raw-trigger candidates: {len(learned.discriminative_trigger_candidates)}",
+        f"Transition-specific raw-trigger candidates: {len(action_specific)}",
     ]
 
-    if learned.discriminative_trigger_candidates:
-        lines.append("Action-specific raw locations:")
-        for candidate in learned.discriminative_trigger_candidates:
+    if refinement is not None and refinement.suppressed_stage_locations:
+        lines.append(
+            "Control-active stage guesses suppressed: "
+            f"{len(refinement.suppressed_stage_locations)}"
+        )
+
+    if action_specific:
+        lines.append("Action-specific raw transition evidence:")
+        for candidate in action_specific:
             roles = learned.descriptor_roles.get(
                 (candidate.report_key, candidate.offset),
                 ("unknown",),
             )
+            suffix = ""
+            refined = refined_by_location.get((candidate.report_key, candidate.offset))
+            if refined is not None:
+                suffix = f" distinctive_transitions={refined.distinctive_transitions!r}"
             lines.append(
                 f"  report={candidate.report_key!r} byte={candidate.offset} "
-                f"observations={candidate.observations} descriptor={','.join(roles)}"
+                f"observations={candidate.observations} descriptor={','.join(roles)}{suffix}"
             )
 
-    if learned.hypotheses:
+    if hypotheses:
         lines.append("Semantic hypotheses:")
-        for hypothesis in learned.hypotheses:
+        for hypothesis in hypotheses:
             location = (
                 f" report={hypothesis.report_key!r} byte={hypothesis.offset}"
                 if hypothesis.report_key is not None
@@ -141,14 +176,6 @@ def _render_guided_learning(learned) -> str:
             "Semantic hypotheses: none yet — no action-specific repeatable field was found."
         )
 
-    teacher_transitions = [
-        {
-            "before": dict(sample.teacher_before_state),
-            "after": dict(sample.teacher_state),
-        }
-        for sample in learned.samples
-        if sample.teacher_before_state or sample.teacher_state
-    ]
     if teacher_transitions:
         lines.append(f"Teacher transitions: {teacher_transitions}")
     else:
@@ -186,8 +213,9 @@ def _capture_controls(
     """Capture negative controls before the labelled DPI action.
 
     One quiet capture establishes idle/background traffic. The second captures
-    ordinary pointer/button traffic so those bytes can be subtracted from the
-    later DPI-button candidates instead of being mistaken for vendor semantics.
+    ordinary pointer/button traffic so its *transition motifs* can be compared
+    with the later DPI-button actions. Sharing a report byte with ordinary
+    traffic is not itself enough to discard a DPI candidate.
     """
 
     controls = []
@@ -250,8 +278,13 @@ def _run_guided_learning(
     if reader is None:
         print(
             "\nNative teacher is OFF. The next inference pass will rely only on Linux "
-            "hidraw/evdev observations, HID descriptors, repetition, and the negative controls."
+            "hidraw/evdev observations, HID descriptors, repeated transition signatures, "
+            "and the negative controls."
         )
+    print(
+        "For the three guided samples, keep the mouse as still as practical and press only "
+        "the DPI button once. Accidental movement is tolerated but is treated as noise."
+    )
 
     samples = []
     for index in range(3):
