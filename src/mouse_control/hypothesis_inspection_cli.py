@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
+from .device_topology import TopologyError
 from .discovery import get_mouse_devices, select_mouse_device
 from .discovery_engine import DiscoveryEngine
 
@@ -17,6 +19,12 @@ def _pick(index: int | None):
     if index < 1 or index > len(mice):
         raise SystemExit(f"--device must be between 1 and {len(mice)}")
     return mice[index - 1]
+
+
+def _identity(mouse) -> str:
+    vendor = mouse.vendor if isinstance(mouse.vendor, int) else 0
+    product = mouse.product if isinstance(mouse.product, int) else 0
+    return f"{mouse.name} [{vendor:04x}:{product:04x}] [{mouse.path}]"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,12 +41,48 @@ def main(argv: list[str] | None = None) -> int:
     if mouse is None:
         return 0
 
-    engine = DiscoveryEngine(detectors=(), save_profiles=False)
-    result = engine.discover(mouse)
-
     print("Mouse Control — Discovery Evidence Inspection")
     print("============================================")
-    print(f"Device: {mouse.name} [{(mouse.vendor or 0):04x}:{(mouse.product or 0):04x}]")
+    print(f"Selected device: {_identity(mouse)}")
+    print("Unknown HID writes sent: NO")
+
+    engine = DiscoveryEngine(detectors=(), save_profiles=False)
+    try:
+        result = engine.discover(mouse)
+    except TopologyError as exc:
+        print()
+        print("Topology correlation: FAILED SAFELY")
+        print(f"Reason: {exc}")
+        print(
+            "The selected evdev mouse remains identified, but Automatic Discovery could not "
+            "correlate its HID/sysfs siblings strongly enough to continue."
+        )
+        print("No hardware authority changed and no HID write was sent.")
+        return 1
+    except PermissionError as exc:
+        print()
+        print("Topology/descriptor visibility: INCOMPLETE")
+        print(f"Reason: {exc}")
+        print(
+            "This is an evidence-visibility failure, not permission to guess. "
+            "No hardware authority changed and no HID write was sent."
+        )
+        return 1
+    except OSError as exc:
+        print()
+        print("Discovery inspection: HARDWARE ACCESS FAILURE")
+        print(f"Reason: {exc}")
+        print("Reconnect the selected mouse and retry. No HID write was sent.")
+        return 1
+    except Exception as exc:
+        # Inspection is a diagnostic surface. Preserve the selected device and
+        # return the unexpected failure to the TUI instead of tearing curses down.
+        print()
+        print("Discovery inspection: INTERNAL FAILURE")
+        print(f"{type(exc).__name__}: {exc}")
+        print("No hardware authority changed and no HID write was sent.")
+        return 1
+
     print(f"Physical identity ambiguous: {'yes' if result.device.ambiguous else 'no'}")
     print(
         f"Correlated interfaces: {len(result.device.evdev_nodes)} evdev / "
