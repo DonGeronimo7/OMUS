@@ -305,8 +305,9 @@ class DiscoveryBackend(HardwareBackend):
         return DpiState(self._last_dpi, self._last_dpi, active_stage=None, confirmed=True)
 
     def get_dpi(self, device: MouseDevice) -> int | tuple[int, int] | None:
-        state = self.get_dpi_state(device)
-        return state.display_value if state else None
+        if self._protocol_backend and self._protocol_backend.supports_dpi_monitoring(device):
+            return self._protocol_backend.get_dpi(device)
+        return self._last_dpi
 
     def get_dpi_values(self, device: MouseDevice) -> list[int]:
         values = set(self._binding.raw_to_dpi.values()) if self._binding is not None else set()
