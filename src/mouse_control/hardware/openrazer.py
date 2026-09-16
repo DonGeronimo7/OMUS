@@ -1,7 +1,8 @@
 """Optional OpenRazer Python/session-D-Bus adapter; no lighting or profiles."""
 from functools import wraps
 from .base import HardwareBackend, HardwareError
-from .capabilities import DpiState
+from .capabilities import (DpiCapabilities, DpiState, HardwareCapabilities,
+                           ReportRateCapabilities)
 from ..discovery import MouseDevice
 
 
@@ -59,6 +60,28 @@ class OpenRazerBackend(HardwareBackend):
     @_library_errors
     def get_device_name(self, device: MouseDevice) -> str | None:
         return str(self._device(device).name)
+
+    @_library_errors
+    def get_capabilities(self, device: MouseDevice) -> HardwareCapabilities:
+        target = self._device(device)
+        dpi = bool(target.has("dpi"))
+        values = tuple(int(v) for v in target.available_dpi) if target.has("available_dpi") else None
+        polling = bool(target.has("poll_rate"))
+        rates = (tuple(int(v) for v in target.supported_poll_rates)
+                 if target.has("supported_poll_rates") else None)
+        return HardwareCapabilities(
+            dpi=DpiCapabilities(
+                readable=dpi,
+                writable=dpi,
+                values=values,
+                independent_axes=True,
+            ),
+            report_rate=ReportRateCapabilities(
+                readable=polling,
+                writable=polling,
+                values=rates,
+            ),
+        )
 
     @_library_errors
     def supports_dpi(self, device: MouseDevice) -> bool:
