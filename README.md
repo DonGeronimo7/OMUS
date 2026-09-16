@@ -292,15 +292,22 @@ posting it and remove anything you do not want to share.
 
 ## How Mouse Control chooses a backend
 
-Mouse Control uses the best available integration for the selected device and
-falls back gracefully when vendor-specific functionality is unavailable:
+Every selected mouse is represented by the same **Automatic Discovery**
+hardware surface. It first builds a read-only picture of the physical mouse
+and its related Linux interfaces. Proven protocol implementations are optional
+internal adapters, not competing top-level backends:
 
-1. Native HID where a validated protocol driver confidently claims one interface.
-2. OpenRazer where its optional daemon/client can confidently recognize it.
-3. Generic HID identity with evdev/software remapping when no validated hardware backend is available.
+1. A validated native protocol adapter, such as Logitech HID++, may be bound
+   when it can identify one unambiguous matching interface.
+2. OpenRazer may be used as another optional proven adapter when available and
+   confident about the selected device.
+3. Independently PROVEN learned operations for the exact physical model may be
+   exposed through the same Automatic Discovery surface.
 
-Hardware configuration failures are reported independently and do not prevent
-ordinary software remapping from starting.
+If no proven adapter or learned operation applies, Automatic Discovery still
+retains safe identity and read-only evidence where it can. It exposes no
+guessed DPI or polling write controls, and ordinary evdev/uinput remapping
+continues regardless of hardware-discovery or configuration failures.
 
 `mouse-control debug-hid --seconds 10` is the vendor-neutral, read-only
 development path. It matches hidraw interfaces to the selected evdev mouse by
