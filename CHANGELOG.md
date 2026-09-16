@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.9.1 — 2026-09-16
+
+### Setup TUI and guided discovery
+
+- Replace the sequential setup wizard with a state-driven, full-screen keyboard
+  TUI while retaining the existing `SetupChoices`, hardware transactions,
+  configuration merge behavior, and rollback semantics.
+- Integrate Automatic Discovery into `mouse-control setup` so unknown mice can
+  enter the existing safe passive-discovery and five-sample DPI-button learning
+  workflow without requiring users to know discovery CLI commands.
+- Keep Guided Discovery read-only unless an exact-model capability has already
+  satisfied the existing PROVEN promotion rules. No generic speculative DPI or
+  polling writer is introduced.
+- Separate DPI live testing from configuration acceptance. Users can test a
+  candidate on the physical mouse, use the current verified hardware DPI, and
+  explicitly accept the value; Back/Cancel restores the pre-editor hardware DPI
+  without changing the staged configuration.
+- Preserve normal evdev/uinput remapping when hardware DPI or polling control is
+  not yet learned.
+
+### UX and reliability
+
+- Restore visible package-manager confirmation input for interactive updates.
+- Exclusively grab the selected keyboard during shortcut capture so captured
+  shortcuts do not leak into the desktop session.
+- Restore terminal mode, cursor/input state, and temporary hardware state across
+  normal completion, cancellation, Ctrl+C, exceptions, resize handling, and
+  hardware disconnect paths.
+- Preserve the complete v0.9.0 runtime and safety contract, including native
+  HID++, learned DPI/polling, notifications, reconnect, late receiver insertion,
+  battery/tray behavior, service controls, updater behavior, and packaging.
+
 ## 0.9.0 — 2026-09-16
 
 ### Automatic Discovery runtime
@@ -16,8 +48,6 @@
   polling changes may use only a PROVEN reversible ownership transition.
 - Preserve the full v0.8.2 behavior contract across remapping, notifications,
   reconnect, setup, service/runtime, updater, packaging, and backend APIs.
-
-
 
 ## 0.8.2 — 2026-09-15
 
@@ -48,7 +78,7 @@
 
 - Uses the stable RPM package name and verifies the installed RPM version after
   DNF finishes, so warnings or a nonzero DNF result do not cause a false failure
-  when the target release is installed.
+  when the target version is installed.
 - Preserves the GitHub RPM fallback when a native upgrade leaves the old version
   installed, and verifies the final installed version.
 - Makes `mouse-control update --yes` pass DNF `--assumeyes` for native and
