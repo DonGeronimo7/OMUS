@@ -33,7 +33,7 @@ and refuse to invent semantics that were not observed or proven.
 
 ```fish
 cd ~/Mouse-control
-git switch feat/automatic-hardware-discovery
+git switch main
 git pull --ff-only
 mouse-control stop
 ```

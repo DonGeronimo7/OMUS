@@ -2,9 +2,11 @@
 
 ![Mouse Control — Linux gaming mouse configuration and remapping](assets/mouse-control-social-preview.png)
 
-Open-source Linux gaming mouse configuration and remapping: map mouse buttons to keyboard keys, configure supported DPI and polling rates, and help test new hardware.
+Open-source Linux gaming mouse remapping and hardware discovery: map mouse
+buttons to keyboard keys, configure proven DPI and polling rates, and safely
+help expand support for new hardware.
 
-[![Current release](https://img.shields.io/github/v/release/DonGeronimo7/mouse-control?display_name=tag&label=release)](https://github.com/DonGeronimo7/mouse-control/releases/latest)
+[![Current release: v0.9.0](https://img.shields.io/badge/current%20release-v0.9.0-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
@@ -29,7 +31,27 @@ reversible transactions plus independent physical verification, promoted
 to exact-model DPI or polling control. Learned write authority is never
 generalized from one mouse model to another.
 
+## Current release: v0.9.0 — Automatic Discovery foundation
+
+Get [Mouse Control v0.9.0](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0),
+the release that makes safe hardware discovery part of the project’s foundation.
 The current release is [v0.9.0](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0).
+
+## What Automatic Discovery means
+
+Instead of requiring Mouse Control’s developers to already know your exact
+mouse, Automatic Discovery gives Mouse Control a framework for figuring out
+how the device communicates, gathering evidence from what the mouse actually
+does, and turning that evidence into safe support once the behavior has been
+proven.
+
+It identifies the Linux input and HID interfaces that belong to one physical
+mouse, examines their read-only information, and can guide evidence gathering
+from physical actions. It does **not** guess commands and send them to unknown
+hardware. A discovered DPI or polling control becomes writable only when that
+exact model and operation have passed the required reversible proof, readback,
+and verification steps. Known backends such as Logitech HID++ are teachers and
+references, not a shortcut that grants other mice the same authority.
 
 ## What Mouse Control does
 
@@ -46,11 +68,11 @@ The current release is [v0.9.0](https://github.com/DonGeronimo7/mouse-control/re
 
 Get the latest package from the [v0.9.0 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0):
 
-- **Fedora, Nobara, and other RPM distributions:** RPM
-- **Debian, Ubuntu, Mint, and other DEB distributions:** DEB
-- **Other distributions:** AppImage
+- **Fedora, Nobara, and other RPM distributions:** [RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse-control-0.9.0-1.fc44.noarch.rpm)
+- **Debian, Ubuntu, Mint, and other DEB distributions:** [DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse-control_0.9.0-1_all.deb)
+- **Other distributions:** [AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/Mouse-Control-0.9.0-x86_64.AppImage)
 - **Arch Linux:** included [PKGBUILD](PKGBUILD)
-- **Developers and advanced users:** source installation
+- **Developers and advanced users:** [wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse_control-0.9.0-py3-none-any.whl) or [source tarball](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse_control-0.9.0.tar.gz)
 
 Detailed commands and package filenames are in [Install](#install).
 
@@ -73,21 +95,18 @@ Repository packages can intentionally lag behind the newest GitHub release.
 Editable/source and unsupported installation methods are reported with safe
 next steps rather than changed automatically.
 
-## Unsupported gaming mouse? Help expand compatibility
+## Trying an unsupported mouse?
 
-Run:
+1. Install [v0.9.0](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0) and connect the mouse normally.
+2. Run `mouse-control setup` to configure normal button remapping. This can remain available even when DPI or polling support is not yet proven.
+3. Run `mouse-control doctor --report`, then run `mouse-control support`. Both select the relevant mouse and create privacy-safe, read-only diagnostics; nothing is uploaded and unknown hardware receives no guessed commands.
+4. If you can help capture a physical button action, use `mouse-control support --guided`. For the complete discovery path, run `sudo mouse-control-discover --full-access --generic-only --learn-dpi-button --verbose` and follow its prompts. It maps the mouse’s interfaces and collects evidence without authorizing unknown HID writes.
+5. Attach the generated report to the [hardware compatibility issue template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml). Include the mouse’s exact model, connection type (USB, receiver, or Bluetooth), Linux distribution/version, desktop session, the command you ran, what worked (including remapping), what did not, and the reviewed report output. Do not include serial numbers or anything private.
 
-```bash
-mouse-control support
-```
-
-This creates a local, privacy-safe, read-only report for the mouse you select.
-Nothing is uploaded automatically and probing performs no hardware writes.
-Attach the report to the [hardware compatibility issue template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml) to help expand Linux gaming-mouse compatibility. `mouse-control support --guided` can additionally record one requested side-button press.
-
-Unknown hardware is expected: a useful report does not mean the device is
-already supported. In particular, this project does not claim support for the
-Turtle Beach Kone II.
+Advanced DPI or polling support may not be ready after the first report. The
+guided evidence is how an exact mouse can earn safe support rather than being
+treated as compatible by guesswork. Unknown hardware is expected: a useful
+report does not mean the device is already supported.
 
 ## Install
 
@@ -97,7 +116,7 @@ needed by the host system.
 
 ### Fedora, Nobara, and other RPM-based distributions
 
-Download the v0.9.0 RPM from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0), then install it with DNF:
+Download [mouse-control-0.9.0-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse-control-0.9.0-1.fc44.noarch.rpm), then install it with DNF:
 
 ```bash
 sudo dnf install ./mouse-control-0.9.0-1.fc44.noarch.rpm
@@ -109,7 +128,7 @@ installation shadows the command, use `/usr/bin/mouse-control`.
 
 ### Debian, Ubuntu, Mint, and other DEB-based distributions
 
-Download `mouse-control_0.9.0-1_all.deb` from the [release assets](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.0), then let APT resolve its declared dependencies:
+Download [mouse-control_0.9.0-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse-control_0.9.0-1_all.deb), then let APT resolve its declared dependencies:
 
 ```bash
 sudo apt install ./mouse-control_0.9.0-1_all.deb
@@ -133,8 +152,8 @@ native package when you need the packaged udev and service integration.
 
 ### Arch Linux
 
-The repository includes a [PKGBUILD](PKGBUILD) prepared for v0.9.0; it needs
-the v0.9.0 tag before it can build. This project does not currently claim to
+The repository includes a [PKGBUILD](PKGBUILD) for the released v0.9.0 tag.
+This project does not currently claim to
 publish an AUR package. OpenRazer remains an optional dependency.
 
 ### Source installation

@@ -1,35 +1,69 @@
 # Mouse Control v0.9.0
 
-**Automatic Discovery foundation release**
+## Automatic Discovery foundation
 
-Mouse Control 0.9.0 moves hardware support onto the Automatic Discovery
-runtime while preserving the complete v0.8.2 remapping, notification,
-reconnect, setup, service, updater, and packaging behavior as a compatibility
-contract.
+Mouse Control 0.9.0 is a major architectural release. It makes it practical to
+add support for new Linux gaming mice without pretending that an unknown device
+is safe to configure. Instead of requiring a developer to begin with every
+manufacturer’s private protocol, Automatic Discovery connects the Linux input
+and HID interfaces for one physical mouse, studies its read-only behavior, and
+collects evidence from real actions. A capability is promoted only after its
+behavior has been demonstrated for that exact model.
 
-- Adds protocol-neutral physical-device discovery across matching HID
-  interfaces instead of treating a known vendor backend as the generic
-  backbone.
-- Promotes exact-model learned DPI and report-rate operations only after
-  reversible transaction proof, hardware readback, independent physical
-  verification, and exact rollback. Read evidence alone never grants write
-  authority.
-- Adds a single-reader learned HID session so learned transactions and
-  unsolicited events can safely share one hidraw interface without competing
-  readers.
-- Integrates validated read-only physical action triggers with the existing
-  configured `dpi-cycle` path, confirmed write/readback, and direct DPI
-  notifications.
-- Preserves polling ownership safety: normal startup/reconnect reconciliation
-  never takes Host/software control merely to apply a saved polling rate.
-  Explicit user-requested changes may use only a separately PROVEN reversible
-  takeover branch.
-- Keeps unknown hardware conservative: unsupported devices retain evdev/uinput
-  remapping and read-only discovery evidence until their own exact protocol is
-  safely demonstrated and promoted.
-- The Logitech G305 remains the physically validated reference device for the
-  v0.9.0 learned-runtime path; its write authority is never generalized to
-  other models.
+For users, this means a clear path to helping with an unsupported mouse today:
+install v0.9.0, configure ordinary remapping with `mouse-control setup`, run
+`mouse-control doctor --report` and `mouse-control support`, and attach the
+reviewed report to the hardware-support issue template. `mouse-control support
+--guided` can record an optional button press. Advanced testers can use
+`sudo mouse-control-discover --full-access --generic-only --learn-dpi-button
+--verbose` for the guided, read-only discovery workflow.
+
+Normal evdev/uinput button remapping remains available when advanced hardware
+control is unavailable. That is deliberate: an unproven DPI or polling feature
+must never prevent a mouse from working as a Linux input device.
+
+## Safety model
+
+Automatic Discovery does not guess commands or send them to unknown hardware.
+Unknown devices remain conservative and read-only while their identity,
+interfaces, report behavior, and any requested operation are evaluated.
+Writable DPI or polling control requires exact-model evidence, reversible
+transaction proof, readback, independent physical verification, and rollback
+where applicable. The Logitech G305 is the physically proven reference for the
+learned-runtime path; its write authority does not transfer to another model.
+
+Known protocol adapters—including Logitech HID++—are teachers and references,
+not the generic backbone. The project continues to refuse ambiguous device or
+protocol matches rather than choosing one.
+
+## What changed underneath
+
+- Physical-device topology correlates evdev, hidraw, and sysfs interfaces.
+- Protocol-neutral HID descriptor/report analysis and grammar/repertoire tools
+  record evidence without inventing vendor semantics.
+- Known protocols can teach semantic behavior without hard-coding their write
+  authority into generic discovery.
+- Exact-model learned operations support reversible write proof, readback, and
+  behavioral verification for DPI and polling/report-rate control.
+- One learned HID session owns a selected interface reader so transactions and
+  unsolicited events do not compete.
+- Runtime/reconnect integration keeps ownership-safe Host/onboard transitions
+  separate from ordinary reconciliation and preserves remapping on failure.
+
+## Compatibility preserved
+
+v0.9.0 carries forward the complete v0.8.2 stability and functionality
+contract: remapping, notifications, reconnect behavior, setup preservation,
+service/runtime controls, updater behavior, and packaging. This remains the
+baseline for future development.
+
+## Downloads
+
+- [RPM: mouse-control-0.9.0-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse-control-0.9.0-1.fc44.noarch.rpm)
+- [DEB: mouse-control_0.9.0-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse-control_0.9.0-1_all.deb)
+- [AppImage: Mouse-Control-0.9.0-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/Mouse-Control-0.9.0-x86_64.AppImage)
+- [Wheel: mouse_control-0.9.0-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse_control-0.9.0-py3-none-any.whl)
+- [Source: mouse_control-0.9.0.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.0/mouse_control-0.9.0.tar.gz)
 
 ## Known issue
 
