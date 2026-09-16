@@ -1,4 +1,4 @@
-"""Regression tests for teacher-free transition-signature refinement."""
+"""Regression tests for teacher-free transition/report-shape refinement."""
 
 from mouse_control.contrastive_inference import refine_teacher_free
 from mouse_control.discovery_models import PhysicalDevice
@@ -25,6 +25,17 @@ def _action(timestamp: int, values: tuple[int, ...]) -> PhysicalAction:
         for index, value in enumerate(values)
     ]
     return PhysicalAction(timestamp, timestamp + len(values), hid_reports=reports)
+
+
+def _single_state_report(timestamp: int, value: int) -> PhysicalAction:
+    data = bytearray(20)
+    data[0] = 0x11
+    data[4] = value
+    return PhysicalAction(
+        timestamp,
+        timestamp + 1,
+        hid_reports=[TimedReport(timestamp, "vendor-stream", bytes(data))],
+    )
 
 
 def test_same_location_can_be_discriminative_when_transition_motif_differs():
@@ -94,3 +105,53 @@ def test_stage_guess_active_in_normal_controls_is_suppressed():
         for hypothesis in refined.hypotheses
     )
     assert refined.suppressed_stage_locations
+
+
+def test_single_report_per_press_can_validate_guided_behavior_without_teacher():
+    """Match hardware that emits one state/event report per physical DPI press."""
+
+    session = _session()
+    controls = [
+        LearningSample(PhysicalAction(1, 2)),
+        # Ordinary mouse traffic uses a different report shape.
+        LearningSample(_action(10, (10, 11, 12))),
+    ]
+    samples = [
+        LearningSample(_single_state_report(20, 1)),
+        LearningSample(_single_state_report(30, 2)),
+        LearningSample(_single_state_report(40, 3)),
+    ]
+
+    learned = session.analyze(
+        samples,
+        trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+        control_samples=controls,
+    )
+
+    # One packet per action means there is deliberately no within-window trigger
+    # transition. The cross-action state field is still visible.
+    assert learned.trigger_candidates == ()
+    assert any(
+        hypothesis.behavior is SemanticBehavior.DPI_STAGE_INDEX
+        and hypothesis.offset == 4
+        for hypothesis in learned.hypotheses
+    )
+
+    refined = refine_teacher_free(learned)
+    assert len(refined.report_shapes) == 1
+    shape = refined.report_shapes[0]
+    assert shape.guided_counts == (1, 1, 1)
+    assert shape.control_counts == (0, 0)
+    assert any(
+        hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER
+        and hypothesis.confidence == "correlated"
+        and hypothesis.report_key == shape.report_key
+        and hypothesis.offset is None
+        for hypothesis in refined.hypotheses
+    )
+    assert any(
+        hypothesis.behavior is SemanticBehavior.DPI_CYCLE_TRIGGER
+        and hypothesis.confidence == "validated"
+        and hypothesis.report_key is None
+        for hypothesis in refined.hypotheses
+    )
