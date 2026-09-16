@@ -1,12 +1,12 @@
 """Production orchestration for the Automatic Discovery laboratory.
 
 This catalog is intentionally a thin adapter over the exact experiment engines
-used during hardware acceptance.  The TUI is the user-facing surface; these
+used during hardware acceptance. The TUI is the user-facing surface; these
 entries describe the science that must remain reachable without weakening any
 identity, evidence, readback, physical-verification, or rollback rule.
 
 Unknown hardware remains read-only until a promotion engine persists PROVEN
-exact-model authority.  A UI confirmation authorizes running a guarded
+exact-model authority. A UI confirmation authorizes running a guarded
 experiment; it never authorizes a write by itself.
 """
 
@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 
 class DiscoveryTool(str, Enum):
+    HYPOTHESIS_INSPECTION = "hypothesis-inspection"
     SENSOR_CALIBRATION = "sensor-calibration"
     CALIBRATED_DPI_DISCOVERY = "calibrated-dpi-discovery"
     POLLING_PHYSICAL_VERIFY = "polling-physical-verify"
@@ -43,6 +44,13 @@ class DiscoveryToolSpec:
 
 
 _TOOL_SPECS = (
+    DiscoveryToolSpec(
+        DiscoveryTool.HYPOTHESIS_INSPECTION,
+        "Inspect topology + protocol hypotheses",
+        "Read-only descriptor, feature-baseline, repertoire, and evidence-ladder inspection for the selected mouse.",
+        False,
+        evidence_phase="observe",
+    ),
     DiscoveryToolSpec(
         DiscoveryTool.SENSOR_CALIBRATION,
         "Measure physical CPI + rough polling",
@@ -146,6 +154,9 @@ def selected_device_number(devices: tuple[Any, ...] | list[Any], selected: Any) 
 
 def _runner(tool: DiscoveryTool) -> tuple[Callable[[list[str] | None], int], list[str]]:
     """Resolve lazily so importing setup never imports every experiment module."""
+    if tool is DiscoveryTool.HYPOTHESIS_INSPECTION:
+        from .hypothesis_inspection_cli import main
+        return main, []
     if tool is DiscoveryTool.SENSOR_CALIBRATION:
         from .sensor_calibration_cli import main
         return main, []
@@ -195,7 +206,7 @@ def run_discovery_tool(
     """Run one guarded experiment against the already-selected setup mouse.
 
     ``extra_args`` is supplied by the TUI for experiment-specific values while
-    device identity and authorization flags remain controlled here.  The
+    device identity and authorization flags remain controlled here. The
     underlying experiment still owns every safety check and may refuse to run.
     """
     main, guard_args = _runner(tool)
