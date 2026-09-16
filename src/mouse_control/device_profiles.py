@@ -11,6 +11,7 @@ from enum import Enum
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
@@ -30,9 +31,37 @@ class DeviceProfileError(RuntimeError):
     """A discovery profile is malformed or unsafe to use."""
 
 
+def _sudo_identity() -> tuple[int, int, Path] | None:
+    """Return the invoking user's uid/gid/home for a sudo-root process."""
+
+    if os.geteuid() != 0:
+        return None
+    try:
+        uid = int(os.environ["SUDO_UID"])
+        gid = int(os.environ["SUDO_GID"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if uid == 0:
+        return None
+    try:
+        home = Path(pwd.getpwuid(uid).pw_dir)
+    except KeyError:
+        return None
+    return uid, gid, home
+
+
 def get_profile_directory() -> Path:
-    data_home = os.environ.get("XDG_DATA_HOME")
-    root = Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share"
+    explicit = os.environ.get("MOUSE_CONTROL_PROFILE_DIR")
+    if explicit:
+        return Path(explicit).expanduser()
+
+    sudo_identity = _sudo_identity()
+    if sudo_identity is not None:
+        _uid, _gid, home = sudo_identity
+        root = home / ".local" / "share"
+    else:
+        data_home = os.environ.get("XDG_DATA_HOME")
+        root = Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share"
     return root / "mouse-control" / "devices"
 
 
@@ -197,6 +226,19 @@ class DeviceProfileStore:
         profile = result_to_profile(result)
         validate_profile(profile)
         self.directory.mkdir(parents=True, exist_ok=True)
+        sudo_identity = _sudo_identity()
+        if sudo_identity is not None:
+            uid, gid, _home = sudo_identity
+            # A privileged discovery run must not strand its cache under root
+            # ownership. Only adjust the mouse-control cache directories, never
+            # arbitrary ancestors of the user's home.
+            for path in (self.directory.parent, self.directory):
+                try:
+                    if path.stat().st_uid == 0:
+                        os.chown(path, uid, gid)
+                except OSError:
+                    pass
+
         destination = self.directory / profile_filename(profile)
         with NamedTemporaryFile(
             "w",
@@ -213,6 +255,9 @@ class DeviceProfileStore:
             os.fsync(handle.fileno())
         try:
             os.replace(temp_path, destination)
+            if sudo_identity is not None:
+                uid, gid, _home = sudo_identity
+                os.chown(destination, uid, gid)
         except Exception:
             temp_path.unlink(missing_ok=True)
             raise
