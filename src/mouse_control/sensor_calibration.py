@@ -6,7 +6,7 @@ physical travel distance turns those counts into DPI, and event-frame timing
 provides an observed polling-frequency estimate.
 
 Nothing in this module knows Logitech, Razer, HID++, sensor models, report IDs,
-or vendor packet layouts.  The resulting measurements are semantic labels that
+or vendor packet layouts. The resulting measurements are semantic labels that
 automatic discovery can correlate with simultaneously/adjacently observed
 hidraw state.
 """
@@ -25,6 +25,7 @@ from typing import Iterable, Literal
 EV_SYN = 0x00
 EV_REL = 0x02
 SYN_REPORT = 0x00
+SYN_DROPPED = 0x03
 REL_X = 0x00
 REL_Y = 0x01
 
@@ -69,7 +70,7 @@ class SensorCalibration:
 def _event_timestamp_ns(event) -> int:
     """Return a kernel event timestamp in nanoseconds.
 
-    python-evdev exposes ``sec``/``usec`` from ``struct input_event``.  Tests and
+    python-evdev exposes ``sec``/``usec`` from ``struct input_event``. Tests and
     replay callers may instead pass a ``timestamp_ns`` attribute.
     """
 
@@ -114,7 +115,7 @@ def estimate_peak_polling_hz(
 
     Gaming mice may dynamically lower their event rate while moving slowly.
     Rather than averaging pauses into the result, use the median of the fastest
-    quartile of positive frame intervals.  The raw estimate is retained and a
+    quartile of positive frame intervals. The raw estimate is retained and a
     common USB gaming-mouse rate is reported only when it is within 20%.
     """
 
@@ -122,7 +123,7 @@ def estimate_peak_polling_hz(
     deltas = sorted(
         after - before
         for before, after in zip(timestamps, timestamps[1:])
-        if after > before and after - before >= 50_000  # reject >20 kHz timer/batch artifacts
+        if after > before and after - before >= 50_000
     )
     if len(deltas) < 3:
         return None, None, None
@@ -149,8 +150,8 @@ def measure_sensor_state(
 ) -> SensorCalibration:
     """Convert a known physical movement into DPI and polling observations.
 
-    ``distance_mm`` is the ruler distance travelled by the mouse.  The user
-    should move predominantly along ``axis`` without reversing direction.  DPI
+    ``distance_mm`` is the ruler distance travelled by the mouse. The user
+    should move predominantly along ``axis`` without reversing direction. DPI
     is simply device counts divided by physical inches travelled.
     """
 
@@ -162,6 +163,15 @@ def measure_sensor_state(
         raise CalibrationError("minimum_straightness must be in (0, 1]")
 
     captured = tuple(normalize_event(event) for event in events)
+    if any(
+        event.event_type == EV_SYN and event.code == SYN_DROPPED
+        for event in captured
+    ):
+        raise CalibrationError(
+            "kernel reported SYN_DROPPED during calibration; input events were lost, "
+            "so DPI cannot be measured reliably"
+        )
+
     x_values = [
         event.value
         for event in captured
@@ -213,12 +223,15 @@ def capture_evdev_motion(
     path: str | Path,
     *,
     seconds: float,
+    exclusive: bool = True,
 ) -> tuple[CalibrationEvent, ...]:
-    """Capture kernel-timestamped evdev events without pointer acceleration.
+    """Capture kernel-timestamped physical evdev events.
 
-    This opens the event node read-only and does not grab the device.  The
-    kernel timestamps are kept specifically so polling-rate estimation is not
-    distorted by userspace batching latency.
+    Calibration normally takes an EVIOCGRAB on the selected physical event
+    device. Linux input grabs are exclusive: this prevents another consumer
+    from owning the stream while we silently calibrate from incomplete data.
+    No input is written or injected. If another process (including the normal
+    mouse-control remapper) already owns the device, calibration fails loudly.
     """
 
     if seconds <= 0:
@@ -229,6 +242,19 @@ def capture_evdev_motion(
         raise RuntimeError("python-evdev is required for sensor calibration") from exc
 
     device = InputDevice(str(path))
+    grabbed = False
+    if exclusive:
+        try:
+            device.grab()
+            grabbed = True
+        except OSError as exc:
+            device.close()
+            raise CalibrationError(
+                "could not exclusively grab the physical mouse event stream; "
+                "stop mouse-control and any other program that has grabbed the mouse, "
+                "then retry calibration"
+            ) from exc
+
     captured: list[CalibrationEvent] = []
     deadline = time.monotonic() + seconds
     try:
@@ -245,5 +271,10 @@ def capture_evdev_motion(
                 continue
             captured.extend(normalize_event(event) for event in batch)
     finally:
+        if grabbed:
+            try:
+                device.ungrab()
+            except OSError:
+                pass
         device.close()
     return tuple(captured)
