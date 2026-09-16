@@ -110,24 +110,61 @@ A successful calibrated run may persist:
 
 Volatile `/dev` paths are rejected from persisted profiles.
 
+## Universal backend contract
+
+Discovery is the one hardware-backend surface exposed to the rest of Mouse
+Control. Callers do not select Logitech, Razer, generic HID, or future vendor
+backends directly.
+
+The runtime shape is:
+
+```text
+application
+    |
+    v
+DiscoveryBackend
+    |
+    +-- passive topology / descriptor discovery
+    +-- physically learned read-side grammar
+    +-- proven protocol adapter: HID++ / Razer / future families
+    +-- evdev/uinput software remapping when no hardware semantics are known
+```
+
+A proven vendor implementation is therefore a **protocol adapter behind
+Discovery**, not a competing top-level backend. Adapters may contribute proven
+reads, writes, battery state, report-rate control, or event streams. Learned
+profiles may supplement validated read/event capabilities. Learned evidence can
+never contribute write authority.
+
+This stable contract is intended to make Discovery reusable: another Linux
+project should be able to ask one backend for mouse capabilities without knowing
+which vendor wire protocol, learned grammar, or protocol adapter supplied them.
+
 ## Runtime backend selection
 
-The old inert `GenericBackend` is retired as a runtime concept. Backend selection
-is now:
+The old inert `GenericBackend` is retired as a runtime concept. `get_backend()`
+now always returns `DiscoveryBackend` for every selected mouse.
 
-1. a proven native backend when one confidently claims the device;
-2. `DiscoveryBackend` as the universal safe fallback.
+Discovery internally performs three jobs:
 
-`GenericBackend` remains only as a compatibility alias to `DiscoveryBackend` so
-older imports do not break.
+1. run the safe passive discovery path for every device;
+2. load and rebind any physically calibrated learned profile;
+3. bind an ordered proven protocol adapter when one confidently recognizes the
+   device.
+
+Native HID++ and Razer support therefore remain available, including their
+already-proven write operations, but they are implementation details behind the
+Discovery contract. `GenericBackend` remains only as a compatibility alias to
+`DiscoveryBackend` so older imports do not break.
 
 When Discovery has a matching calibrated profile, it re-finds the current hidraw
 interface from stable identity facts and emits confirmed `DpiState` events from
 the learned mapping. It does not expose a synchronous vendor GET-DPI transaction
-that was never learned, and it does not expose DPI writes.
+that was never learned, and learned profiles do not expose DPI writes.
 
-When no calibrated profile exists, Discovery remains the safe fallback and
-ordinary evdev/uinput remapping continues without guessed hardware controls.
+When no calibrated profile or proven adapter exists, Discovery still represents
+the device and ordinary evdev/uinput remapping continues without guessed
+hardware controls.
 
 ## G305 controlled proof
 
