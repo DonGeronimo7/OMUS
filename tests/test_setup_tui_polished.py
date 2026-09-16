@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from mouse_control.setup_flow import SetupChoices
-from mouse_control.setup_tui_polished import DpiEditSession
+from mouse_control.setup_tui_curses import DpiEditSession
 
 
 class FakeBackend:
