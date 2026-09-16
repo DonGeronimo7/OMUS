@@ -5,8 +5,8 @@ correlated evdev and hidraw interfaces, takes safe Feature-report snapshots
 before/after each action, and asks semantic inference to identify repeated
 fields. It never contains a HID write operation.
 
-Known backends may optionally provide read-only teacher state after each action.
-That ground truth can label raw states without teaching the learner any
+Known native teachers may optionally provide semantic ground truth after each
+action. That ground truth can label raw states without teaching the learner any
 vendor-specific packet offsets or command IDs.
 """
 
@@ -21,6 +21,7 @@ from .discovery_models import DeviceNode, PhysicalDevice
 from .event_correlation import (
     CorrelationCandidate,
     PhysicalAction,
+    RawStreamIdentity,
     capture_action_window,
     detect_repeated_changes,
     detect_repeated_report_fields,
@@ -37,13 +38,13 @@ from .semantic_inference import (
 )
 
 
-TeacherReader = Callable[[], Mapping[str, int | tuple[int, int] | None]]
+TeacherReader = Callable[[], Mapping[str, object]]
 
 
 @dataclass(frozen=True)
 class LearningSample:
     action: PhysicalAction
-    teacher_state: Mapping[str, int | tuple[int, int] | None] = field(default_factory=dict)
+    teacher_state: Mapping[str, object] = field(default_factory=dict)
     unreadable_hidraw_paths: tuple[str, ...] = ()
 
 
@@ -81,6 +82,18 @@ class ReadOnlyLearningSession:
             node.interface_number,
             node.descriptor_sha256,
             report_id,
+        )
+
+    @staticmethod
+    def _raw_stream_identity(node: DeviceNode) -> RawStreamIdentity:
+        """Return the stable identity used by raw input-report inference."""
+
+        return RawStreamIdentity(
+            bus=node.bus,
+            vendor_id=node.vendor_id,
+            product_id=node.product_id,
+            interface_number=node.interface_number,
+            descriptor_sha256=node.descriptor_sha256,
         )
 
     def snapshot_features(self) -> dict[tuple[object, ...], bytes]:
@@ -124,6 +137,20 @@ class ReadOnlyLearningSession:
                 os.close(fd)
         return tuple(readable), tuple(skipped)
 
+    def _hidraw_source_map(
+        self,
+        readable_paths: tuple[Path, ...],
+    ) -> dict[str, RawStreamIdentity]:
+        """Map volatile live paths to stable logical stream identities."""
+
+        readable = {os.fspath(path) for path in readable_paths}
+        result: dict[str, RawStreamIdentity] = {}
+        for node in self.physical.hidraw_nodes:
+            path = os.fspath(node.path)
+            if path in readable:
+                result[path] = self._raw_stream_identity(node)
+        return result
+
     def hidraw_access_report(self) -> tuple[tuple[Path, ...], tuple[str, ...]]:
         """Report passive capture access for every correlated hidraw sibling.
 
@@ -148,6 +175,7 @@ class ReadOnlyLearningSession:
         action = capture_action_window(
             evdev_paths=(node.path for node in self.physical.evdev_nodes),
             hidraw_paths=readable_hidraw,
+            hidraw_sources=self._hidraw_source_map(readable_hidraw),
             seconds=seconds,
         )
         after = self.snapshot_features()
@@ -207,7 +235,7 @@ class ReadOnlyLearningSession:
         samples: list[LearningSample] | tuple[LearningSample, ...],
         candidates: tuple[CorrelationCandidate, ...],
     ) -> tuple[SemanticHypothesis, ...]:
-        """Label persistent raw states when a proven backend supplies current DPI.
+        """Label persistent raw states when a proven teacher supplies current DPI.
 
         This does not prove that writing the candidate field changes DPI. It
         only validates a *read-side* raw-state -> DPI relationship. Momentary
@@ -219,7 +247,7 @@ class ReadOnlyLearningSession:
             raw = sample.teacher_state.get("dpi")
             if isinstance(raw, tuple):
                 value = int(raw[0])
-            elif isinstance(raw, int):
+            elif isinstance(raw, int) and not isinstance(raw, bool):
                 value = raw
             else:
                 return ()

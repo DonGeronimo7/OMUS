@@ -8,7 +8,7 @@ it cannot turn that observation into writable DPI support.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import os
 from pathlib import Path
 import selectors
@@ -17,10 +17,33 @@ from typing import Any, Hashable, Iterable, Mapping, Sequence
 
 
 @dataclass(frozen=True)
+class RawStreamIdentity:
+    """Path-independent identity for one correlated hidraw input stream."""
+
+    bus: int | None
+    vendor_id: int | None
+    product_id: int | None
+    interface_number: int | None
+    descriptor_sha256: str | None
+
+    @property
+    def key(self) -> tuple[object, ...]:
+        return (
+            "input",
+            self.bus,
+            self.vendor_id,
+            self.product_id,
+            self.interface_number,
+            self.descriptor_sha256,
+        )
+
+
+@dataclass(frozen=True)
 class TimedReport:
     timestamp_ns: int
-    source: str
+    source: Hashable
     data: bytes
+    diagnostic_source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +79,7 @@ class CorrelationCandidate:
     observations: int
     values: tuple[int, ...]
     transitions: tuple[tuple[int | None, int | None], ...]
+    mirrors: tuple[Hashable, ...] = ()
 
 
 def diff_feature_snapshots(
@@ -88,7 +112,7 @@ def suppress_duplicates(
         raise ValueError("window_ms cannot be negative")
     window_ns = int(window_ms * 1_000_000)
     result: list[TimedReport] = []
-    last: dict[tuple[str, bytes], int] = {}
+    last: dict[tuple[Hashable, bytes], int] = {}
     for report in sorted(reports, key=lambda item: item.timestamp_ns):
         key = (report.source, report.data)
         previous = last.get(key)
@@ -182,9 +206,133 @@ def detect_repeated_changes(
     return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
 
 
-def _report_shape(report: TimedReport) -> tuple[str, int, int | None]:
+def _report_shape(report: TimedReport) -> Hashable:
     data = bytes(report.data)
-    return (report.source, len(data), data[0] if data else None)
+    layout = (len(data), data[0] if data else None)
+    if isinstance(report.source, RawStreamIdentity):
+        return (*report.source.key, *layout)
+    # Compatibility for synthetic/older callers. Live guided capture supplies
+    # RawStreamIdentity, so volatile paths never enter new semantic hypotheses.
+    return (report.source, *layout)
+
+
+def _shape_layout(shape: Hashable) -> tuple[int, int | None] | None:
+    if not isinstance(shape, tuple) or len(shape) < 2:
+        return None
+    length, report_id = shape[-2:]
+    if not isinstance(length, int):
+        return None
+    if report_id is not None and not isinstance(report_id, int):
+        return None
+    return length, report_id
+
+
+def _report_sequences(
+    actions: Sequence[PhysicalAction],
+) -> dict[Hashable, dict[int, tuple[bytes, ...]]]:
+    """Return each raw stream's complete per-action report sequence."""
+
+    result: dict[Hashable, dict[int, tuple[bytes, ...]]] = defaultdict(dict)
+    for action_index, action in enumerate(actions):
+        grouped: dict[Hashable, list[bytes]] = defaultdict(list)
+        for report in action.hid_reports:
+            grouped[_report_shape(report)].append(bytes(report.data))
+        for shape, reports in grouped.items():
+            result[shape][action_index] = tuple(reports)
+    return result
+
+
+def _mirror_aliases(
+    actions: Sequence[PhysicalAction],
+    *,
+    minimum_shared_actions: int = 3,
+) -> tuple[dict[Hashable, Hashable], dict[Hashable, tuple[Hashable, ...]]]:
+    """Find streams that repeatedly carry the exact same logical reports.
+
+    A mirror requires the same report layout, identical action coverage, and
+    identical full report sequences in at least three guided actions. This is
+    intentionally stricter than candidate detection: a one-off coincidental
+    packet must never merge unrelated interfaces.
+    """
+
+    sequences = _report_sequences(actions)
+    shapes = sorted(sequences, key=repr)
+    parent: dict[Hashable, Hashable] = {shape: shape for shape in shapes}
+
+    def find(item: Hashable) -> Hashable:
+        root = item
+        while parent[root] != root:
+            root = parent[root]
+        while parent[item] != item:
+            next_item = parent[item]
+            parent[item] = root
+            item = next_item
+        return root
+
+    def union(left: Hashable, right: Hashable) -> None:
+        a = find(left)
+        b = find(right)
+        if a == b:
+            return
+        canonical, other = sorted((a, b), key=repr)
+        parent[other] = canonical
+
+    for index, left in enumerate(shapes):
+        left_layout = _shape_layout(left)
+        if left_layout is None:
+            continue
+        left_actions = sequences[left]
+        for right in shapes[index + 1:]:
+            if _shape_layout(right) != left_layout:
+                continue
+            right_actions = sequences[right]
+            if set(left_actions) != set(right_actions):
+                continue
+            if len(left_actions) < minimum_shared_actions:
+                continue
+            if all(left_actions[action] == right_actions[action] for action in left_actions):
+                union(left, right)
+
+    members: dict[Hashable, list[Hashable]] = defaultdict(list)
+    for shape in shapes:
+        members[find(shape)].append(shape)
+
+    aliases: dict[Hashable, Hashable] = {}
+    mirrors: dict[Hashable, tuple[Hashable, ...]] = {}
+    for group in members.values():
+        canonical = min(group, key=repr)
+        for shape in group:
+            aliases[shape] = canonical
+        mirrors[canonical] = tuple(sorted((shape for shape in group if shape != canonical), key=repr))
+    return aliases, mirrors
+
+
+def _collapse_mirrored_candidates(
+    actions: Sequence[PhysicalAction],
+    candidates: Iterable[CorrelationCandidate],
+) -> list[CorrelationCandidate]:
+    aliases, mirrors = _mirror_aliases(actions)
+    result: list[CorrelationCandidate] = []
+    seen: set[tuple[Hashable, int, int, tuple[int, ...], tuple[tuple[int | None, int | None], ...]]] = set()
+    for candidate in candidates:
+        canonical = aliases.get(candidate.report_key, candidate.report_key)
+        normalized = replace(
+            candidate,
+            report_key=canonical,
+            mirrors=mirrors.get(canonical, ()),
+        )
+        fingerprint = (
+            normalized.report_key,
+            normalized.offset,
+            normalized.observations,
+            normalized.values,
+            normalized.transitions,
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        result.append(normalized)
+    return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
 
 
 def detect_repeated_report_fields(
@@ -194,28 +342,25 @@ def detect_repeated_report_fields(
 ) -> list[CorrelationCandidate]:
     """Find persistent changing byte positions in spontaneous raw HID reports.
 
-    Reports are grouped by live source, length, and first byte (normally the
-    report ID). The last report of each shape in each guided action is compared
-    across actions. This intentionally models *persistent state* and is kept
-    separate from momentary press/release transitions.
-
-    The live source path is diagnostic only and must never become persistent
-    identity; device profiles already redact volatile hidraw/event paths.
+    The last report of each logical shape in each guided action is compared
+    across actions. Live captures use path-independent stream identities.
+    Repeated byte-for-byte mirrored siblings are collapsed only after the raw
+    evidence has been retained.
     """
 
     if minimum_observations < 1:
         raise ValueError("minimum_observations must be at least one")
 
-    per_shape: dict[tuple[str, int, int | None], list[tuple[int, bytes]]] = defaultdict(list)
+    per_shape: dict[Hashable, list[tuple[int, bytes]]] = defaultdict(list)
     for action_index, action in enumerate(actions):
-        latest: dict[tuple[str, int, int | None], bytes] = {}
+        latest: dict[Hashable, bytes] = {}
         for report in action.hid_reports:
             data = bytes(report.data)
             latest[_report_shape(report)] = data
         for shape, data in latest.items():
             per_shape[shape].append((action_index, data))
 
-    result: list[CorrelationCandidate] = []
+    raw: list[CorrelationCandidate] = []
     for shape, observed in per_shape.items():
         if len(observed) < minimum_observations:
             continue
@@ -230,7 +375,7 @@ def detect_repeated_report_fields(
             for value in ordered_values:
                 transitions.append((previous, value))
                 previous = value
-            result.append(
+            raw.append(
                 CorrelationCandidate(
                     report_key=shape,
                     offset=offset,
@@ -240,7 +385,7 @@ def detect_repeated_report_fields(
                 )
             )
 
-    return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
+    return _collapse_mirrored_candidates(actions, raw)
 
 
 def detect_repeated_report_transitions(
@@ -261,12 +406,12 @@ def detect_repeated_report_transitions(
         raise ValueError("minimum_observations must be at least one")
 
     observed: dict[
-        tuple[tuple[str, int, int | None], int],
+        tuple[Hashable, int],
         list[tuple[tuple[int, int], ...]],
     ] = defaultdict(list)
 
     for action in actions:
-        per_shape: dict[tuple[str, int, int | None], list[bytes]] = defaultdict(list)
+        per_shape: dict[Hashable, list[bytes]] = defaultdict(list)
         for report in action.hid_reports:
             per_shape[_report_shape(report)].append(bytes(report.data))
 
@@ -284,13 +429,13 @@ def detect_repeated_report_transitions(
                 if changes:
                     observed[(shape, offset)].append(changes)
 
-    result: list[CorrelationCandidate] = []
+    raw: list[CorrelationCandidate] = []
     for (shape, offset), action_changes in observed.items():
         if len(action_changes) < minimum_observations:
             continue
         flattened = tuple(change for changes in action_changes for change in changes)
         values = tuple(sorted({value for change in flattened for value in change}))
-        result.append(
+        raw.append(
             CorrelationCandidate(
                 report_key=shape,
                 offset=offset,
@@ -300,21 +445,23 @@ def detect_repeated_report_transitions(
             )
         )
 
-    return sorted(result, key=lambda item: (-item.observations, repr(item.report_key), item.offset))
+    return _collapse_mirrored_candidates(actions, raw)
 
 
 def capture_action_window(
     *,
     evdev_paths: Iterable[str | Path] = (),
     hidraw_paths: Iterable[str | Path] = (),
+    hidraw_sources: Mapping[str | Path, Hashable] | None = None,
     seconds: float = 1.0,
     before_features: Mapping[Hashable, bytes] | None = None,
     after_features: Mapping[Hashable, bytes] | None = None,
 ) -> PhysicalAction:
     """Capture one bounded user action from evdev and hidraw simultaneously.
 
-    hidraw files are opened O_RDONLY|O_NONBLOCK. No grab is performed on evdev
-    and no HID output/feature write operation exists in this capture path.
+    ``hidraw_sources`` maps volatile live paths to stable logical identities.
+    Paths remain available as diagnostic provenance only. hidraw files are
+    opened O_RDONLY|O_NONBLOCK; no grab or HID write operation exists here.
     """
 
     if seconds <= 0:
@@ -324,6 +471,10 @@ def capture_action_window(
     except ImportError as exc:  # pragma: no cover - project dependency
         raise RuntimeError("python-evdev is required for action capture") from exc
 
+    source_map = {
+        os.fspath(path): source
+        for path, source in (hidraw_sources or {}).items()
+    }
     selector = selectors.DefaultSelector()
     evdev_devices: list[Any] = []
     hid_fds: list[int] = []
@@ -338,25 +489,40 @@ def capture_action_window(
             evdev_devices.append(device)
             selector.register(device.fd, selectors.EVENT_READ, ("evdev", device))
         for path in hidraw_paths:
-            fd = os.open(os.fspath(path), os.O_RDONLY | os.O_NONBLOCK)
+            live_path = os.fspath(path)
+            fd = os.open(live_path, os.O_RDONLY | os.O_NONBLOCK)
             hid_fds.append(fd)
-            selector.register(fd, selectors.EVENT_READ, ("hidraw", os.fspath(path)))
+            logical_source = source_map.get(live_path, live_path)
+            selector.register(
+                fd,
+                selectors.EVENT_READ,
+                ("hidraw", logical_source, live_path),
+            )
 
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
             for key, _mask in selector.select(timeout=min(remaining, 0.1)):
-                kind, source = key.data
+                kind = key.data[0]
                 timestamp = time.monotonic_ns()
                 if kind == "hidraw":
+                    _kind, logical_source, live_path = key.data
                     try:
                         data = os.read(key.fd, 4096)
                     except BlockingIOError:
                         continue
                     if data:
-                        reports.append(TimedReport(timestamp, str(source), data))
+                        reports.append(
+                            TimedReport(
+                                timestamp,
+                                logical_source,
+                                data,
+                                diagnostic_source=live_path,
+                            )
+                        )
                 else:
+                    _kind, source = key.data
                     try:
                         batch = source.read()
                     except BlockingIOError:
