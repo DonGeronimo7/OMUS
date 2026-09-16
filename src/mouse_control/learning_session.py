@@ -6,8 +6,9 @@ before/after each action, and asks semantic inference to identify repeated
 fields. It never contains a HID write operation.
 
 Known native teachers may optionally provide semantic ground truth before and
-after each action. That ground truth can validate behavior without teaching the
-learner any vendor-specific packet offsets or command IDs.
+after each action. When no teacher exists, contrastive control captures provide
+negative evidence: raw activity that also occurs during ordinary mouse use is
+not allowed to masquerade as the guided vendor-specific action.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 from .discovery_models import DeviceNode, PhysicalDevice
 from .event_correlation import (
@@ -56,6 +57,9 @@ class LearningResult:
     report_candidates: tuple[CorrelationCandidate, ...]
     trigger_candidates: tuple[CorrelationCandidate, ...]
     hypotheses: tuple[SemanticHypothesis, ...]
+    control_samples: tuple[LearningSample, ...] = ()
+    control_trigger_candidates: tuple[CorrelationCandidate, ...] = ()
+    discriminative_trigger_candidates: tuple[CorrelationCandidate, ...] = ()
 
 
 class ReadOnlyLearningSession:
@@ -107,6 +111,10 @@ class ReadOnlyLearningSession:
         if isinstance(raw, int) and not isinstance(raw, bool):
             return raw
         return None
+
+    @staticmethod
+    def _candidate_location(candidate: CorrelationCandidate) -> tuple[object, int]:
+        return candidate.report_key, candidate.offset
 
     def snapshot_features(self) -> dict[tuple[object, ...], bytes]:
         """Read every descriptor-declared Feature report that permits GET_FEATURE."""
@@ -211,11 +219,44 @@ class ReadOnlyLearningSession:
         samples: list[LearningSample] | tuple[LearningSample, ...],
         *,
         trigger_behavior: SemanticBehavior | None = None,
+        control_samples: Sequence[LearningSample] = (),
     ) -> LearningResult:
+        """Infer semantics from guided actions, optionally against negative controls.
+
+        Control captures are deliberately *subtractive evidence*. Any raw byte
+        location that also transitions during ordinary control activity is
+        retained in the audit trail but is excluded from the action-specific
+        trigger set. This is especially useful without a native protocol
+        teacher because pointer movement and ordinary buttons otherwise produce
+        large amounts of convincing-looking HID noise.
+        """
+
         actions = tuple(sample.action for sample in samples)
+        controls = tuple(control_samples)
+        control_actions = tuple(sample.action for sample in controls)
+
         feature_candidates = tuple(detect_repeated_changes(actions))
         report_candidates = tuple(detect_repeated_report_fields(actions))
         trigger_candidates = tuple(detect_repeated_report_transitions(actions))
+        control_trigger_candidates = (
+            tuple(
+                detect_repeated_report_transitions(
+                    control_actions,
+                    minimum_observations=1,
+                )
+            )
+            if control_actions
+            else ()
+        )
+        control_locations = {
+            self._candidate_location(candidate)
+            for candidate in control_trigger_candidates
+        }
+        discriminative_trigger_candidates = tuple(
+            candidate
+            for candidate in trigger_candidates
+            if self._candidate_location(candidate) not in control_locations
+        )
 
         stage_hypotheses = [
             *infer_stage_hypotheses(feature_candidates),
@@ -224,29 +265,45 @@ class ReadOnlyLearningSession:
         teacher_hypotheses = self._teacher_dpi_hypotheses(
             samples, (*feature_candidates, *report_candidates)
         )
+        raw_trigger_source = (
+            discriminative_trigger_candidates
+            if control_actions
+            else trigger_candidates
+        )
         trigger_hypotheses = (
-            infer_trigger_hypotheses(trigger_candidates, behavior=trigger_behavior)
+            infer_trigger_hypotheses(raw_trigger_source, behavior=trigger_behavior)
             if trigger_behavior is not None
             else ()
         )
         teacher_trigger_hypotheses = (
             self._teacher_dpi_trigger_hypotheses(
                 samples,
-                trigger_candidates,
+                raw_trigger_source,
+                behavior=trigger_behavior,
+            )
+            if trigger_behavior is not None
+            else ()
+        )
+        contrastive_hypotheses = (
+            self._contrastive_trigger_hypotheses(
+                samples,
+                controls,
+                discriminative_trigger_candidates,
                 behavior=trigger_behavior,
             )
             if trigger_behavior is not None
             else ()
         )
 
-        # Deduplicate equivalent semantic locations while preserving the more
-        # useful teacher-validated hypothesis when both paths found the same field.
+        # Deduplicate equivalent semantic locations while preserving stronger
+        # validated evidence when both paths found the same semantic claim.
         merged: dict[tuple[object, object, object], SemanticHypothesis] = {}
         for hypothesis in (
             *stage_hypotheses,
             *teacher_hypotheses,
             *trigger_hypotheses,
             *teacher_trigger_hypotheses,
+            *contrastive_hypotheses,
         ):
             key = (hypothesis.behavior, repr(hypothesis.report_key), hypothesis.offset)
             previous = merged.get(key)
@@ -261,6 +318,9 @@ class ReadOnlyLearningSession:
             report_candidates=report_candidates,
             trigger_candidates=trigger_candidates,
             hypotheses=tuple(merged.values()),
+            control_samples=controls,
+            control_trigger_candidates=control_trigger_candidates,
+            discriminative_trigger_candidates=discriminative_trigger_candidates,
         )
 
     @classmethod
@@ -354,6 +414,45 @@ class ReadOnlyLearningSession:
                     f"guided action produced {len(candidates)} correlated raw trigger candidate(s) "
                     f"while the native teacher independently confirmed DPI changed in "
                     f"{len(transitions)} before/after action pairs; raw locations remain candidates"
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _contrastive_trigger_hypotheses(
+        samples: Sequence[LearningSample],
+        controls: Sequence[LearningSample],
+        candidates: tuple[CorrelationCandidate, ...],
+        *,
+        behavior: SemanticBehavior,
+    ) -> tuple[SemanticHypothesis, ...]:
+        """Validate a guided behavior from repeatability plus negative controls.
+
+        This is the teacher-free path. The user supplies the semantic action by
+        following the guided prompt; the learner supplies independent evidence
+        that repeatable raw transitions occur with that action but not during
+        idle/ordinary-use controls. It validates the behavior association, not
+        a unique packet byte and not an absolute DPI value.
+        """
+
+        if len(samples) < 3 or len(controls) < 2 or not candidates:
+            return ()
+        if any(sample.teacher_state or sample.teacher_before_state for sample in samples):
+            return ()
+
+        repeated = tuple(candidate for candidate in candidates if candidate.observations >= 2)
+        if not repeated:
+            return ()
+
+        return (
+            SemanticHypothesis(
+                behavior=behavior,
+                confidence="validated",
+                reason=(
+                    f"teacher-free contrastive learning found {len(repeated)} repeated raw "
+                    f"trigger candidate(s) across {len(samples)} guided actions and none at "
+                    f"those locations during {len(controls)} negative-control captures; "
+                    "raw locations remain candidates and no absolute DPI value is inferred"
                 ),
             ),
         )

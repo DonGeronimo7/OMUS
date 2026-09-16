@@ -62,16 +62,16 @@ def _parser() -> argparse.ArgumentParser:
         "--learn-dpi-button",
         action="store_true",
         help=(
-            "after discovery, capture three read-only DPI-button actions and infer "
-            "both persistent state and momentary trigger fields"
+            "capture two negative controls plus three read-only DPI-button actions and "
+            "infer action-specific persistent state and momentary trigger fields"
         ),
     )
     parser.add_argument(
         "--teacher",
         action="store_true",
         help=(
-            "during guided learning, read semantic ground truth before and after each "
-            "action from a native protocol teacher such as HID++; packet details are not shared"
+            "also read semantic ground truth before and after each guided action from a "
+            "native protocol teacher such as HID++; packet details are not shared"
         ),
     )
     parser.add_argument(
@@ -79,7 +79,7 @@ def _parser() -> argparse.ArgumentParser:
         type=float,
         default=1.5,
         metavar="SECONDS",
-        help="capture window for each guided action (default: 1.5)",
+        help="capture window for each control/action sample (default: 1.5)",
     )
     return parser
 
@@ -102,10 +102,13 @@ def _render_guided_learning(learned) -> str:
         "",
         "Guided DPI-button learning",
         "==========================",
-        f"Samples: {len(learned.samples)}",
+        f"Guided samples: {len(learned.samples)}",
+        f"Negative-control samples: {len(learned.control_samples)}",
         f"Feature-field candidates: {len(learned.feature_candidates)}",
         f"Persistent raw-state candidates: {len(learned.report_candidates)}",
-        f"Momentary raw-trigger candidates: {len(learned.trigger_candidates)}",
+        f"Raw trigger candidates before controls: {len(learned.trigger_candidates)}",
+        f"Raw trigger locations seen in controls: {len(learned.control_trigger_candidates)}",
+        f"Action-specific raw-trigger candidates: {len(learned.discriminative_trigger_candidates)}",
     ]
 
     if learned.hypotheses:
@@ -123,7 +126,7 @@ def _render_guided_learning(learned) -> str:
             lines.append(f"               {hypothesis.reason}")
     else:
         lines.append(
-            "Semantic hypotheses: none yet — no repeatable persistent or momentary field was found."
+            "Semantic hypotheses: none yet — no action-specific repeatable field was found."
         )
 
     teacher_transitions = [
@@ -136,6 +139,8 @@ def _render_guided_learning(learned) -> str:
     ]
     if teacher_transitions:
         lines.append(f"Teacher transitions: {teacher_transitions}")
+    else:
+        lines.append("Teacher: unavailable/not requested — inference used Linux HID evidence only.")
     lines.append(
         "Write status: forbidden — guided learning produces observations/correlations only."
     )
@@ -150,6 +155,55 @@ def _full_access_preflight(session: ReadOnlyLearningSession) -> tuple[str, ...]:
             "still unavailable: " + ", ".join(unreadable)
         )
     return tuple(str(path) for path in readable)
+
+
+def _check_sample_access(sample, *, require_complete_access: bool) -> None:
+    if require_complete_access and sample.unreadable_hidraw_paths:
+        raise PermissionError(
+            "a hidraw sibling became unavailable during full-access capture: "
+            + ", ".join(sample.unreadable_hidraw_paths)
+        )
+
+
+def _capture_controls(
+    session: ReadOnlyLearningSession,
+    *,
+    seconds: float,
+    require_complete_access: bool,
+):
+    """Capture negative controls before the labelled DPI action.
+
+    One quiet capture establishes idle/background traffic. The second captures
+    ordinary pointer/button traffic so those bytes can be subtracted from the
+    later DPI-button candidates instead of being mistaken for vendor semantics.
+    """
+
+    controls = []
+    print(
+        "\nContrastive controls come first. These are still read-only and are used only "
+        "to learn what ordinary/non-DPI HID traffic looks like."
+    )
+    prompts = (
+        (
+            "[control 1/2] Press Enter, then leave the mouse completely untouched "
+            f"for {seconds:g}s... "
+        ),
+        (
+            "[control 2/2] Press Enter, then move the mouse normally and left-click once, "
+            f"but do NOT press DPI/profile buttons, during {seconds:g}s... "
+        ),
+    )
+    for prompt in prompts:
+        input(prompt)
+        sample = session.observe_action(seconds=seconds)
+        _check_sample_access(sample, require_complete_access=require_complete_access)
+        controls.append(sample)
+        print(
+            f"  control captured {len(sample.action.hid_reports)} HID report(s), "
+            f"{len(sample.action.evdev_events)} evdev event(s), "
+            f"{len(sample.action.feature_changes)} Feature byte change(s)"
+        )
+    return controls
 
 
 def _run_guided_learning(
@@ -174,7 +228,19 @@ def _run_guided_learning(
             "correlated hidraw sibling(s) readable."
         )
 
+    controls = _capture_controls(
+        session,
+        seconds=seconds,
+        require_complete_access=require_complete_access,
+    )
+
     reader = (lambda: read_teacher_labels(selected)) if teacher else None
+    if reader is None:
+        print(
+            "\nNative teacher is OFF. The next inference pass will rely only on Linux "
+            "hidraw/evdev observations, HID descriptors, repetition, and the negative controls."
+        )
+
     samples = []
     for index in range(3):
         # Capture teacher ground truth before the prompt, not immediately before
@@ -190,11 +256,7 @@ def _run_guided_learning(
             teacher_reader=reader,
             teacher_before_state=teacher_before,
         )
-        if require_complete_access and sample.unreadable_hidraw_paths:
-            raise PermissionError(
-                "a hidraw sibling became unavailable during full-access capture: "
-                + ", ".join(sample.unreadable_hidraw_paths)
-            )
+        _check_sample_access(sample, require_complete_access=require_complete_access)
         samples.append(sample)
         teacher_suffix = ""
         if sample.teacher_before_state or sample.teacher_state:
@@ -216,6 +278,7 @@ def _run_guided_learning(
     learned = session.analyze(
         samples,
         trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+        control_samples=controls,
     )
     print(_render_guided_learning(learned))
 
