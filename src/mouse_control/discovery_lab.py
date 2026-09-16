@@ -20,6 +20,7 @@ from typing import Any, Callable
 class DiscoveryTool(str, Enum):
     HYPOTHESIS_INSPECTION = "hypothesis-inspection"
     SENSOR_CALIBRATION = "sensor-calibration"
+    AUTONOMOUS_DPI_DISCOVERY = "autonomous-dpi-discovery"
     CALIBRATED_DPI_DISCOVERY = "calibrated-dpi-discovery"
     POLLING_PHYSICAL_VERIFY = "polling-physical-verify"
     DPI_WRITE_TRACE = "dpi-write-trace"
@@ -59,9 +60,16 @@ _TOOL_SPECS = (
         evidence_phase="calibrate",
     ),
     DiscoveryToolSpec(
+        DiscoveryTool.AUTONOMOUS_DPI_DISCOVERY,
+        "Discover physical DPI cycle automatically",
+        "Teacher-free cycle learning: measure CPI, observe one physical DPI-button transition at a time, and stop only when physical CPI wraps to the starting state.",
+        False,
+        evidence_phase="correlate",
+    ),
+    DiscoveryToolSpec(
         DiscoveryTool.CALIBRATED_DPI_DISCOVERY,
-        "Correlate physical DPI states with raw HID",
-        "Teacher-free CPI calibration plus simultaneous read-only HID observation and contrastive state inference.",
+        "Validate labelled DPI cycle against raw HID",
+        "Expert verification path using supplied stage labels plus independent CPI calibration, simultaneous read-only HID observation, and contrastive state inference.",
         False,
         evidence_phase="correlate",
     ),
@@ -159,6 +167,9 @@ def _runner(tool: DiscoveryTool) -> tuple[Callable[[list[str] | None], int], lis
         return main, []
     if tool is DiscoveryTool.SENSOR_CALIBRATION:
         from .sensor_calibration_cli import main
+        return main, []
+    if tool is DiscoveryTool.AUTONOMOUS_DPI_DISCOVERY:
+        from .autonomous_dpi_discovery_cli import main
         return main, []
     if tool is DiscoveryTool.CALIBRATED_DPI_DISCOVERY:
         from .calibrated_discovery_cli import main
