@@ -43,9 +43,6 @@ class HardwareSupervisor(HardwareBackend):
         self.desired = desired
         self._device_resolver = device_resolver or (lambda selected: selected)
         self._has_preferred_backend = self._backend_has_proven_adapter(backend)
-        # Callers from the pre-universal-backend era may conservatively mark
-        # every DiscoveryBackend as pending. A proven internal adapter means
-        # discovery has already reached the preferred hardware path.
         self._discovery_pending = bool(discovery_pending and not self._has_preferred_backend)
         self._lock = threading.RLock()
         self._generation = 0
@@ -53,12 +50,56 @@ class HardwareSupervisor(HardwareBackend):
 
     @staticmethod
     def _backend_has_proven_adapter(backend: HardwareBackend) -> bool:
-        """Whether this backend already owns a proven hardware protocol path."""
         if isinstance(backend, DiscoveryBackend):
             return backend.protocol_adapter_name is not None
-        # Direct HardwareBackend objects remain supported in tests/extensions;
-        # production registry selection now wraps them behind DiscoveryBackend.
         return True
+
+    @staticmethod
+    def _discovery_binding_signature(backend: HardwareBackend):
+        """Stable-enough signature for deciding whether a Discovery rebind matters.
+
+        The signature deliberately includes current node paths as well as stable
+        identity. A reconnect that moves to another hidraw node must therefore
+        replace the live backend even when the learned grammar is unchanged.
+        Two completely empty Discovery objects remain equivalent and can be
+        collapsed while hotplug enumeration is still settling.
+        """
+        if not isinstance(backend, DiscoveryBackend):
+            return None
+        physical = backend._physical
+        binding = backend._binding
+        nodes = ()
+        physical_identity = None
+        if physical is not None:
+            physical_identity = (
+                physical.vendor_id,
+                physical.product_id,
+                physical.bus,
+                physical.model_fingerprint,
+                physical.instance_fingerprint,
+                physical.ambiguous,
+            )
+            nodes = tuple(sorted(
+                (
+                    str(node.path),
+                    node.bus,
+                    node.vendor_id,
+                    node.product_id,
+                    node.interface_number,
+                    node.descriptor_sha256,
+                )
+                for node in physical.hidraw_nodes
+            ))
+        learned = None
+        if binding is not None:
+            learned = (
+                str(binding.node.path),
+                binding.report_length,
+                binding.report_id,
+                binding.offset,
+                tuple(sorted(binding.raw_to_dpi.items())),
+            )
+        return (backend.protocol_adapter_name, physical_identity, nodes, learned)
 
     @property
     def generation(self) -> int:
@@ -99,12 +140,6 @@ class HardwareSupervisor(HardwareBackend):
 
     def _reconcile_backend(self, backend: HardwareBackend,
                            device: MouseDevice | None = None) -> None:
-        """Apply desired state without changing native control ownership.
-
-        Reconnect/startup reconciliation is automatic lifecycle work, not an
-        explicit user takeover. A backend may know how to enter a Host/software
-        control mode, but that transition is intentionally ineligible here.
-        """
         desired = self.desired
         device = device or self.device
         if desired.polling_rate_hz is not None:
@@ -146,7 +181,6 @@ class HardwareSupervisor(HardwareBackend):
                 self._reconcile_backend(self._backend)
 
     def record_active_dpi(self, dpi: int | tuple[int, int]) -> None:
-        """Keep reconnect reconciliation aligned with confirmed runtime state."""
         value = dpi[0] if isinstance(dpi, tuple) else dpi
         if value <= 0:
             return
@@ -174,10 +208,16 @@ class HardwareSupervisor(HardwareBackend):
                         close()
                 raise
 
-            # A Discovery -> Discovery rebind is meaningful: the replacement may
-            # have rebound a new hidraw path, acquired a newly available protocol
-            # adapter, or loaded newly learned evidence. Do not collapse it merely
-            # because the outer backend type stayed the same.
+            old_signature = self._discovery_binding_signature(old)
+            new_signature = self._discovery_binding_signature(replacement)
+            if (old_signature is not None and new_signature is not None and
+                    old_signature == new_signature):
+                close = getattr(replacement, "close", None)
+                if close:
+                    close()
+                self.device = resolved_device
+                return False
+
             self.device = resolved_device
             self._backend = replacement
             replacement_preferred = self._backend_has_proven_adapter(replacement)
@@ -185,7 +225,6 @@ class HardwareSupervisor(HardwareBackend):
                 self._has_preferred_backend = True
                 self._discovery_pending = False
             elif self._has_preferred_backend:
-                # A proven adapter may return after partial hotplug enumeration.
                 self._discovery_pending = True
             self._generation += 1
             if old is not replacement:
@@ -218,8 +257,6 @@ class HardwareSupervisor(HardwareBackend):
 
     def watch_dpi_events(self, device, callback, shutdown_event,
                          ready_callback=None) -> None:
-        # Long-running event reads must not hold the lifecycle lock. Closing a
-        # replaced backend wakes the old watcher.
         with self._lock:
             if self._closed:
                 raise HardwareError("hardware supervisor is closed")
