@@ -11,13 +11,13 @@ import json
 import os
 import sys
 
-from .backend_teacher import read_backend_teacher_state
 from .device_topology import TopologyError
 from .discovery import get_mouse_devices, select_mouse_device
 from .discovery_engine import DiscoveryEngine
 from .discovery_ui import render_discovery_result, result_to_dict
 from .learning_session import ReadOnlyLearningSession
 from .protocol_grammar import SemanticBehavior
+from .teacher_registry import read_teacher_labels
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -71,7 +71,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "during guided learning, read semantic ground truth after each action "
-            "from an already-proven backend such as HID++; packet details are not shared"
+            "from a native protocol teacher such as HID++; packet details are not shared"
         ),
     )
     parser.add_argument(
@@ -167,7 +167,7 @@ def _run_guided_learning(
             "correlated hidraw sibling(s) readable."
         )
 
-    reader = (lambda: read_backend_teacher_state(selected)) if teacher else None
+    reader = (lambda: read_teacher_labels(selected)) if teacher else None
     samples = []
     for index in range(3):
         input(
