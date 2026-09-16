@@ -393,12 +393,7 @@ class SetupController:
                 DisplayRow("Press Enter on a device in the left pane to bind it."),
             ]
         if self.section is SetupSection.HARDWARE:
-            rows = [
-                DisplayRow("Automatic Discovery — complete evidence ladder"),
-                DisplayRow("OBSERVE → CORRELATE → VALIDATE → PROVE", dim=True),
-                DisplayRow("Read-only evidence never grants write authority.", dim=True),
-                DisplayRow(""),
-            ]
+            rows = [DisplayRow("OBSERVE → CORRELATE → VALIDATE → PROVE", dim=True)]
             for index, (_kind, label, _payload) in enumerate(self.hardware_actions()):
                 rows.append(DisplayRow(label, index))
             rows.extend((DisplayRow(""), DisplayRow("Detected capabilities", dim=True)))
