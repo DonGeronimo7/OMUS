@@ -21,6 +21,7 @@ dependencies = [
 [project.scripts]
 mouse-control = "mouse_control.cli:main"
 mouse-control-discover = "mouse_control.discovery_cli:main"
+mouse-control-sensor-calibrate = "mouse_control.sensor_calibration_cli:main"
 
 [tool.setuptools.package-data]
 mouse_control = ["udev/*.rules"]
