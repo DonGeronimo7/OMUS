@@ -24,6 +24,8 @@ unknown hardware without guessing write commands.
 
 ## Current release: v0.9.1
 
+The current release is [v0.9.1](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.1).
+
 Mouse Control v0.9.1 makes the safe Automatic Discovery architecture from
 v0.9.0 accessible from the normal setup workflow.
 
