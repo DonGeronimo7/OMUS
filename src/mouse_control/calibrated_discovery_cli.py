@@ -12,6 +12,11 @@ from .calibrated_discovery import (
     capture_calibrated_motion,
     infer_calibrated_raw_mappings,
 )
+from .calibrated_profiles import (
+    CalibratedProfileError,
+    calibrated_profile_data,
+    save_calibrated_profile,
+)
 from .contrastive_inference import refine_teacher_free
 from .device_topology import TopologyError
 from .discovery import get_mouse_devices, select_mouse_device
@@ -90,6 +95,11 @@ def _parser() -> argparse.ArgumentParser:
         "--full-access",
         action="store_true",
         help="require every correlated hidraw sibling to remain readable throughout learning",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="do not persist the path-independent calibrated read-only profile",
     )
     return parser
 
@@ -235,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         "stream simultaneously. DPI-button transitions are captured separately with the mouse still."
     )
 
+    profile_path = None
     engine = DiscoveryEngine(detectors=(), save_profiles=False)
     try:
         result = engine.discover(selected)
@@ -323,20 +334,33 @@ def main(argv: list[str] | None = None) -> int:
         )
         cycle_hypothesis = calibrated_cycle_hypothesis(resulting_states)
 
+        if (
+            not args.no_save
+            and mappings
+            and cycle_hypothesis is not None
+            and cycle_hypothesis.confidence == "validated"
+        ):
+            profile = calibrated_profile_data(
+                device=result.device,
+                configured_cycle=args.dpi_values,
+                measured_cycle=measured_cycle,
+                mappings=mappings,
+                action_report_keys=action_specific_keys,
+            )
+            profile_path = save_calibrated_profile(profile)
+
     except KeyboardInterrupt:
         print("\nCalibrated discovery cancelled.", file=sys.stderr)
         return 130
     except TopologyError as exc:
         print(f"Could not correlate the physical mouse: {exc}", file=sys.stderr)
         return 1
-    except (CalibrationError, OSError, PermissionError, ValueError) as exc:
+    except (CalibrationError, OSError, PermissionError, ValueError, CalibratedProfileError) as exc:
         print(f"Calibrated discovery failed: {exc}", file=sys.stderr)
         return 1
 
     print("\nCalibrated DPI-state evidence")
     print("=============================")
-    # The final state repeats the first stage after wrap; keep it visible because
-    # the wrap is independent physical evidence that the cycle closed.
     for index, state in enumerate(measured_cycle):
         suffix = " (wrap confirmation)" if index == len(measured_cycle) - 1 else ""
         print(
@@ -351,10 +375,12 @@ def main(argv: list[str] | None = None) -> int:
             f"{cycle_hypothesis.reason}"
         )
 
+    state_keys = {mapping.report_key for mapping in mappings}
     print(f"Action-specific report shapes absent from ruler-motion controls: {len(action_specific_keys)}")
     for shape in refinement.report_shapes:
+        role = "state-bearing" if shape.report_key in state_keys else "transition-only"
         print(
-            f"  report={shape.report_key!r} guided_counts={shape.guided_counts!r} "
+            f"  [{role}] report={shape.report_key!r} guided_counts={shape.guided_counts!r} "
             f"control_counts={shape.control_counts!r}"
         )
 
@@ -373,6 +399,10 @@ def main(argv: list[str] | None = None) -> int:
             "but no persistent raw field was both repeated across the full cycle and isolated "
             "to an action-specific report shape."
         )
+
+    if profile_path is not None:
+        print(f"\nSaved calibrated read-only profile: {profile_path}")
+        print("Profile write authority: false")
 
     print(
         "\nWrite status: FORBIDDEN — calibrated discovery validates read-side behavior and "
