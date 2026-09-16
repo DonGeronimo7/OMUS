@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from mouse_control import device_profiles
 from mouse_control.device_profiles import DeviceProfileStore, result_to_profile, validate_profile
 from mouse_control.discovery_models import (
     DeviceNode,
@@ -110,3 +112,22 @@ def test_profile_redacts_live_paths_from_diagnostic_evidence(tmp_path):
     saved = path.read_text(encoding="utf-8")
     assert "/dev/hidraw" not in saved
     assert "/dev/input/event" not in saved
+
+
+def test_sudo_profile_directory_uses_invoking_users_home(monkeypatch, tmp_path):
+    """Privileged discovery must not cache learned profiles below /root."""
+
+    monkeypatch.setattr(device_profiles.os, "geteuid", lambda: 0)
+    monkeypatch.setenv("SUDO_UID", "1000")
+    monkeypatch.setenv("SUDO_GID", "1000")
+    monkeypatch.delenv("MOUSE_CONTROL_PROFILE_DIR", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(
+        device_profiles.pwd,
+        "getpwuid",
+        lambda uid: SimpleNamespace(pw_dir=str(tmp_path)) if uid == 1000 else None,
+    )
+
+    assert device_profiles.get_profile_directory() == (
+        tmp_path / ".local" / "share" / "mouse-control" / "devices"
+    )
