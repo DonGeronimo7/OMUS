@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .discovery import get_mouse_devices, select_mouse_device
@@ -67,18 +68,24 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     inches = args.distance_mm / 25.4
+    resolved_path = os.path.realpath(mouse.path)
     print("Mouse Control — Generic Sensor Calibration")
     print("==========================================")
     print(f"Device: {mouse.name} [{(mouse.vendor or 0):04x}:{(mouse.product or 0):04x}]")
+    print(f"evdev source: {mouse.path} -> {resolved_path}")
     print(
         f"Place the mouse against a ruler. After pressing Enter, move it exactly "
         f"{args.distance_mm:g} mm ({inches:g} in) along the {args.axis.upper()} axis in one "
         "direction, then stop. Do not press the DPI button during this pass."
     )
+    print(
+        "Calibration will exclusively grab this physical evdev stream during the capture. "
+        "If mouse-control is currently remapping it, stop the service first."
+    )
     input("Press Enter when ready... ")
 
     try:
-        events = capture_evdev_motion(mouse.path, seconds=args.window)
+        events = capture_evdev_motion(mouse.path, seconds=args.window, exclusive=True)
         result = measure_sensor_state(
             events,
             distance_mm=args.distance_mm,
@@ -90,7 +97,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\nMeasured sensor state")
     print("---------------------")
-    print(f"Raw {args.axis.upper()} counts: {result.net_counts}")
+    print(f"Raw {args.axis.upper()} net counts: {result.net_counts}")
+    print(f"Raw {args.axis.upper()} path counts: {result.path_counts}")
+    other_axis = "Y" if args.axis == "x" else "X"
+    print(f"Cross-axis {other_axis} path counts: {result.cross_axis_counts}")
     print(f"Movement straightness: {result.straightness * 100:.1f}%")
     print(f"Estimated DPI: {result.estimated_dpi:.1f} (~{result.rounded_dpi})")
     print(f"Motion report frames: {result.motion_frames}")
@@ -102,6 +112,11 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Observed peak polling: {result.peak_polling_hz:.1f} Hz "
             f"(~{result.standard_polling_hz} Hz)"
+        )
+    if result.cross_axis_counts > result.path_counts:
+        print(
+            "Diagnostic: cross-axis motion exceeded the requested-axis motion. "
+            "Retry with --axis y if the physical ruler movement maps to REL_Y on this stream."
         )
     print("Vendor protocol used: none")
     return 0
