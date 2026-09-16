@@ -10,6 +10,7 @@ def test_catalog_exposes_full_proven_discovery_ladder():
     specs = discovery_tool_specs()
     assert [spec.tool for spec in specs] == [
         DiscoveryTool.SENSOR_CALIBRATION,
+        DiscoveryTool.POLLING_PHYSICAL_VERIFY,
         DiscoveryTool.DPI_WRITE_TRACE,
         DiscoveryTool.DPI_WRITE_PROMOTION,
         DiscoveryTool.POLLING_ONBOARD_TRACE,
@@ -17,7 +18,8 @@ def test_catalog_exposes_full_proven_discovery_ladder():
         DiscoveryTool.POLLING_PROMOTION,
     ]
     assert specs[0].writes_hardware is False
-    assert specs[2].promotion is True
+    assert specs[1].writes_hardware is True
+    assert specs[3].promotion is True
     assert specs[-1].promotion is True
 
 
