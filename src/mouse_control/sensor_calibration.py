@@ -68,11 +68,7 @@ class SensorCalibration:
 
 
 def _event_timestamp_ns(event) -> int:
-    """Return a kernel event timestamp in nanoseconds.
-
-    python-evdev exposes ``sec``/``usec`` from ``struct input_event``. Tests and
-    replay callers may instead pass a ``timestamp_ns`` attribute.
-    """
+    """Return a kernel event timestamp in nanoseconds."""
 
     timestamp_ns = getattr(event, "timestamp_ns", None)
     if timestamp_ns is not None:
@@ -93,6 +89,35 @@ def normalize_event(event) -> CalibrationEvent:
     )
 
 
+def _normalize_capture(events: Iterable[CalibrationEvent]) -> tuple[CalibrationEvent, ...]:
+    captured = tuple(normalize_event(event) for event in events)
+    if any(
+        event.event_type == EV_SYN and event.code == SYN_DROPPED
+        for event in captured
+    ):
+        raise CalibrationError(
+            "kernel reported SYN_DROPPED during calibration; input events were lost, "
+            "so DPI cannot be measured reliably"
+        )
+    return captured
+
+
+def _axis_values(
+    captured: tuple[CalibrationEvent, ...],
+) -> tuple[list[int], list[int]]:
+    x_values = [
+        event.value
+        for event in captured
+        if event.event_type == EV_REL and event.code == REL_X
+    ]
+    y_values = [
+        event.value
+        for event in captured
+        if event.event_type == EV_REL and event.code == REL_Y
+    ]
+    return x_values, y_values
+
+
 def _motion_frame_timestamps(events: tuple[CalibrationEvent, ...]) -> tuple[int, ...]:
     """Return SYN_REPORT timestamps for frames that contain X/Y motion."""
 
@@ -111,13 +136,7 @@ def _motion_frame_timestamps(events: tuple[CalibrationEvent, ...]) -> tuple[int,
 def estimate_peak_polling_hz(
     frame_timestamps_ns: Iterable[int],
 ) -> tuple[float | None, int | None, float | None]:
-    """Estimate the device's highest sustained event frequency.
-
-    Gaming mice may dynamically lower their event rate while moving slowly.
-    Rather than averaging pauses into the result, use the median of the fastest
-    quartile of positive frame intervals. The raw estimate is retained and a
-    common USB gaming-mouse rate is reported only when it is within 20%.
-    """
+    """Estimate the device's highest sustained event frequency."""
 
     timestamps = tuple(int(value) for value in frame_timestamps_ns)
     deltas = sorted(
@@ -141,47 +160,14 @@ def estimate_peak_polling_hz(
     return measured, standard, error
 
 
-def measure_sensor_state(
-    events: Iterable[CalibrationEvent],
+def _measure_normalized(
+    captured: tuple[CalibrationEvent, ...],
     *,
     distance_mm: float,
-    axis: Literal["x", "y"] = "x",
-    minimum_straightness: float = 0.80,
+    axis: Literal["x", "y"],
+    minimum_straightness: float,
 ) -> SensorCalibration:
-    """Convert a known physical movement into DPI and polling observations.
-
-    ``distance_mm`` is the ruler distance travelled by the mouse. The user
-    should move predominantly along ``axis`` without reversing direction. DPI
-    is simply device counts divided by physical inches travelled.
-    """
-
-    if distance_mm <= 0:
-        raise CalibrationError("distance_mm must be greater than zero")
-    if axis not in {"x", "y"}:
-        raise CalibrationError("axis must be 'x' or 'y'")
-    if not 0 < minimum_straightness <= 1:
-        raise CalibrationError("minimum_straightness must be in (0, 1]")
-
-    captured = tuple(normalize_event(event) for event in events)
-    if any(
-        event.event_type == EV_SYN and event.code == SYN_DROPPED
-        for event in captured
-    ):
-        raise CalibrationError(
-            "kernel reported SYN_DROPPED during calibration; input events were lost, "
-            "so DPI cannot be measured reliably"
-        )
-
-    x_values = [
-        event.value
-        for event in captured
-        if event.event_type == EV_REL and event.code == REL_X
-    ]
-    y_values = [
-        event.value
-        for event in captured
-        if event.event_type == EV_REL and event.code == REL_Y
-    ]
+    x_values, y_values = _axis_values(captured)
     primary = x_values if axis == "x" else y_values
     secondary = y_values if axis == "x" else x_values
 
@@ -219,20 +205,73 @@ def measure_sensor_state(
     )
 
 
+def measure_sensor_state(
+    events: Iterable[CalibrationEvent],
+    *,
+    distance_mm: float,
+    axis: Literal["x", "y"] = "x",
+    minimum_straightness: float = 0.80,
+) -> SensorCalibration:
+    """Convert a known physical movement into DPI and polling observations."""
+
+    if distance_mm <= 0:
+        raise CalibrationError("distance_mm must be greater than zero")
+    if axis not in {"x", "y"}:
+        raise CalibrationError("axis must be 'x' or 'y'")
+    if not 0 < minimum_straightness <= 1:
+        raise CalibrationError("minimum_straightness must be in (0, 1]")
+
+    captured = _normalize_capture(events)
+    return _measure_normalized(
+        captured,
+        distance_mm=distance_mm,
+        axis=axis,
+        minimum_straightness=minimum_straightness,
+    )
+
+
+def measure_sensor_state_auto(
+    events: Iterable[CalibrationEvent],
+    *,
+    distance_mm: float,
+    minimum_straightness: float = 0.80,
+) -> SensorCalibration:
+    """Measure DPI without asking the user which Linux axis carries motion.
+
+    Both REL_X and REL_Y are inspected. The axis with the larger accumulated
+    absolute travel is treated as the deliberate ruler-motion axis. This keeps
+    Linux axis orientation and receiver quirks as implementation details rather
+    than wizard questions.
+    """
+
+    if distance_mm <= 0:
+        raise CalibrationError("distance_mm must be greater than zero")
+    if not 0 < minimum_straightness <= 1:
+        raise CalibrationError("minimum_straightness must be in (0, 1]")
+
+    captured = _normalize_capture(events)
+    x_values, y_values = _axis_values(captured)
+    x_path = sum(abs(value) for value in x_values)
+    y_path = sum(abs(value) for value in y_values)
+    if x_path <= 0 and y_path <= 0:
+        raise CalibrationError("no usable REL_X or REL_Y motion was captured")
+
+    axis: Literal["x", "y"] = "x" if x_path >= y_path else "y"
+    return _measure_normalized(
+        captured,
+        distance_mm=distance_mm,
+        axis=axis,
+        minimum_straightness=minimum_straightness,
+    )
+
+
 def capture_evdev_motion(
     path: str | Path,
     *,
     seconds: float,
     exclusive: bool = True,
 ) -> tuple[CalibrationEvent, ...]:
-    """Capture kernel-timestamped physical evdev events.
-
-    Calibration normally takes an EVIOCGRAB on the selected physical event
-    device. Linux input grabs are exclusive: this prevents another consumer
-    from owning the stream while we silently calibrate from incomplete data.
-    No input is written or injected. If another process (including the normal
-    mouse-control remapper) already owns the device, calibration fails loudly.
-    """
+    """Capture kernel-timestamped physical evdev events."""
 
     if seconds <= 0:
         raise CalibrationError("seconds must be greater than zero")
