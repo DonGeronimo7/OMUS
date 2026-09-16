@@ -62,6 +62,8 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
   %{buildroot}%{_bindir}/mouse-control --help
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
   %{buildroot}%{_bindir}/mouse-control-discover --help
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
+  %{buildroot}%{_bindir}/mouse-control-sensor-calibrate --help
 
 %files -f %{pyproject_files}
 %license LICENSE
@@ -69,6 +71,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
 %{_bindir}/mouse-control-discover
+%{_bindir}/mouse-control-sensor-calibrate
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
