@@ -93,24 +93,104 @@ class IntegratedCursesSetupApp(CursesSetupApp):
             if key in (27, ord("b"), ord("B"), ord("q"), ord("Q")):
                 raise KeyboardInterrupt
 
+    @staticmethod
+    def _parse_cycle_labels(raw: str) -> list[int]:
+        values: list[int] = []
+        for part in raw.replace(" ", "").split(","):
+            if not part:
+                continue
+            value = int(part)
+            if value <= 0:
+                raise ValueError("DPI labels must be positive integers")
+            values.append(value)
+        if len(values) < 2:
+            raise ValueError("Enter at least two DPI states")
+        if len(set(values)) != len(values):
+            raise ValueError("DPI-state labels must be distinct")
+        return values
+
+    def _edit_cycle_labels_tui(self, labels: list[int]) -> list[int] | None:
+        """Edit expert verification labels without leaving the setup TUI."""
+        value = ",".join(str(item) for item in labels)
+        while True:
+            self._modal(
+                "Edit DPI cycle labels",
+                [
+                    "Enter the physical DPI cycle in button order.",
+                    "Example: 800,1600,3200,6400",
+                    "These labels are for the expert verification path only.",
+                    "Autonomous DPI discovery does not require them.",
+                    "",
+                    f"Cycle: {value or ' '}",
+                ],
+                prompt="Type values   Enter Accept   Esc Cancel",
+            )
+            key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
+            if key == 27:
+                return None
+            if key in (10, 13, curses.KEY_ENTER):
+                try:
+                    return self._parse_cycle_labels(value)
+                except ValueError as exc:
+                    self.controller.status = f"Invalid DPI cycle: {exc}"
+                    continue
+            if key in (curses.KEY_BACKSPACE, 127, 8):
+                value = value[:-1]
+            elif ord("0") <= key <= ord("9") or key == ord(","):
+                if len(value) < 120:
+                    value += chr(key)
+
+    def _choose_labelled_cycle_tui(self) -> list[int] | None:
+        labels = list(self.controller.choices.stages)
+        cursor = 0
+        options = ("Use current labels", "Edit labels in TUI", "Cancel")
+        while True:
+            current = ",".join(str(value) for value in labels)
+            lines = [
+                "This is the expert labelled verification experiment.",
+                "For unknown hardware, prefer 'Discover physical DPI cycle automatically'.",
+                f"Current labels: {current}",
+                "",
+            ] + [
+                ("▶ " if index == cursor else "  ") + label
+                for index, label in enumerate(options)
+            ]
+            self._modal(
+                "DPI-state calibration labels",
+                lines,
+                prompt="↑↓ Navigate   Enter Select   Esc Cancel",
+            )
+            key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
+            if key == curses.KEY_UP:
+                cursor = (cursor - 1) % len(options)
+                continue
+            if key == curses.KEY_DOWN:
+                cursor = (cursor + 1) % len(options)
+                continue
+            if key == 27:
+                return None
+            if key not in (10, 13, curses.KEY_ENTER):
+                continue
+            if cursor == 0:
+                return labels
+            if cursor == 1:
+                edited = self._edit_cycle_labels_tui(labels)
+                if edited is not None:
+                    labels = edited
+                continue
+            return None
+
     def _tool_extra_args(self, tool: DiscoveryTool) -> list[str]:
         """Supply TUI-owned experiment parameters without hiding their meaning."""
         if tool is DiscoveryTool.CALIBRATED_DPI_DISCOVERY:
-            labels = ",".join(str(value) for value in self.controller.choices.stages)
-            accepted = self._confirm(
-                "DPI-state calibration labels",
-                [
-                    "The calibrated-state experiment needs labels for the physical DPI cycle.",
-                    f"Current setup labels: {labels}",
-                    "These are comparison labels only; physical CPI remains the independent evidence.",
-                    "If these labels are not the mouse's actual cycle, edit them before using this stage.",
-                ],
-                yes="Enter Use current labels",
-                no="b Back",
-            )
-            if not accepted:
+            labels = self._choose_labelled_cycle_tui()
+            if labels is None:
                 raise KeyboardInterrupt
-            return ["--dpi-values", labels]
+            return ["--dpi-values", ",".join(str(value) for value in labels)]
         if tool is DiscoveryTool.DPI_GENERALIZATION:
             return ["--baseline", str(self.controller.choices.active_dpi)]
         if tool is DiscoveryTool.POLLING_REPLAY and self.controller.choices.polling_rate:
@@ -173,8 +253,11 @@ class IntegratedCursesSetupApp(CursesSetupApp):
                     status = int(exc.code or 0)
         except KeyboardInterrupt:
             status = 130
-        except (OSError, PermissionError, ValueError, HardwareError, RuntimeError) as exc:
-            self._append_lab_line(f"FAILED: {exc}")
+        except BaseException as exc:
+            # No discovery experiment should be able to tear down the product UI.
+            # KeyboardInterrupt/SystemExit are handled above; everything else is
+            # surfaced as an in-TUI diagnostic and the backend is rebound below.
+            self._append_lab_line(f"FAILED: {type(exc).__name__}: {exc}")
             status = 1
         finally:
             stream.flush()
@@ -186,7 +269,7 @@ class IntegratedCursesSetupApp(CursesSetupApp):
                 "Completed successfully."
                 if status == 0
                 else "Cancelled." if status == 130
-                else f"No new PROVEN authority was produced (exit {status})."
+                else f"Discovery stage stopped safely (exit {status})."
             )
             self._confirm(
                 f"{spec.label} — Result",
@@ -200,7 +283,7 @@ class IntegratedCursesSetupApp(CursesSetupApp):
             if status == 0
             else f"{spec.label} cancelled; capabilities refreshed."
             if status == 130
-            else f"{spec.label} finished without new PROVEN authority; capabilities refreshed."
+            else f"{spec.label} stopped safely; diagnostic shown and capabilities refreshed."
         )
         self.controller.refresh_discovery_backend(status=message)
 
