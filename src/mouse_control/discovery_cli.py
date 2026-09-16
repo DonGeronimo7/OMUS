@@ -64,7 +64,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "capture two negative controls plus three read-only DPI-button actions and "
-            "infer action-specific persistent state and momentary trigger fields"
+            "infer action-specific report shapes, persistent state and momentary fields"
         ),
     )
     parser.add_argument(
@@ -113,6 +113,7 @@ def _render_guided_learning(learned) -> str:
         if refinement is not None
         else learned.discriminative_trigger_candidates
     )
+    report_shapes = refinement.report_shapes if refinement is not None else ()
     refined_by_location = (
         {
             (item.candidate.report_key, item.candidate.offset): item
@@ -133,6 +134,7 @@ def _render_guided_learning(learned) -> str:
         f"Persistent raw-state candidates: {len(learned.report_candidates)}",
         f"Raw trigger candidates before controls: {len(learned.trigger_candidates)}",
         f"Raw trigger locations seen in controls: {len(learned.control_trigger_candidates)}",
+        f"Action-specific report shapes: {len(report_shapes)}",
         f"Transition-specific raw-trigger candidates: {len(action_specific)}",
     ]
 
@@ -141,6 +143,28 @@ def _render_guided_learning(learned) -> str:
             "Control-active stage guesses suppressed: "
             f"{len(refinement.suppressed_stage_locations)}"
         )
+
+    if report_shapes:
+        lines.append("Action-specific report-shape evidence:")
+        for shape in report_shapes:
+            lines.append(
+                f"  report={shape.report_key!r} guided_counts={shape.guided_counts!r} "
+                f"control_counts={shape.control_counts!r}"
+            )
+
+        shape_keys = {shape.report_key for shape in report_shapes}
+        associated_state = tuple(
+            candidate
+            for candidate in learned.report_candidates
+            if candidate.report_key in shape_keys
+        )
+        if associated_state:
+            lines.append("State fields carried by action-specific reports:")
+            for candidate in associated_state:
+                lines.append(
+                    f"  report={candidate.report_key!r} byte={candidate.offset} "
+                    f"observations={candidate.observations} values={candidate.values!r}"
+                )
 
     if action_specific:
         lines.append("Action-specific raw transition evidence:")
@@ -162,7 +186,8 @@ def _render_guided_learning(learned) -> str:
         lines.append("Semantic hypotheses:")
         for hypothesis in hypotheses:
             location = (
-                f" report={hypothesis.report_key!r} byte={hypothesis.offset}"
+                f" report={hypothesis.report_key!r}"
+                + (f" byte={hypothesis.offset}" if hypothesis.offset is not None else "")
                 if hypothesis.report_key is not None
                 else ""
             )
@@ -173,7 +198,7 @@ def _render_guided_learning(learned) -> str:
             lines.append(f"               {hypothesis.reason}")
     else:
         lines.append(
-            "Semantic hypotheses: none yet — no action-specific repeatable field was found."
+            "Semantic hypotheses: none yet — no action-specific repeatable evidence was found."
         )
 
     if teacher_transitions:
@@ -213,9 +238,9 @@ def _capture_controls(
     """Capture negative controls before the labelled DPI action.
 
     One quiet capture establishes idle/background traffic. The second captures
-    ordinary pointer/button traffic so its *transition motifs* can be compared
-    with the later DPI-button actions. Sharing a report byte with ordinary
-    traffic is not itself enough to discard a DPI candidate.
+    ordinary pointer/button traffic so report presence and transition motifs can
+    be compared with the later DPI-button actions. Sharing a report byte with
+    ordinary traffic is not itself enough to discard a DPI candidate.
     """
 
     controls = []
@@ -278,8 +303,8 @@ def _run_guided_learning(
     if reader is None:
         print(
             "\nNative teacher is OFF. The next inference pass will rely only on Linux "
-            "hidraw/evdev observations, HID descriptors, repeated transition signatures, "
-            "and the negative controls."
+            "hidraw/evdev observations, HID descriptors, guided-only report shapes, "
+            "repeated transition signatures, and the negative controls."
         )
     print(
         "For the three guided samples, keep the mouse as still as practical and press only "
