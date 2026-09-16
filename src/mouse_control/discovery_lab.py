@@ -1,12 +1,12 @@
 """Production orchestration for the Automatic Discovery laboratory.
 
-This module deliberately does not reimplement any discovery science.  It exposes
+This module deliberately does not reimplement any discovery science. It exposes
 one catalog around the existing physically validated command modules so setup
 and future front-ends invoke the exact same calibration, demonstration and
 promotion engines used during hardware acceptance.
 
 Unknown hardware remains read-only until a separate promotion engine persists
-PROVEN exact-model authority.  A front-end confirmation only authorizes running
+PROVEN exact-model authority. A front-end confirmation only authorizes running
 an existing guarded experiment; it never bypasses that experiment's validation.
 """
 
@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 class DiscoveryTool(str, Enum):
     SENSOR_CALIBRATION = "sensor-calibration"
+    POLLING_PHYSICAL_VERIFY = "polling-physical-verify"
     DPI_WRITE_TRACE = "dpi-write-trace"
     DPI_WRITE_PROMOTION = "dpi-write-promotion"
     POLLING_ONBOARD_TRACE = "polling-onboard-trace"
@@ -38,9 +39,15 @@ class DiscoveryToolSpec:
 _TOOL_SPECS = (
     DiscoveryToolSpec(
         DiscoveryTool.SENSOR_CALIBRATION,
-        "Measure physical CPI + polling",
-        "Vendor-neutral ruler calibration and repeated evdev timing measurement.",
+        "Measure physical CPI + rough polling",
+        "Vendor-neutral ruler calibration with repeated evdev motion measurement.",
         False,
+    ),
+    DiscoveryToolSpec(
+        DiscoveryTool.POLLING_PHYSICAL_VERIFY,
+        "Verify polling with fundamental timing analyzer",
+        "Use the harmonic-resistant p50/mode/direct-support verifier built for promotion evidence.",
+        True,
     ),
     DiscoveryToolSpec(
         DiscoveryTool.DPI_WRITE_TRACE,
@@ -94,6 +101,9 @@ def _runner(tool: DiscoveryTool) -> tuple[Callable[[list[str] | None], int], lis
     if tool is DiscoveryTool.SENSOR_CALIBRATION:
         from .sensor_calibration_cli import main
         return main, []
+    if tool is DiscoveryTool.POLLING_PHYSICAL_VERIFY:
+        from .polling_verify_cli import main
+        return main, ["--i-understand-this-writes-hardware"]
     if tool is DiscoveryTool.DPI_WRITE_TRACE:
         from .write_trace_cli import main
         return main, ["--i-understand-this-writes-hardware"]
@@ -121,7 +131,7 @@ def run_discovery_tool(
     """Run one existing laboratory against the already-selected setup mouse.
 
     Guard flags are supplied only after the caller has performed an explicit UI
-    confirmation for write-capable tools.  The underlying laboratory still
+    confirmation for write-capable tools. The underlying laboratory still
     performs every identity, evidence, readback, physical verification and
     rollback check and may refuse the run.
     """
