@@ -1,4 +1,4 @@
-"""Temporary, non-exclusive evdev keyboard capture for the setup wizard."""
+"""Temporary exclusive evdev keyboard capture for the setup wizard."""
 
 from contextlib import contextmanager
 import os
@@ -9,6 +9,10 @@ import termios
 from evdev import InputDevice, ecodes
 
 from .discovery import _iter_candidate_paths
+
+
+class KeyboardGrabError(RuntimeError):
+    """The wizard could not safely reserve every keyboard used for capture."""
 
 
 def keyboard_key_name(code: int) -> str | None:
@@ -72,146 +76,202 @@ def _capture_terminal(*, keep_signals: bool = True):
             termios.tcsetattr(fd, termios.TCSAFLUSH, settings)
 
 
+def _drain_queued_events(device: InputDevice) -> None:
+    """Discard events queued before a capture window begins."""
+    while True:
+        try:
+            list(device.read())
+        except BlockingIOError:
+            return
+
+
+def _prepare_neutral_keyboards(devices: list[InputDevice]) -> list[InputDevice]:
+    """Drain stale input and let pre-existing held keys release before grabbing.
+
+    Waiting for release while devices are still ungrabbed avoids suppressing a
+    key-up whose key-down was already delivered to the compositor (for example
+    the Enter press that selected shortcut capture in the wizard).
+    """
+    active = devices[:]
+    held: dict[int, set[int]] = {}
+    for device in active[:]:
+        try:
+            _drain_queued_events(device)
+            held[device.fd] = set(device.active_keys())
+        except OSError:
+            active.remove(device)
+            held.pop(device.fd, None)
+
+    while active and any(held.get(device.fd) for device in active):
+        ready, _, _ = select(active, [], [])
+        for device in ready:
+            try:
+                for event in device.read():
+                    if event.type == ecodes.EV_KEY and event.value == 0:
+                        held[device.fd].discard(event.code)
+            except BlockingIOError:
+                continue
+            except OSError:
+                active.remove(device)
+                held.pop(device.fd, None)
+    return active
+
+
+@contextmanager
+def _exclusive_keyboards(devices: list[InputDevice]):
+    """Exclusively reserve all capture devices, rolling back partial grabs."""
+    grabbed: list[InputDevice] = []
+    try:
+        for device in devices:
+            try:
+                device.grab()
+            except OSError as exc:
+                raise KeyboardGrabError(str(exc)) from exc
+            grabbed.append(device)
+        yield
+    finally:
+        for device in reversed(grabbed):
+            try:
+                device.ungrab()
+            except OSError:
+                pass
+
+
+def _print_grab_failure(*, chord: bool = False) -> None:
+    print("Safe keyboard capture is unavailable because Mouse Control could not")
+    print("temporarily reserve every keyboard input device.")
+    print("No shortcut was recorded.")
+    if chord:
+        print("Enter the Linux KEY_* chord manually with option 7 instead.")
+    else:
+        print("Enter the Linux KEY_* value manually with option 5 instead.")
+
+
 def capture_keyboard_key() -> str | None:
     """Capture a fresh key press, or return None on cancellation/unavailability.
 
     Ctrl is resolved on release so Ctrl+C can cancel even without a terminal.
     Release events never create a mapping without a preceding captured press.
     """
-    devices = []
+    devices: list[InputDevice] = []
+    all_devices: list[InputDevice] = []
     try:
         with _capture_terminal():
-            devices = _open_keyboards()
-            blocked = {}
-            for device in devices[:]:
-                try:
-                    # Discard events queued during discovery, including menu Enter.
-                    while True:
-                        try:
-                            list(device.read())
-                        except BlockingIOError:
-                            break
-                    blocked[device.fd] = set(device.active_keys())
-                except OSError:
-                    devices.remove(device)
-                    device.close()
+            all_devices = _open_keyboards()
+            devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
                 print("No readable keyboard devices found. Check input permissions or use manual entry.")
                 return None
-            print("Press the keyboard key you want to assign... (Ctrl+C to cancel)", flush=True)
-            controls = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
-            pending_ctrl = {}
-            while devices:
-                ready, _, _ = select(devices, [], [])
-                for device in ready:
-                    try:
-                        for event in device.read():
-                            if event.type != ecodes.EV_KEY:
+            try:
+                with _exclusive_keyboards(devices):
+                    print("Press the keyboard key you want to assign... (Ctrl+C to cancel)", flush=True)
+                    controls = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
+                    pending_ctrl: dict[tuple[int, int], str] = {}
+                    while devices:
+                        ready, _, _ = select(devices, [], [])
+                        for device in ready:
+                            try:
+                                for event in device.read():
+                                    if event.type != ecodes.EV_KEY:
+                                        continue
+                                    identity = (device.fd, event.code)
+                                    if event.value == 0 and identity in pending_ctrl:
+                                        return pending_ctrl.pop(identity)
+                                    if event.value != 1:
+                                        continue
+                                    name = keyboard_key_name(event.code)
+                                    if name is None:
+                                        continue
+                                    if event.code == ecodes.KEY_C and pending_ctrl:
+                                        raise KeyboardInterrupt
+                                    if event.code in controls:
+                                        pending_ctrl[identity] = name
+                                        continue
+                                    return next(iter(pending_ctrl.values()), name)
+                            except BlockingIOError:
                                 continue
-                            identity = (device.fd, event.code)
-                            if event.code in blocked[device.fd]:
-                                if event.value == 0:
-                                    blocked[device.fd].discard(event.code)
-                                continue
-                            if event.value == 0 and identity in pending_ctrl:
-                                return pending_ctrl.pop(identity)
-                            if event.value != 1:
-                                continue
-                            name = keyboard_key_name(event.code)
-                            if name is None:
-                                continue
-                            if event.code == ecodes.KEY_C and pending_ctrl:
-                                raise KeyboardInterrupt
-                            if event.code in controls:
-                                pending_ctrl[identity] = name
-                                continue
-                            return next(iter(pending_ctrl.values()), name)
-                    except BlockingIOError:
-                        continue
-                    except OSError:
-                        devices.remove(device)
-                        pending_ctrl = {key: value for key, value in pending_ctrl.items()
-                                        if key[0] != device.fd}
-                        device.close()
-            print("Keyboard devices disconnected. Try again or use manual entry.")
+                            except OSError:
+                                devices.remove(device)
+                                pending_ctrl = {key: value for key, value in pending_ctrl.items()
+                                                if key[0] != device.fd}
+                    print("Keyboard devices disconnected. Try again or use manual entry.")
+            except KeyboardGrabError:
+                _print_grab_failure()
     except KeyboardInterrupt:
         print("\nKeyboard capture cancelled.")
+    except OSError:
+        print("Keyboard capture stopped. Use manual entry.")
     finally:
-        for device in devices:
-            device.close()
+        for device in all_devices:
+            try:
+                device.close()
+            except OSError:
+                pass
     return None
 
 
 def capture_keyboard_chord() -> str | None:
     """Capture keys held together, in press order, until all are released."""
-    devices = []
+    devices: list[InputDevice] = []
+    all_devices: list[InputDevice] = []
     try:
         # Escape cancels; disabling terminal signals permits Ctrl+C chords.
         with _capture_terminal(keep_signals=False):
-            devices = _open_keyboards()
-            blocked = {}
-            for device in devices[:]:
-                try:
-                    while True:
-                        try:
-                            list(device.read())
-                        except BlockingIOError:
-                            break
-                    blocked[device.fd] = set(device.active_keys())
-                except OSError:
-                    devices.remove(device)
-                    device.close()
+            all_devices = _open_keyboards()
+            devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
                 print("No readable keyboard devices found. Use manual chord entry.")
                 return None
-            print("Press and hold the keyboard shortcut, then release it... (Esc to cancel)",
-                  flush=True)
-            active: set[tuple[int, int]] = set()
-            names: list[str] = []
-            seen: set[int] = set()
-            while devices:
-                ready, _, _ = select(devices, [], [])
-                for device in ready:
-                    try:
-                        for event in device.read():
-                            if event.type != ecodes.EV_KEY:
+            try:
+                with _exclusive_keyboards(devices):
+                    print("Press and hold the keyboard shortcut, then release it... (Esc to cancel)",
+                          flush=True)
+                    active: set[tuple[int, int]] = set()
+                    names: list[str] = []
+                    seen: set[int] = set()
+                    while devices:
+                        ready, _, _ = select(devices, [], [])
+                        for device in ready:
+                            try:
+                                for event in device.read():
+                                    if event.type != ecodes.EV_KEY:
+                                        continue
+                                    identity = (device.fd, event.code)
+                                    if event.value == 1 and event.code == ecodes.KEY_ESC:
+                                        return None
+                                    if event.value == 1:
+                                        name = keyboard_key_name(event.code)
+                                        if name is None or identity in active:
+                                            continue
+                                        active.add(identity)
+                                        if event.code not in seen:
+                                            names.append(name)
+                                            seen.add(event.code)
+                                    elif event.value == 0 and identity in active:
+                                        active.remove(identity)
+                                        if not active:
+                                            if len(names) >= 2:
+                                                return "chord:" + "+".join(names)
+                                            names.clear()
+                                            seen.clear()
+                            except BlockingIOError:
                                 continue
-                            identity = (device.fd, event.code)
-                            if event.code in blocked[device.fd]:
-                                if event.value == 0:
-                                    blocked[device.fd].discard(event.code)
-                                continue
-                            if event.value == 1 and event.code == ecodes.KEY_ESC:
-                                return None
-                            if event.value == 1:
-                                name = keyboard_key_name(event.code)
-                                if name is None or identity in active:
-                                    continue
-                                active.add(identity)
-                                if event.code not in seen:
-                                    names.append(name)
-                                    seen.add(event.code)
-                            elif event.value == 0 and identity in active:
-                                active.remove(identity)
-                                if not active:
-                                    if len(names) >= 2:
-                                        return "chord:" + "+".join(names)
-                                    names.clear()
-                                    seen.clear()
-                    except BlockingIOError:
-                        continue
-                    except OSError:
-                        devices.remove(device)
-                        device.close()
-                        active.clear()
-                        names.clear()
-                        seen.clear()
-            print("Keyboard devices disconnected. Use manual chord entry.")
+                            except OSError:
+                                devices.remove(device)
+                                active.clear()
+                                names.clear()
+                                seen.clear()
+                    print("Keyboard devices disconnected. Use manual chord entry.")
+            except KeyboardGrabError:
+                _print_grab_failure(chord=True)
     except KeyboardInterrupt:
         print("\nKeyboard chord capture cancelled.")
     except OSError:
         print("Keyboard chord capture stopped. Use manual chord entry.")
     finally:
-        for device in devices:
-            device.close()
+        for device in all_devices:
+            try:
+                device.close()
+            except OSError:
+                pass
     return None
