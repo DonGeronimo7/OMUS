@@ -247,12 +247,10 @@ def run_guided_discovery(
     report("Inspecting mouse…")
     engine = engine_factory()
     result = engine.discover(selected)
-    report("Physical device identified.")
-    report(
-        f"{len(result.device.hidraw_nodes)} HID interface(s) correlated; "
-        f"{len(engine.descriptors)} descriptor(s) read."
-    )
-    report("Existing protocol teachers and exact-model learned support checked.")
+    report("✓ Physical device identified")
+    report(f"✓ {len(result.device.hidraw_nodes)} hardware interface(s) correlated")
+    report(f"✓ {len(engine.descriptors)} hardware descriptor(s) read")
+    report("✓ Existing protocol teachers and exact-model learned support checked")
 
     dpi = result.capabilities.get("dpi")
     if dpi is not None and dpi.writable:
