@@ -6,7 +6,7 @@ import logging
 import sys
 
 from .setup_flow import restore_dpi
-from .setup_tui import run_setup_tui
+from .setup_tui_polished import run_setup_tui
 from .wizard import ButtonCaptureError
 
 
