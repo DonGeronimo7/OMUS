@@ -434,12 +434,17 @@ class DiscoveryEngine:
             normalized[name] = item
 
         if protocol is None:
-            # Generic writes are still forbidden unless the capability carries
-            # explicit PROVEN learned-operation promotion evidence.
+            # Generic writes remain forbidden unless that specific capability
+            # carries the corresponding exact-model PROVEN promotion evidence.
+            proven_codes = {
+                "dpi": "learned-operation-proven",
+                "report_rate": "learned-polling-operation-proven",
+            }
             for name, item in tuple(normalized.items()):
-                learned_proven = any(
+                expected_code = proven_codes.get(name)
+                learned_proven = expected_code is not None and any(
                     evidence.level is EvidenceLevel.PROVEN
-                    and evidence.code == "learned-operation-proven"
+                    and evidence.code == expected_code
                     for evidence in item.evidence
                 )
                 if item.writable and not learned_proven:
