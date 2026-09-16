@@ -1,15 +1,12 @@
-"""Safe fallback: generic HID identity plus evdev/uinput remapping.
+"""Compatibility import for the former generic fallback.
 
-The HID mouse specification does not define DPI or polling-rate controls, so
-this backend never guesses vendor reports.  Native protocol backends are
-selected before this fallback as they are added.
+The inert GenericBackend has been replaced by :class:`DiscoveryBackend`.
+Keeping this alias avoids breaking third-party imports while ensuring every
+fallback device now enters the automatic discovery path.
 """
-from .base import HardwareBackend
-from ..discovery import MouseDevice
 
+from .discovery_backend import DiscoveryBackend
 
-class GenericBackend(HardwareBackend):
-    name = "Generic HID / evdev"
+GenericBackend = DiscoveryBackend
 
-    def supports_device(self, device: MouseDevice) -> bool:
-        return True
+__all__ = ["GenericBackend", "DiscoveryBackend"]
