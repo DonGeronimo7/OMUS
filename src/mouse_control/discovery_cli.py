@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from .backend_teacher import read_backend_teacher_state
@@ -46,6 +47,15 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "skip known protocol detectors and exercise only topology, descriptor, "
             "repertoire and read-only learning paths"
+        ),
+    )
+    parser.add_argument(
+        "--full-access",
+        action="store_true",
+        help=(
+            "require root hardware visibility and a complete passive-open preflight "
+            "for every hidraw sibling correlated to the selected physical mouse; "
+            "unknown HID writes remain forbidden"
         ),
     )
     parser.add_argument(
@@ -125,13 +135,38 @@ def _render_guided_learning(learned) -> str:
     return "\n".join(lines)
 
 
-def _run_guided_learning(selected, result, engine, *, seconds: float, teacher: bool) -> None:
+def _full_access_preflight(session: ReadOnlyLearningSession) -> tuple[str, ...]:
+    readable, unreadable = session.hidraw_access_report()
+    if unreadable:
+        raise PermissionError(
+            "full-access discovery requires every correlated hidraw sibling to be readable; "
+            "still unavailable: " + ", ".join(unreadable)
+        )
+    return tuple(str(path) for path in readable)
+
+
+def _run_guided_learning(
+    selected,
+    result,
+    engine,
+    *,
+    seconds: float,
+    teacher: bool,
+    require_complete_access: bool,
+) -> None:
     print(
         "\nGuided learner is read-only. Native/onboard control is preserved. It will watch "
         "every readable correlated evdev/hidraw interface while you press the physical "
         "DPI button exactly once per sample."
     )
     session = ReadOnlyLearningSession(result.device, engine.descriptors)
+    if require_complete_access:
+        readable = _full_access_preflight(session)
+        print(
+            f"Full-access preflight: {len(readable)}/{len(result.device.hidraw_nodes)} "
+            "correlated hidraw sibling(s) readable."
+        )
+
     reader = (lambda: read_backend_teacher_state(selected)) if teacher else None
     samples = []
     for index in range(3):
@@ -140,6 +175,11 @@ def _run_guided_learning(selected, result, engine, *, seconds: float, teacher: b
             f"within {seconds:g}s... "
         )
         sample = session.observe_action(seconds=seconds, teacher_reader=reader)
+        if require_complete_access and sample.unreadable_hidraw_paths:
+            raise PermissionError(
+                "a hidraw sibling became unavailable during full-access capture: "
+                + ", ".join(sample.unreadable_hidraw_paths)
+            )
         samples.append(sample)
         print(
             f"  captured {len(sample.action.hid_reports)} HID report(s), "
@@ -168,6 +208,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--json cannot be combined with interactive --learn-dpi-button")
     if args.teacher and not args.learn_dpi_button:
         parser.error("--teacher requires --learn-dpi-button")
+    if args.full_access and os.geteuid() != 0:
+        print(
+            "Full-access discovery requires root so every correlated mouse hidraw "
+            "interface can be inspected. Re-run this same discovery command with sudo. "
+            "Root visibility does not authorize unknown HID writes.",
+            file=sys.stderr,
+        )
+        return 77
 
     selected, status = _pick_mouse(args.device)
     if selected is None:
@@ -179,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.generic_only
             else "Unknown HID is read-only and the normal mouse-control runtime is not being reconfigured."
         )
+        if args.full_access:
+            mode += " Root/full-evidence acquisition is required for all correlated HID siblings."
         print(f"Discovery test mode: {mode}\n")
 
     engine = DiscoveryEngine(
@@ -187,6 +237,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         result = engine.discover(selected)
+        if args.full_access:
+            access_session = ReadOnlyLearningSession(result.device, engine.descriptors)
+            readable = _full_access_preflight(access_session)
+            if not args.json:
+                print(
+                    f"Full-access acquisition: {len(readable)}/{len(result.device.hidraw_nodes)} "
+                    "correlated hidraw sibling(s) readable.\n"
+                )
     except TopologyError as exc:
         print(f"Discovery could not correlate the physical mouse: {exc}", file=sys.stderr)
         return 1
@@ -217,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                 engine,
                 seconds=args.learn_window,
                 teacher=args.teacher,
+                require_complete_access=args.full_access,
             )
         except KeyboardInterrupt:
             print("\nGuided learning cancelled.", file=sys.stderr)
