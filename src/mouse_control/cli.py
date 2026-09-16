@@ -575,7 +575,7 @@ def run_from_config(path: Path | None = None) -> int:
         device_resolver=_resolve_runtime_device,
         discovery_pending=discovery_pending)
     if mouse is not None:
-        identity = (f"{mouse.vendor:04x}:{mouse.product:04x}]"
+        identity = (f"{mouse.vendor:04x}:{mouse.product:04x}"
                     if mouse.vendor is not None and mouse.product is not None
                     else "identity unavailable")
         LOG.info("Selected mouse: %s (%s, %s)", mouse.name, mouse.path, identity)

@@ -119,14 +119,14 @@ def test_rebind_updates_device_identity_used_by_existing_consumers():
     assert not supervisor.discovery_pending
 
 
-def test_reconnect_promotes_adapter_after_temporary_discovery_only_rebinds():
-    """Fresh Discovery binds stay replaceable until a proven adapter returns."""
+def test_reconnect_promotes_native_after_temporary_generic_fallback():
+    """Incomplete hotplug discovery must not make Generic permanently sticky."""
     native_before, native_after = backend(), backend()
     fallback = GenericBackend()
     fallback.close = MagicMock()
-    second_discovery = GenericBackend()
-    second_discovery.close = MagicMock()
-    replacements = iter((fallback, second_discovery, native_after))
+    duplicate_fallback = GenericBackend()
+    duplicate_fallback.close = MagicMock()
+    replacements = iter((fallback, duplicate_fallback, native_after))
     supervisor = HardwareSupervisor(
         native_before, G305, lambda _device: next(replacements))
 
@@ -136,16 +136,15 @@ def test_reconnect_promotes_adapter_after_temporary_discovery_only_rebinds():
     assert supervisor.generation == 1
     native_before.close.assert_called_once()
 
-    # A new Discovery instance is not interchangeable with the old one: it may
-    # have rebound a changed hidraw path or loaded new learned evidence.
-    assert supervisor.rebind(1)
-    assert supervisor.current_backend is second_discovery
-    assert supervisor.discovery_pending
-    assert supervisor.generation == 2
-    fallback.close.assert_called_once()
+    # A settling probe that finds only Generic does not replace the live
+    # fallback or advance its generation.
+    assert not supervisor.rebind(1)
+    assert supervisor.current_backend is fallback
+    assert supervisor.generation == 1
+    duplicate_fallback.close.assert_called_once()
 
-    assert supervisor.rebind(2)
+    assert supervisor.rebind(1)
     assert supervisor.current_backend is native_after
     assert not supervisor.discovery_pending
-    assert supervisor.generation == 3
-    second_discovery.close.assert_called_once()
+    assert supervisor.generation == 2
+    fallback.close.assert_called_once()
