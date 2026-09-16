@@ -17,6 +17,8 @@ from .sensor_calibration import (
 
 
 _CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
+_DEFAULT_MAX_ADAPTIVE_PASSES = 5
+_CPI_OUTLIER_THRESHOLD = 0.05
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -53,7 +55,10 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         metavar="N",
-        help="repeat the ruler pass N times and use the median (default: 3)",
+        help=(
+            "minimum ruler passes before confidence is evaluated (default: 3); "
+            "Mouse Control may request up to two extra passes when needed"
+        ),
     )
     parser.add_argument(
         "--known-dpi",
@@ -111,12 +116,7 @@ def _polling_consensus(results) -> tuple[int | None, int, str]:
 
 
 def _cpi_consistency(results, summary) -> tuple[float, float, str]:
-    """Score repeated CPI passes without letting a single outlier hide behind MAD.
-
-    Median absolute deviation is robust, but with only three passes one bad
-    sample can still leave a deceptively small MAD. Keep the median as the
-    estimate while also checking the worst pass and total observed spread.
-    """
+    """Score repeated CPI passes without letting a single outlier hide behind MAD."""
 
     if not results or summary.estimated_dpi <= 0:
         return 1.0, 1.0, "low"
@@ -148,8 +148,58 @@ def _cpi_consistency(results, summary) -> tuple[float, float, str]:
     return worst_relative_deviation, relative_range, confidence
 
 
+def _robust_cpi_subset(results):
+    """Return a defensible CPI cluster and any explicitly rejected passes.
+
+    Three samples are never enough evidence to discard one of them. Once at
+    least four passes exist, a pass may be excluded only when at least three
+    samples and at least 75% of all samples lie within 5% of the all-pass
+    median. This lets one obvious ruler/capture mistake be retried without
+    silently hiding genuine device instability.
+    """
+
+    samples = tuple(results)
+    if len(samples) < 4:
+        return samples, ()
+
+    all_summary = summarize_calibrations(samples)
+    center = all_summary.estimated_dpi
+    if center <= 0:
+        return samples, ()
+
+    inliers = tuple(
+        sample
+        for sample in samples
+        if abs(sample.estimated_dpi - center) / center <= _CPI_OUTLIER_THRESHOLD
+    )
+    outliers = tuple(sample for sample in samples if sample not in inliers)
+    if len(inliers) >= 3 and len(inliers) / len(samples) >= 0.75:
+        return inliers, outliers
+    return samples, ()
+
+
 def _weaker_confidence(first: str, second: str) -> str:
     return min((first, second), key=lambda value: _CONFIDENCE_RANK[value])
+
+
+def _evaluate(results):
+    cpi_results, rejected = _robust_cpi_subset(results)
+    summary = summarize_calibrations(cpi_results)
+    polling_rate, polling_matches, polling_confidence = _polling_consensus(results)
+    worst_cpi_deviation, cpi_range, cpi_confidence = _cpi_consistency(cpi_results, summary)
+    overall_confidence = _weaker_confidence(cpi_confidence, polling_confidence)
+    return (
+        cpi_results,
+        rejected,
+        summary,
+        polling_rate,
+        polling_matches,
+        polling_confidence,
+        worst_cpi_deviation,
+        cpi_range,
+        cpi_confidence,
+        overall_confidence,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -191,9 +241,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Configured DPI stage label for comparison: {args.known_dpi} DPI")
 
     results = []
-    for pass_index in range(1, args.passes + 1):
-        input(f"\nPass {pass_index}/{args.passes}: press Enter when positioned at the start mark... ")
-        try:
+    max_passes = max(args.passes, _DEFAULT_MAX_ADAPTIVE_PASSES)
+    try:
+        while len(results) < max_passes:
+            if len(results) >= args.passes:
+                evaluation = _evaluate(results)
+                if evaluation[-1] == "high":
+                    break
+                print(
+                    "\nConfidence is not yet high; collecting one additional pass "
+                    "to distinguish a physical outlier from real device variation."
+                )
+
+            pass_index = len(results) + 1
+            minimum_label = args.passes if pass_index <= args.passes else max_passes
+            prompt = (
+                f"\nPass {pass_index}/{minimum_label}: press Enter when positioned "
+                "at the start mark... "
+            )
+            input(prompt)
+
             events = capture_evdev_motion(mouse.path, seconds=args.window, exclusive=True)
             if args.axis == "auto":
                 result = measure_sensor_state_auto(events, distance_mm=args.distance_mm)
@@ -203,28 +270,47 @@ def main(argv: list[str] | None = None) -> int:
                     distance_mm=args.distance_mm,
                     axis=args.axis,
                 )
-        except (CalibrationError, OSError, PermissionError) as exc:
-            print(f"Calibration failed on pass {pass_index}: {exc}", file=sys.stderr)
-            return 1
-        results.append(result)
-        print(
-            f"  pass {pass_index}: ~{result.rounded_dpi} measured CPI, {_polling_label(result)}, "
-            f"straightness {result.straightness * 100:.1f}%"
-        )
-        if result.segment_count > 1:
+            results.append(result)
             print(
-                f"  isolated strongest motion segment from {result.segment_count} observed segments"
+                f"  pass {pass_index}: ~{result.rounded_dpi} measured CPI, {_polling_label(result)}, "
+                f"straightness {result.straightness * 100:.1f}%"
             )
+            if result.segment_count > 1:
+                print(
+                    f"  isolated strongest motion segment from {result.segment_count} observed segments"
+                )
+    except KeyboardInterrupt:
+        print("\nCalibration cancelled.", file=sys.stderr)
+        return 130
+    except (CalibrationError, OSError, PermissionError) as exc:
+        print(f"Calibration failed on pass {len(results) + 1}: {exc}", file=sys.stderr)
+        return 1
 
-    summary = summarize_calibrations(results)
-    representative = min(results, key=lambda item: abs(item.estimated_dpi - summary.estimated_dpi))
-    polling_rate, polling_matches, polling_confidence = _polling_consensus(results)
-    worst_cpi_deviation, cpi_range, cpi_confidence = _cpi_consistency(results, summary)
-    overall_confidence = _weaker_confidence(cpi_confidence, polling_confidence)
+    (
+        cpi_results,
+        rejected,
+        summary,
+        polling_rate,
+        polling_matches,
+        polling_confidence,
+        worst_cpi_deviation,
+        cpi_range,
+        cpi_confidence,
+        overall_confidence,
+    ) = _evaluate(results)
+    representative = min(
+        cpi_results,
+        key=lambda item: abs(item.estimated_dpi - summary.estimated_dpi),
+    )
 
     print("\nMeasured sensor state")
     print("---------------------")
-    print(f"Calibration passes: {len(results)}")
+    print(f"Calibration passes captured: {len(results)}")
+    if rejected:
+        print(
+            f"CPI passes used: {len(cpi_results)}; rejected {len(rejected)} clearly inconsistent "
+            "physical pass(es) after adaptive retry"
+        )
     print(f"Detected motion axis: REL_{representative.axis.upper()} (diagnostic only)")
     print(f"Representative net displacement: {representative.net_counts} device units")
     print(f"Representative path: {representative.path_counts} device units")
@@ -235,8 +321,8 @@ def main(argv: list[str] | None = None) -> int:
         f"({summary.relative_mad * 100:.1f}%)"
     )
     print(
-        f"Worst-pass CPI deviation from median: {worst_cpi_deviation * 100:.1f}%; "
-        f"full pass range: {cpi_range * 100:.1f}%"
+        f"Worst-used-pass CPI deviation from median: {worst_cpi_deviation * 100:.1f}%; "
+        f"used-pass range: {cpi_range * 100:.1f}%"
     )
     if polling_rate is not None:
         print(f"Observed polling: ~{polling_rate} Hz")
