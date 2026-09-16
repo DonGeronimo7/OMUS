@@ -214,3 +214,39 @@ and any required ownership transition. A failed or ambiguous proof leaves the
 learned read-side profile intact and read-only.
 
 Host/software-control takeover is post-discovery only.
+
+## Phase 3 learned runtime ownership
+
+Automatic Discovery's production learned path uses one protocol-neutral
+`LearnedHidSession` per live hidraw interface. DPI transactions, promoted
+report-rate transactions, and validated physical-action events share that
+single reader. Transaction response matchers claim replies first; unmatched
+packets become read-only event evidence.
+
+Subscriber callbacks from `LearnedHidSession` execute on its reader thread.
+Production watchers therefore decode packets on the reader thread but enqueue
+semantic events for delivery from the DPI watcher thread. A physical
+`DPI_CYCLE_TRIGGER` can consequently invoke the existing `DpiCycler`, perform a
+PROVEN learned DPI write/readback, and emit the normal deliberate DPI
+notification without re-entering `session.exchange()` from the reader thread.
+
+Learned polling preserves control-ownership safety. Ordinary reconciliation may
+write only when the learned state machine reports Host control; it never takes
+Host ownership merely to reconcile startup state. An explicit user-requested
+polling change may use the independently PROVEN reversible takeover branch.
+
+Validated learned action profiles are permanently read-only
+(`write_authorized=false`, `write_scope=never`). They only identify a physical
+action. Any resulting hardware change still requires a separately PROVEN
+exact-model writable operation.
+
+The G305 hardware evidence collected during Phase 3 showed the Host-mode
+physical DPI button as an exact 9-byte press/release stream on the same
+interface used by learned DPI/polling transactions:
+
+- press: `02 20 00 00 00 00 00 00 00`
+- release: `02 00 00 00 00 00 00 00 00`
+
+Those packets are structurally disjoint from the 20-byte learned transaction
+replies. The generic runtime does not hard-code these bytes; they are persisted
+only as exact-model learned action evidence.

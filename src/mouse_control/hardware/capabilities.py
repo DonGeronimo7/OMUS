@@ -69,6 +69,7 @@ class DpiState:
     active_stage: int | None = None
     active_profile: int | None = None
     confirmed: bool = False
+    cycle_trigger: bool = False
 
     @property
     def display_value(self) -> int | tuple[int, int]:

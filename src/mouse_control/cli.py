@@ -623,14 +623,21 @@ def run_from_config(path: Path | None = None) -> int:
         LOG.info("Selected hardware backend: %s (%s)", initial_backend.name,
                  type(initial_backend).__name__)
     hardware.reconcile()
-    if "dpi-cycle" in mappings.values() or g305_hidpp:
+    try:
+        learned_cycle_trigger = (
+            hardware.supports_dpi_cycle_trigger(hardware_device) is True
+        )
+    except HardwareError as exc:
+        LOG.warning("Learned DPI-cycle trigger unavailable: %s", exc)
+        learned_cycle_trigger = False
+    if "dpi-cycle" in mappings.values() or g305_hidpp or learned_cycle_trigger:
         dpi_cycler = DpiCycler(hardware, hardware_device, dpi_stages, active_dpi,
                                notifications_enabled)
 
-    if notifications_enabled or g305_hidpp:
+    if notifications_enabled or g305_hidpp or learned_cycle_trigger:
         monitor_kwargs = ({"dpi_cycler": dpi_cycler,
                            "notifications_enabled": notifications_enabled}
-                          if g305_hidpp else {})
+                          if (g305_hidpp or learned_cycle_trigger) else {})
         monitor = DpiMonitorSupervisor(hardware, hardware_device,
                                        lambda _device: hardware,
                                        dpi_stages, active_dpi, shutdown_event, **monitor_kwargs)

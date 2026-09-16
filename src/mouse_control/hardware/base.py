@@ -55,6 +55,10 @@ class HardwareBackend(ABC):
     def supports_dpi_events(self, device: MouseDevice) -> bool:
         return False
 
+    def supports_dpi_cycle_trigger(self, device: MouseDevice) -> bool:
+        """Return whether a physical event can request one software DPI cycle."""
+        return False
+
     def watch_dpi_events(self, device: MouseDevice, callback: Callable[[DpiState], None],
                          shutdown_event: threading.Event,
                          ready_callback: Callable[[], None] | None = None) -> None:

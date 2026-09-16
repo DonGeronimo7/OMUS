@@ -31,6 +31,7 @@ from .learned_operations import (
     LearnedOperationStore,
     matching_interface_node,
 )
+from .learned_polling import LearnedPollingOperationStore
 from .protocol_grammar import SemanticBehavior
 from .protocol_discovery import (
     ProtocolAmbiguityError,
@@ -57,6 +58,7 @@ class DiscoveryEngine:
         probe_factory: Callable[[DeviceNode], ReadOnlyHidProbe] | None = None,
         profile_store: DeviceProfileStore | None = None,
         learned_operation_store: LearnedOperationStore | None = None,
+        learned_polling_store: LearnedPollingOperationStore | None = None,
         save_profiles: bool = True,
     ) -> None:
         self._topology_builder = topology_builder
@@ -66,6 +68,9 @@ class DiscoveryEngine:
         )
         self._profile_store = profile_store or DeviceProfileStore()
         self._learned_operation_store = learned_operation_store or LearnedOperationStore()
+        self._learned_polling_store = (
+            learned_polling_store or LearnedPollingOperationStore()
+        )
         self._save_profiles = save_profiles
         self._descriptors: dict[DeviceNode, ParsedHidDescriptor] = {}
         self._feature_snapshots: dict[DeviceNode, dict[int, bytes]] = {}
@@ -300,9 +305,11 @@ class DiscoveryEngine:
                 )
             )
 
-        # A separately persisted learned operation may authorize a generic
-        # write only after explicit exact-model promotion. Calibrated read-side
-        # profiles themselves remain permanently non-writable.
+        # Separately persisted learned operations authorize generic writes
+        # only after explicit exact-model promotion. Calibrated/read-side
+        # evidence remains permanently non-writable.
+        capabilities: dict[str, DiscoveredCapability] = {}
+
         learned = self._learned_operation_store.find_for_physical(
             physical,
             behavior=SemanticBehavior.DPI_VALUE,
@@ -339,20 +346,62 @@ class DiscoveryEngine:
                     },
                 )
                 self._observations.append(evidence)
-                return {
-                    "dpi": DiscoveredCapability(
-                        name="dpi",
-                        readable=True,
-                        writable=True,
-                        values=operation.demonstrated_values,
-                        evidence=[evidence],
-                    ).normalized()
-                }
+                capabilities["dpi"] = DiscoveredCapability(
+                    name="dpi",
+                    readable=True,
+                    writable=True,
+                    values=operation.demonstrated_values,
+                    evidence=[evidence],
+                ).normalized()
+
+        learned_polling = self._learned_polling_store.find_for_physical(
+            physical,
+            proven_only=True,
+        )
+        if learned_polling is not None:
+            _path, operation = learned_polling
+            try:
+                node = matching_interface_node(operation, physical)
+            except LearnedOperationError as exc:
+                self._observations.append(
+                    DiscoveryEvidence(
+                        EvidenceLevel.VALIDATED,
+                        "learned-polling-interface-mismatch",
+                        str(exc),
+                        source="learned_polling",
+                    )
+                )
+            else:
+                evidence = DiscoveryEvidence(
+                    EvidenceLevel.PROVEN,
+                    "learned-polling-operation-proven",
+                    (
+                        "Exact-model learned report-rate state machine was "
+                        "independently promoted by generic readback, physical "
+                        "timing, persistent-session proof, and exact rollback"
+                    ),
+                    source="learned_polling",
+                    details={
+                        "behavior": operation.behavior.value,
+                        "demonstrated_rates": operation.demonstrated_rates,
+                        "interface_number": node.interface_number,
+                        "descriptor_sha256": node.descriptor_sha256,
+                        "write_scope": operation.write_scope.value,
+                    },
+                )
+                self._observations.append(evidence)
+                capabilities["report_rate"] = DiscoveredCapability(
+                    name="report_rate",
+                    readable=True,
+                    writable=True,
+                    values=operation.demonstrated_rates,
+                    evidence=[evidence],
+                ).normalized()
 
         # Descriptor structure, family resemblance, feature snapshots and
         # changing bytes remain evidence, not semantics. DEMONSTRATED learned
         # operations are intentionally inert until promotion.
-        return {}
+        return capabilities
 
     def validate(
         self,

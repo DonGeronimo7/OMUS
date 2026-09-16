@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import json
 import logging
 import os
+import queue
 from pathlib import Path
 import select
 import threading
@@ -30,6 +31,14 @@ from ..calibrated_profiles import (
     validate_calibrated_profile,
 )
 from ..device_topology import build_device_graph
+from ..learned_actions import (
+    LearnedActionStore,
+    LearnedActionTrigger,
+)
+from ..learned_hid_session import (
+    LearnedHidSession,
+    LearnedHidSessionError,
+)
 from ..learned_hid_transport import (
     LearnedHidAdapter,
     LearnedHidTransportError,
@@ -42,6 +51,17 @@ from ..learned_operations import (
     LearnedOperationStore,
     matching_interface_node,
 )
+from ..learned_polling import (
+    LearnedPollingOperation,
+    LearnedPollingOperationStore,
+)
+from ..learned_polling_transport import (
+    LearnedPollingTransportError,
+    execute_learned_polling,
+    learned_polling_write_without_takeover,
+    read_learned_polling_rate,
+)
+from ..protocol_grammar import SemanticBehavior
 from ..transaction_engine import (
     TransactionAuthorization,
     TransactionContext,
@@ -51,7 +71,12 @@ from ..transaction_engine import (
 from ..discovery import MouseDevice
 from ..discovery_models import DeviceNode, PhysicalDevice
 from .base import HardwareBackend, HardwareError
-from .capabilities import DpiCapabilities, DpiState, HardwareCapabilities
+from .capabilities import (
+    DpiCapabilities,
+    DpiState,
+    HardwareCapabilities,
+    ReportRateCapabilities,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -74,12 +99,19 @@ class DiscoveryBackend(HardwareBackend):
         *,
         profile_directory: Path | None = None,
         learned_operation_store: LearnedOperationStore | None = None,
+        learned_polling_store: LearnedPollingOperationStore | None = None,
+        learned_action_store: LearnedActionStore | None = None,
         topology_builder: Callable[[MouseDevice], PhysicalDevice] = build_device_graph,
         protocol_factories: Iterable[Callable[[], HardwareBackend]] = (),
         log_protocol_failures: bool = True,
+        learned_session_factory=LearnedHidSession,
     ) -> None:
         self.profile_directory = profile_directory or get_calibrated_profile_directory()
         self._learned_operation_store = learned_operation_store or LearnedOperationStore()
+        self._learned_polling_store = (
+            learned_polling_store or LearnedPollingOperationStore()
+        )
+        self._learned_action_store = learned_action_store or LearnedActionStore()
         self._topology_builder = topology_builder
         self._protocol_factories = tuple(protocol_factories)
         self._log_protocol_failures = log_protocol_failures
@@ -88,14 +120,25 @@ class DiscoveryBackend(HardwareBackend):
         self._protocol_backend: HardwareBackend | None = None
         self._learned_operation: LearnedOperation | None = None
         self._learned_write_node: DeviceNode | None = None
+        self._learned_polling_operation: LearnedPollingOperation | None = None
+        self._learned_polling_node: DeviceNode | None = None
+        self._learned_action_trigger: LearnedActionTrigger | None = None
+        self._learned_action_node: DeviceNode | None = None
         self._learned_adapter: LearnedHidAdapter | None = None
+        self._learned_session_factory = learned_session_factory
+        self._learned_sessions: dict[Path, LearnedHidSession] = {}
+        self._learned_session_lock = threading.RLock()
         self._last_dpi: int | None = None
+        self._last_polling_rate: int | None = None
 
     @property
     def name(self) -> str:
         if self._protocol_backend is not None:
             return f"Automatic Discovery ({self._protocol_backend.name} adapter)"
-        if self._learned_operation is not None:
+        if (
+            self._learned_operation is not None
+            or self._learned_polling_operation is not None
+        ):
             return "Automatic Discovery (PROVEN learned exact-model adapter)"
         return "Automatic Discovery"
 
@@ -103,6 +146,13 @@ class DiscoveryBackend(HardwareBackend):
     def protocol_adapter_name(self) -> str | None:
         """Human-readable proven protocol adapter, if one was bound."""
         return self._protocol_backend.name if self._protocol_backend is not None else None
+
+    @property
+    def has_proven_learned_adapter(self) -> bool:
+        return (
+            self._learned_operation is not None
+            or self._learned_polling_operation is not None
+        )
 
     def _run_passive_discovery(self, device: MouseDevice) -> PhysicalDevice | None:
         """Run read-only Discovery; failure must not disable evdev remapping."""
@@ -229,17 +279,103 @@ class DiscoveryBackend(HardwareBackend):
         # Multiple independent state-bearing fields are not guessed between.
         return candidates[0] if len(candidates) == 1 else None
 
+    def _session_for_node(self, node: DeviceNode) -> LearnedHidSession:
+        path = Path(node.path)
+        with self._learned_session_lock:
+            session = self._learned_sessions.get(path)
+            if session is not None and not session.closed:
+                return session
+            if session is not None:
+                session.close()
+                self._learned_sessions.pop(path, None)
+            try:
+                session = self._learned_session_factory(path)
+            except OSError as exc:
+                raise HardwareError(
+                    f"Automatic Discovery: could not open learned HID transport: {exc}"
+                ) from exc
+            self._learned_sessions[path] = session
+            return session
+
+    def _drop_learned_sessions(self) -> None:
+        with self._learned_session_lock:
+            sessions = tuple(self._learned_sessions.values())
+            self._learned_sessions.clear()
+        for session in sessions:
+            session.close()
+
+    def _reset_learned_runtime(self) -> None:
+        self._drop_learned_adapter()
+        self._drop_learned_sessions()
+
+    def _binding_shares_writable_interface(self) -> bool:
+        binding = self._binding
+        if binding is None:
+            return False
+        path = Path(binding.node.path)
+        return any(
+            candidate is not None and Path(candidate.path) == path
+            for candidate in (
+                self._learned_write_node,
+                self._learned_polling_node,
+            )
+        )
+
+    def _learned_event_stream_is_disjoint(self) -> bool:
+        """Refuse shared event/reply routing when report identity can overlap."""
+
+        binding = self._binding
+        if binding is None:
+            return False
+        patterns = []
+        if (
+            self._learned_operation is not None
+            and self._learned_write_node is not None
+            and Path(self._learned_write_node.path) == Path(binding.node.path)
+        ):
+            patterns.extend(
+                (
+                    self._learned_operation.write_reply,
+                    self._learned_operation.read_reply,
+                )
+            )
+        if (
+            self._learned_polling_operation is not None
+            and self._learned_polling_node is not None
+            and Path(self._learned_polling_node.path) == Path(binding.node.path)
+        ):
+            operation = self._learned_polling_operation
+            patterns.append(operation.control_query_response)
+            patterns.extend(step.response for step in operation.onboard_steps)
+            patterns.extend(step.response for step in operation.host_steps)
+
+        for pattern in patterns:
+            values = pattern.bytes_
+            if len(values) != binding.report_length:
+                continue
+            first = values[0] if values else None
+            if (
+                binding.report_id == 0
+                or first is None
+                or int(first) == binding.report_id
+            ):
+                return False
+        return True
+
     def supports_device(self, device: MouseDevice) -> bool:
         if self._protocol_backend is not None:
             self._protocol_backend.close()
-        if self._learned_adapter is not None:
-            self._learned_adapter.close()
-            self._learned_adapter = None
+        self._reset_learned_runtime()
         self._physical = self._run_passive_discovery(device)
         self._binding = None
         self._learned_operation = None
         self._learned_write_node = None
+        self._learned_polling_operation = None
+        self._learned_polling_node = None
+        self._learned_action_trigger = None
+        self._learned_action_node = None
         self._last_dpi = None
+        self._last_polling_rate = None
 
         if self._physical is not None and not self._physical.ambiguous:
             matches = [
@@ -263,6 +399,48 @@ class DiscoveryBackend(HardwareBackend):
                 else:
                     self._learned_operation = operation
                     self._learned_write_node = node
+
+            learned_polling = self._learned_polling_store.find_for_physical(
+                self._physical,
+                proven_only=True,
+            )
+            if learned_polling is not None:
+                _path, polling_operation = learned_polling
+                try:
+                    polling_node = matching_interface_node(
+                        polling_operation,
+                        self._physical,
+                    )
+                except LearnedOperationError:
+                    pass
+                else:
+                    self._learned_polling_operation = polling_operation
+                    self._learned_polling_node = polling_node
+
+            learned_action = self._learned_action_store.find_for_physical(
+                self._physical,
+                behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+            )
+            if learned_action is not None and self._learned_operation is not None:
+                _path, action_trigger = learned_action
+                try:
+                    action_node = matching_interface_node(
+                        action_trigger,
+                        self._physical,
+                    )
+                except LearnedOperationError:
+                    pass
+                else:
+                    # Initial production scope: the read-only trigger must be
+                    # observed on the same exact interface as the independently
+                    # PROVEN DPI writer. This guarantees one-reader ownership.
+                    if (
+                        self._learned_write_node is not None
+                        and Path(action_node.path)
+                        == Path(self._learned_write_node.path)
+                    ):
+                        self._learned_action_trigger = action_trigger
+                        self._learned_action_node = action_node
 
         # Proven vendor/protocol support is still an optional internal adapter.
         # A PROVEN learned operation is an independent exact-model adapter.
@@ -297,6 +475,16 @@ class DiscoveryBackend(HardwareBackend):
             events=events,
         )
 
+    def _learned_polling_capabilities(self) -> ReportRateCapabilities:
+        operation = self._learned_polling_operation
+        if operation is None:
+            return ReportRateCapabilities()
+        return ReportRateCapabilities(
+            readable=True,
+            writable=True,
+            values=tuple(sorted(operation.demonstrated_rates)),
+        )
+
     @staticmethod
     def _merge_dpi_capabilities(proven: DpiCapabilities, learned: DpiCapabilities) -> DpiCapabilities:
         if not learned.readable:
@@ -319,12 +507,25 @@ class DiscoveryBackend(HardwareBackend):
 
     def get_capabilities(self, device: MouseDevice) -> HardwareCapabilities:
         learned_dpi = self._learned_dpi_capabilities()
+        learned_polling = self._learned_polling_capabilities()
         if self._protocol_backend is None:
-            return HardwareCapabilities(dpi=learned_dpi)
+            return HardwareCapabilities(
+                dpi=learned_dpi,
+                report_rate=learned_polling,
+            )
         proven = self._protocol_backend.get_capabilities(device)
+        report_rate = (
+            proven.report_rate
+            if (
+                proven.report_rate.readable
+                or proven.report_rate.writable
+                or proven.report_rate.values
+            )
+            else learned_polling
+        )
         return HardwareCapabilities(
             dpi=self._merge_dpi_capabilities(proven.dpi, learned_dpi),
-            report_rate=proven.report_rate,
+            report_rate=report_rate,
             battery=proven.battery,
         )
 
@@ -347,16 +548,68 @@ class DiscoveryBackend(HardwareBackend):
             self._protocol_backend and self._protocol_backend.supports_dpi_monitoring(device)
         )
 
-    def supports_dpi_events(self, device: MouseDevice) -> bool:
-        # A PROVEN learned writer and the calibrated event watcher may resolve
-        # to the same hidraw interface. Until the protocol-neutral single-reader
-        # dispatcher owns both streams, never start a second reader that could
-        # steal transaction replies. Native/proven protocol adapters retain
-        # their existing event path.
-        learned_events = self._binding is not None and self._learned_operation is None
-        return learned_events or bool(
-            self._protocol_backend and self._protocol_backend.supports_dpi_events(device)
+    @staticmethod
+    def _patterns_overlap(left, right) -> bool:
+        if len(left.bytes_) != len(right.bytes_):
+            return False
+        return all(
+            a is None or b is None or int(a) == int(b)
+            for a, b in zip(left.bytes_, right.bytes_)
         )
+
+    def _learned_action_is_disjoint(self) -> bool:
+        trigger = self._learned_action_trigger
+        node = self._learned_action_node
+        if trigger is None or node is None:
+            return False
+        patterns = []
+        if (
+            self._learned_operation is not None
+            and self._learned_write_node is not None
+            and Path(self._learned_write_node.path) == Path(node.path)
+        ):
+            patterns.extend(
+                (
+                    self._learned_operation.write_reply,
+                    self._learned_operation.read_reply,
+                )
+            )
+        if (
+            self._learned_polling_operation is not None
+            and self._learned_polling_node is not None
+            and Path(self._learned_polling_node.path) == Path(node.path)
+        ):
+            operation = self._learned_polling_operation
+            patterns.append(operation.control_query_response)
+            patterns.extend(step.response for step in operation.onboard_steps)
+            patterns.extend(step.response for step in operation.host_steps)
+        return all(
+            not self._patterns_overlap(trigger.press_pattern, pattern)
+            and not self._patterns_overlap(trigger.release_pattern, pattern)
+            for pattern in patterns
+        )
+
+    def supports_dpi_cycle_trigger(self, device: MouseDevice) -> bool:
+        return (
+            self._learned_operation is not None
+            and self._learned_action_trigger is not None
+            and self._learned_action_node is not None
+            and self._learned_action_is_disjoint()
+        )
+
+    def supports_dpi_events(self, device: MouseDevice) -> bool:
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_dpi_events(device)
+        ):
+            return True
+        if self.supports_dpi_cycle_trigger(device):
+            return True
+        if self._binding is None:
+            return False
+        if not self._binding_shares_writable_interface():
+            return True
+        return self._learned_event_stream_is_disjoint()
 
     def _bound_learned_adapter(self) -> LearnedHidAdapter:
         if self._learned_operation is None or self._learned_write_node is None:
@@ -366,6 +619,7 @@ class DiscoveryBackend(HardwareBackend):
                 self._learned_adapter = LearnedHidAdapter(
                     self._learned_write_node.path,
                     self._learned_operation,
+                    session=self._session_for_node(self._learned_write_node),
                 )
             except OSError as exc:
                 raise HardwareError(
@@ -395,7 +649,7 @@ class DiscoveryBackend(HardwareBackend):
                 )
                 value = int(context.values["raw_readback"])
             except (OSError, LearnedOperationError, TransactionError) as exc:
-                self._drop_learned_adapter()
+                self._reset_learned_runtime()
                 if self._last_dpi is None:
                     raise HardwareError(
                         f"Automatic Discovery learned DPI read failed: {exc}"
@@ -444,7 +698,7 @@ class DiscoveryBackend(HardwareBackend):
                 context=context,
             )
         except (OSError, LearnedOperationError, TransactionError) as exc:
-            self._drop_learned_adapter()
+            self._reset_learned_runtime()
             raise HardwareError(
                 f"Automatic Discovery learned DPI write failed: {exc}"
             ) from exc
@@ -465,33 +719,108 @@ class DiscoveryBackend(HardwareBackend):
         return self._protocol_backend.apply_dpi_stages(device, stages, active_dpi)
 
     def supports_polling_rate(self, device: MouseDevice) -> bool:
-        return bool(self._protocol_backend and self._protocol_backend.supports_polling_rate(device))
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_polling_rate(device)
+        ):
+            return True
+        return self._learned_polling_operation is not None
 
     def supports_polling_rate_writes(self, device: MouseDevice) -> bool:
-        return bool(
-            self._protocol_backend and self._protocol_backend.supports_polling_rate_writes(device)
-        )
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_polling_rate(device)
+        ):
+            return self._protocol_backend.supports_polling_rate_writes(device)
+        return self._learned_polling_operation is not None
 
     def supports_polling_rate_writes_without_takeover(self, device: MouseDevice) -> bool:
-        return bool(
-            self._protocol_backend
-            and self._protocol_backend.supports_polling_rate_writes_without_takeover(device)
-        )
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_polling_rate(device)
+        ):
+            return self._protocol_backend.supports_polling_rate_writes_without_takeover(
+                device
+            )
+        if (
+            self._learned_polling_operation is None
+            or self._learned_polling_node is None
+        ):
+            return False
+        try:
+            return learned_polling_write_without_takeover(
+                self._learned_polling_operation,
+                self._session_for_node(self._learned_polling_node),
+            )
+        except (LearnedPollingTransportError, OSError):
+            self._reset_learned_runtime()
+            return False
 
     def get_polling_rate(self, device: MouseDevice) -> int | None:
-        if self._protocol_backend is None:
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_polling_rate(device)
+        ):
+            return self._protocol_backend.get_polling_rate(device)
+        if (
+            self._learned_polling_operation is None
+            or self._learned_polling_node is None
+        ):
             return None
-        return self._protocol_backend.get_polling_rate(device)
+        try:
+            value = read_learned_polling_rate(
+                self._learned_polling_operation,
+                self._session_for_node(self._learned_polling_node),
+            )
+        except (LearnedPollingTransportError, OSError) as exc:
+            self._reset_learned_runtime()
+            raise HardwareError(
+                f"Automatic Discovery learned polling read failed: {exc}"
+            ) from exc
+        self._last_polling_rate = value
+        return value
 
     def get_polling_rates(self, device: MouseDevice) -> list[int]:
-        if self._protocol_backend is None:
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_polling_rate(device)
+        ):
+            return self._protocol_backend.get_polling_rates(device)
+        if self._learned_polling_operation is None:
             return []
-        return self._protocol_backend.get_polling_rates(device)
+        return sorted(self._learned_polling_operation.demonstrated_rates)
 
     def set_polling_rate(self, device: MouseDevice, hz: int) -> None:
-        if self._protocol_backend is None or not self._protocol_backend.supports_polling_rate_writes(device):
-            raise HardwareError("Automatic Discovery: no proven writable polling-rate adapter")
-        self._protocol_backend.set_polling_rate(device, hz)
+        if (
+            self._protocol_backend is not None
+            and self._protocol_backend.supports_polling_rate(device)
+        ):
+            if not self._protocol_backend.supports_polling_rate_writes(device):
+                raise HardwareError(
+                    "Automatic Discovery: proven protocol adapter does not allow "
+                    "polling-rate writes"
+                )
+            self._protocol_backend.set_polling_rate(device, hz)
+            return
+        if (
+            self._learned_polling_operation is None
+            or self._learned_polling_node is None
+        ):
+            raise HardwareError(
+                "Automatic Discovery: no proven writable polling-rate adapter"
+            )
+        try:
+            value = execute_learned_polling(
+                self._learned_polling_operation,
+                self._session_for_node(self._learned_polling_node),
+                int(hz),
+            )
+        except (LearnedPollingTransportError, OSError) as exc:
+            self._reset_learned_runtime()
+            raise HardwareError(
+                f"Automatic Discovery learned polling write failed: {exc}"
+            ) from exc
+        self._last_polling_rate = value
 
     def _decode_report(self, data: bytes) -> int | None:
         binding = self._binding
@@ -502,6 +831,149 @@ class DiscoveryBackend(HardwareBackend):
         raw = data[binding.offset]
         return binding.raw_to_dpi.get(raw)
 
+    def _watch_session_events(
+        self,
+        *,
+        session: LearnedHidSession,
+        decode_packet: Callable[[bytes], DpiState | None],
+        callback: Callable[[DpiState], None],
+        shutdown_event: threading.Event,
+        ready_callback: Callable[[], None] | None,
+        label: str,
+    ) -> None:
+        """Dispatch learned HID events off the single reader thread.
+
+        LearnedHidSession subscribers run on its reader thread. They must never
+        synchronously call a path that can re-enter ``session.exchange()``.
+        Decode on the reader thread, enqueue the semantic event, and invoke the
+        runtime callback from this watcher thread instead.
+        """
+        pending: queue.Queue[DpiState] = queue.Queue()
+
+        def handle(packet: bytes) -> None:
+            state = decode_packet(packet)
+            if state is not None:
+                pending.put(state)
+
+        try:
+            unsubscribe = session.subscribe(handle)
+        except LearnedHidSessionError as exc:
+            raise HardwareError(
+                f"Automatic Discovery: could not subscribe {label}: {exc}"
+            ) from exc
+
+        try:
+            if ready_callback is not None:
+                ready_callback()
+            while not shutdown_event.is_set():
+                if session.closed:
+                    detail = session.disconnect_error
+                    raise HardwareError(
+                        f"Automatic Discovery: {label} session disconnected"
+                        + (f": {detail}" if detail is not None else "")
+                    )
+                try:
+                    state = pending.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                callback(state)
+        finally:
+            unsubscribe()
+
+    def _watch_learned_cycle_trigger(
+        self,
+        callback: Callable[[DpiState], None],
+        shutdown_event: threading.Event,
+        ready_callback: Callable[[], None] | None,
+    ) -> None:
+        trigger = self._learned_action_trigger
+        node = self._learned_action_node
+        if (
+            trigger is None
+            or node is None
+            or not self._learned_action_is_disjoint()
+        ):
+            raise HardwareError(
+                "Automatic Discovery: no unambiguous learned DPI-cycle trigger"
+            )
+        try:
+            session = self._session_for_node(node)
+        except OSError as exc:
+            raise HardwareError(
+                f"Automatic Discovery: could not open learned action trigger: {exc}"
+            ) from exc
+
+        pressed = False
+
+        def decode(packet: bytes) -> DpiState | None:
+            nonlocal pressed
+            if trigger.matches_press(packet):
+                if pressed:
+                    return None
+                pressed = True
+                return DpiState(
+                    0,
+                    0,
+                    confirmed=True,
+                    cycle_trigger=True,
+                )
+            if trigger.matches_release(packet):
+                pressed = False
+            return None
+
+        self._watch_session_events(
+            session=session,
+            decode_packet=decode,
+            callback=callback,
+            shutdown_event=shutdown_event,
+            ready_callback=ready_callback,
+            label="learned DPI-cycle trigger",
+        )
+
+    def _watch_shared_learned_dpi_events(
+        self,
+        callback: Callable[[DpiState], None],
+        shutdown_event: threading.Event,
+        ready_callback: Callable[[], None] | None,
+    ) -> None:
+        binding = self._binding
+        if binding is None:
+            raise HardwareError(
+                "Automatic Discovery: no calibrated DPI event mapping is available"
+            )
+        if not self._learned_event_stream_is_disjoint():
+            raise HardwareError(
+                "Automatic Discovery: learned event/reply packet identities overlap; "
+                "refusing ambiguous shared routing"
+            )
+        try:
+            session = self._session_for_node(binding.node)
+        except OSError as exc:
+            raise HardwareError(
+                f"Automatic Discovery: could not open learned HID events: {exc}"
+            ) from exc
+
+        def decode(packet: bytes) -> DpiState | None:
+            dpi = self._decode_report(packet)
+            if dpi is None or dpi == self._last_dpi:
+                return None
+            self._last_dpi = dpi
+            return DpiState(
+                dpi,
+                dpi,
+                active_stage=None,
+                confirmed=True,
+            )
+
+        self._watch_session_events(
+            session=session,
+            decode_packet=decode,
+            callback=callback,
+            shutdown_event=shutdown_event,
+            ready_callback=ready_callback,
+            label="learned DPI event",
+        )
+
     def _watch_learned_dpi_events(
         self,
         callback: Callable[[DpiState], None],
@@ -511,6 +983,13 @@ class DiscoveryBackend(HardwareBackend):
         binding = self._binding
         if binding is None:
             raise HardwareError("Automatic Discovery: no calibrated DPI event mapping is available")
+        if self._binding_shares_writable_interface():
+            self._watch_shared_learned_dpi_events(
+                callback,
+                shutdown_event,
+                ready_callback,
+            )
+            return
 
         try:
             fd = os.open(os.fspath(binding.node.path), os.O_RDONLY | os.O_NONBLOCK)
@@ -559,12 +1038,23 @@ class DiscoveryBackend(HardwareBackend):
                 device, callback, shutdown_event, ready_callback
             )
             return
+        if self.supports_dpi_cycle_trigger(device):
+            self._watch_learned_cycle_trigger(
+                callback,
+                shutdown_event,
+                ready_callback,
+            )
+            return
         self._watch_learned_dpi_events(callback, shutdown_event, ready_callback)
 
     def close(self) -> None:
         if self._protocol_backend is not None:
             self._protocol_backend.close()
             self._protocol_backend = None
-        self._drop_learned_adapter()
+        self._reset_learned_runtime()
         self._learned_operation = None
         self._learned_write_node = None
+        self._learned_polling_operation = None
+        self._learned_polling_node = None
+        self._learned_action_trigger = None
+        self._learned_action_node = None

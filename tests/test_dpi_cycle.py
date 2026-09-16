@@ -335,3 +335,17 @@ def test_runtime_survives_unavailable_backend_at_startup_and_notifies_after_bind
     assert select.call_count == 2
     backend.watch_dpi_events.assert_called_once()
     notifier.notify_dpi.assert_called_once_with(1500)
+
+def test_runtime_literal_true_learned_cycle_trigger_creates_cycler():
+    backend = runtime_backend()
+    backend.supports_dpi_cycle_trigger.return_value = True
+    factory, monitor, remapper = run_config(
+        {"BTN_LEFT": "passthrough"},
+        backend,
+    )
+    factory.assert_called_once()
+    monitor.start.assert_called_once()
+    monitor.stop.assert_called_once()
+    target = remapper.call_args.args[3]
+    assert isinstance(target, DpiCycler)
+    assert factory.call_args.kwargs["dpi_cycler"] is target

@@ -118,6 +118,13 @@ class DpiEventMonitor:
             self._last_notified_dpi = dpi
         return True
     def handle_state(self, state):
+        if state.cycle_trigger:
+            if self.dpi_cycler is None:
+                LOG.warning("Ignoring learned DPI-cycle trigger without a software cycler")
+                return
+            self.dpi_cycler.backend = self.backend
+            self.dpi_cycler.cycle()
+            return
         if not state.confirmed or state.x_dpi <= 0: LOG.warning("Ignoring unconfirmed hardware DPI state"); return
         if self.dpi_cycler is not None and state.active_stage is not None:
             # A physical press advances the onboard slot. Repeated reports for

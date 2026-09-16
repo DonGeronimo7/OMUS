@@ -51,7 +51,10 @@ class HardwareSupervisor(HardwareBackend):
     @staticmethod
     def _backend_has_proven_adapter(backend: HardwareBackend) -> bool:
         if isinstance(backend, DiscoveryBackend):
-            return backend.protocol_adapter_name is not None
+            return (
+                backend.protocol_adapter_name is not None
+                or backend.has_proven_learned_adapter
+            )
         return True
 
     @staticmethod
@@ -99,7 +102,25 @@ class HardwareSupervisor(HardwareBackend):
                 binding.offset,
                 tuple(sorted(binding.raw_to_dpi.items())),
             )
-        return (backend.protocol_adapter_name, physical_identity, nodes, learned)
+        learned_writers = (
+            (
+                str(backend._learned_write_node.path)
+                if backend._learned_write_node is not None
+                else None
+            ),
+            (
+                str(backend._learned_polling_node.path)
+                if backend._learned_polling_node is not None
+                else None
+            ),
+        )
+        return (
+            backend.protocol_adapter_name,
+            physical_identity,
+            nodes,
+            learned,
+            learned_writers,
+        )
 
     @property
     def generation(self) -> int:
@@ -244,6 +265,7 @@ class HardwareSupervisor(HardwareBackend):
     def get_dpi(self, device): return self._call("get_dpi", device)
     def supports_dpi_monitoring(self, device): return self._call("supports_dpi_monitoring", device)
     def supports_dpi_events(self, device): return self._call("supports_dpi_events", device)
+    def supports_dpi_cycle_trigger(self, device): return self._call("supports_dpi_cycle_trigger", device)
     def get_dpi_values(self, device): return self._call("get_dpi_values", device)
     def set_dpi(self, device, dpi): return self._call("set_dpi", device, dpi)
     def supports_dpi_stages(self, device): return self._call("supports_dpi_stages", device)
