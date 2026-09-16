@@ -9,6 +9,7 @@ from mouse_control.discovery_lab import DiscoveryTool, discovery_tool_specs, sel
 def test_catalog_exposes_complete_discovery_ladder():
     specs = discovery_tool_specs()
     assert [spec.tool for spec in specs] == [
+        DiscoveryTool.HYPOTHESIS_INSPECTION,
         DiscoveryTool.SENSOR_CALIBRATION,
         DiscoveryTool.CALIBRATED_DPI_DISCOVERY,
         DiscoveryTool.POLLING_PHYSICAL_VERIFY,
@@ -24,11 +25,12 @@ def test_catalog_exposes_complete_discovery_ladder():
     ]
     assert specs[0].writes_hardware is False
     assert specs[1].writes_hardware is False
-    assert specs[2].writes_hardware is True
+    assert specs[2].writes_hardware is False
+    assert specs[3].writes_hardware is True
     assert next(spec for spec in specs if spec.tool is DiscoveryTool.DPI_WRITE_PROMOTION).promotion is True
     assert next(spec for spec in specs if spec.tool is DiscoveryTool.POLLING_PROMOTION).promotion is True
     assert {spec.evidence_phase for spec in specs} >= {
-        "calibrate", "correlate", "infer", "validate", "generalize", "prove", "persist"
+        "observe", "calibrate", "correlate", "infer", "validate", "generalize", "prove", "persist"
     }
 
 
