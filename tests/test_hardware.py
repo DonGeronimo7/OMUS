@@ -10,6 +10,7 @@ from mouse_control.discovery import MouseDevice
 from mouse_control.hardware import HardwareBackend, HardwareError, get_backend
 from mouse_control.hardware.capabilities import (HardwareCapabilities,
                                                  ReportRateCapabilities)
+from mouse_control.hardware.discovery_backend import DiscoveryBackend
 from mouse_control.hardware.generic import GenericBackend
 from mouse_control.hardware.native_hid import NativeHidBackend
 from mouse_control.hardware.openrazer import OpenRazerBackend
@@ -30,31 +31,36 @@ def razer_backend(*devices):
     return OpenRazerBackend(lambda: SimpleNamespace(devices=list(devices)))
 
 
-def test_native_hid_is_first_backend_and_unknown_falls_back():
+def test_registry_always_returns_discovery_and_binds_first_proven_adapter():
     native, later = Mock(spec=HardwareBackend), Mock()
     native.supports_device.return_value = True
-    assert get_backend(G305, [lambda: native, later]) is native
+    backend = get_backend(G305, [lambda: native, later])
+    assert isinstance(backend, DiscoveryBackend)
+    assert backend._protocol_backend is native
     later.assert_not_called()
+
     unknown = MouseDevice("unknown", "/test", vendor=1, product=2)
-    assert isinstance(get_backend(unknown, [NativeHidBackend]), GenericBackend)
+    fallback = get_backend(unknown, [NativeHidBackend])
+    assert isinstance(fallback, DiscoveryBackend)
+    assert fallback._protocol_backend is None
 
 
-def test_transient_backend_enumeration_failure_falls_back_without_retry_log_spam(caplog):
+def test_transient_adapter_enumeration_failure_falls_back_without_retry_log_spam(caplog):
     backend = Mock(spec=HardwareBackend)
     backend.supports_device.side_effect = OSError("hidraw not ready")
-    assert isinstance(get_backend(G305, [lambda: backend]), GenericBackend)
-    assert caplog.text.count("Hardware discovery failed") == 1
+    assert isinstance(get_backend(G305, [lambda: backend]), DiscoveryBackend)
+    assert caplog.text.count("Hardware protocol adapter discovery failed") == 1
     caplog.clear()
-    assert isinstance(get_backend(G305, [lambda: backend], log_failures=False), GenericBackend)
-    assert "Hardware discovery failed" not in caplog.text
+    assert isinstance(get_backend(G305, [lambda: backend], log_failures=False), DiscoveryBackend)
+    assert "Hardware protocol adapter discovery failed" not in caplog.text
 
 
-def test_backend_registry_closes_rejected_and_failed_candidates():
+def test_discovery_closes_rejected_and_failed_protocol_adapters():
     rejected = Mock(spec=HardwareBackend)
     rejected.supports_device.return_value = False
     failed = Mock(spec=HardwareBackend)
     failed.supports_device.side_effect = HardwareError("probe failed")
-    assert isinstance(get_backend(G305, [lambda: rejected, lambda: failed]), GenericBackend)
+    assert isinstance(get_backend(G305, [lambda: rejected, lambda: failed]), DiscoveryBackend)
     rejected.close.assert_called_once()
     failed.close.assert_called_once()
 
@@ -242,22 +248,29 @@ def test_runtime_device_resolution_rejects_reused_path_and_ambiguity():
         assert cli._resolve_runtime_device(configured) == configured
 
 
-def test_razer_backend_remains_available():
-    backend = razer_backend(razer_device())
-    assert get_backend(RAZER, [lambda: backend]) is backend
+def test_razer_adapter_remains_available_through_discovery():
+    adapter = razer_backend(razer_device())
+    backend = get_backend(RAZER, [lambda: adapter])
+    assert isinstance(backend, DiscoveryBackend)
+    assert backend._protocol_backend is adapter
     assert backend.get_device_name(RAZER) == "Razer mouse"
     assert backend.get_dpi(RAZER) == (800, 800)
     backend.set_dpi(RAZER, 1500)
-    assert backend._devices[RAZER].dpi == (1500, 1500)
+    assert adapter._devices[RAZER].dpi == (1500, 1500)
 
 
-def test_ambiguous_razer_identity_refuses_writes():
-    backend = razer_backend(razer_device(), razer_device())
-    assert isinstance(get_backend(RAZER, [lambda: backend]), GenericBackend)
+def test_ambiguous_razer_identity_refuses_adapter_and_keeps_safe_discovery():
+    adapter = razer_backend(razer_device(), razer_device())
+    backend = get_backend(RAZER, [lambda: adapter])
+    assert isinstance(backend, DiscoveryBackend)
+    assert backend._protocol_backend is None
+    with pytest.raises(HardwareError):
+        backend.set_dpi(RAZER, 800)
 
 
-def test_generic_capability_defaults():
+def test_generic_compatibility_alias_is_discovery():
     backend = GenericBackend()
+    assert isinstance(backend, DiscoveryBackend)
     assert not backend.supports_dpi(G305)
     assert not backend.supports_dpi_stages(G305)
     assert not backend.supports_dpi_monitoring(G305)
@@ -309,7 +322,7 @@ def test_startup_remaps_despite_hardware_failure(unavailable, caplog):
          patch.object(cli, "MouseRemapper") as remapper:
         if unavailable:
             with patch.dict(sys.modules, {"openrazer": None, "openrazer.client": None}), \
-                 patch("mouse_control.hardware.registry.BACKEND_FACTORIES", (OpenRazerBackend,)):
+                 patch("mouse_control.hardware.registry.PROTOCOL_ADAPTER_FACTORIES", (OpenRazerBackend,)):
                 assert cli.run_from_config() == 0
         else:
             with patch.object(cli, "get_backend", return_value=backend):
