@@ -16,9 +16,11 @@ from .device_topology import TopologyError
 from .discovery import get_mouse_devices, select_mouse_device
 from .discovery_engine import DiscoveryEngine
 from .discovery_ui import render_discovery_result, result_to_dict
+from .guided_discovery import (
+    _full_access_preflight,
+    run_guided_dpi_learning,
+)
 from .learning_session import ReadOnlyLearningSession
-from .protocol_grammar import SemanticBehavior
-from .teacher_registry import read_teacher_labels
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -30,29 +32,24 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--device",
-        type=int,
-        metavar="N",
+        "--device", type=int, metavar="N",
         help="select mouse N from the detected list instead of prompting",
     )
     parser.add_argument("--verbose", action="store_true", help="show discovery evidence")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument(
-        "--no-save",
-        action="store_true",
+        "--no-save", action="store_true",
         help="do not cache the path-independent discovery profile",
     )
     parser.add_argument(
-        "--generic-only",
-        action="store_true",
+        "--generic-only", action="store_true",
         help=(
             "skip known protocol detectors and exercise only topology, descriptor, "
             "repertoire and read-only learning paths"
         ),
     )
     parser.add_argument(
-        "--full-access",
-        action="store_true",
+        "--full-access", action="store_true",
         help=(
             "require root hardware visibility and a complete passive-open preflight "
             "for every hidraw sibling correlated to the selected physical mouse; "
@@ -60,26 +57,21 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--learn-dpi-button",
-        action="store_true",
+        "--learn-dpi-button", action="store_true",
         help=(
             "capture two negative controls plus three read-only DPI-button actions and "
             "infer action-specific report shapes, persistent state and momentary fields"
         ),
     )
     parser.add_argument(
-        "--teacher",
-        action="store_true",
+        "--teacher", action="store_true",
         help=(
             "also read semantic ground truth before and after each guided action from a "
             "native protocol teacher such as HID++; packet details are not shared"
         ),
     )
     parser.add_argument(
-        "--learn-window",
-        type=float,
-        default=1.5,
-        metavar="SECONDS",
+        "--learn-window", type=float, default=1.5, metavar="SECONDS",
         help="capture window for each control/action sample (default: 1.5)",
     )
     return parser
@@ -100,10 +92,7 @@ def _pick_mouse(index: int | None):
 
 def _render_guided_learning(learned) -> str:
     teacher_transitions = [
-        {
-            "before": dict(sample.teacher_before_state),
-            "after": dict(sample.teacher_state),
-        }
+        {"before": dict(sample.teacher_before_state), "after": dict(sample.teacher_state)}
         for sample in learned.samples
         if sample.teacher_before_state or sample.teacher_state
     ]
@@ -115,19 +104,13 @@ def _render_guided_learning(learned) -> str:
     )
     report_shapes = refinement.report_shapes if refinement is not None else ()
     refined_by_location = (
-        {
-            (item.candidate.report_key, item.candidate.offset): item
-            for item in refinement.candidates
-        }
-        if refinement is not None
-        else {}
+        {(item.candidate.report_key, item.candidate.offset): item for item in refinement.candidates}
+        if refinement is not None else {}
     )
     hypotheses = refinement.hypotheses if refinement is not None else learned.hypotheses
 
     lines = [
-        "",
-        "Guided DPI-button learning",
-        "==========================",
+        "", "Guided DPI-button learning", "==========================",
         f"Guided samples: {len(learned.samples)}",
         f"Negative-control samples: {len(learned.control_samples)}",
         f"Feature-field candidates: {len(learned.feature_candidates)}",
@@ -137,13 +120,11 @@ def _render_guided_learning(learned) -> str:
         f"Action-specific report shapes: {len(report_shapes)}",
         f"Transition-specific raw-trigger candidates: {len(action_specific)}",
     ]
-
     if refinement is not None and refinement.suppressed_stage_locations:
         lines.append(
             "Control-active stage guesses suppressed: "
             f"{len(refinement.suppressed_stage_locations)}"
         )
-
     if report_shapes:
         lines.append("Action-specific report-shape evidence:")
         for shape in report_shapes:
@@ -151,11 +132,9 @@ def _render_guided_learning(learned) -> str:
                 f"  report={shape.report_key!r} guided_counts={shape.guided_counts!r} "
                 f"control_counts={shape.control_counts!r}"
             )
-
         shape_keys = {shape.report_key for shape in report_shapes}
         associated_state = tuple(
-            candidate
-            for candidate in learned.report_candidates
+            candidate for candidate in learned.report_candidates
             if candidate.report_key in shape_keys
         )
         if associated_state:
@@ -165,13 +144,11 @@ def _render_guided_learning(learned) -> str:
                     f"  report={candidate.report_key!r} byte={candidate.offset} "
                     f"observations={candidate.observations} values={candidate.values!r}"
                 )
-
     if action_specific:
         lines.append("Action-specific raw transition evidence:")
         for candidate in action_specific:
             roles = learned.descriptor_roles.get(
-                (candidate.report_key, candidate.offset),
-                ("unknown",),
+                (candidate.report_key, candidate.offset), ("unknown",)
             )
             suffix = ""
             refined = refined_by_location.get((candidate.report_key, candidate.offset))
@@ -181,15 +158,13 @@ def _render_guided_learning(learned) -> str:
                 f"  report={candidate.report_key!r} byte={candidate.offset} "
                 f"observations={candidate.observations} descriptor={','.join(roles)}{suffix}"
             )
-
     if hypotheses:
         lines.append("Semantic hypotheses:")
         for hypothesis in hypotheses:
             location = (
                 f" report={hypothesis.report_key!r}"
                 + (f" byte={hypothesis.offset}" if hypothesis.offset is not None else "")
-                if hypothesis.report_key is not None
-                else ""
+                if hypothesis.report_key is not None else ""
             )
             mapping = f" mapping={dict(hypothesis.mapping)}" if hypothesis.mapping else ""
             lines.append(
@@ -200,84 +175,16 @@ def _render_guided_learning(learned) -> str:
         lines.append(
             "Semantic hypotheses: none yet — no action-specific repeatable evidence was found."
         )
-
     if teacher_transitions:
         lines.append(f"Teacher transitions: {teacher_transitions}")
     else:
         lines.append("Teacher: unavailable/not requested — inference used Linux HID evidence only.")
-    lines.append(
-        "Write status: forbidden — guided learning produces observations/correlations only."
-    )
+    lines.append("Write status: forbidden — guided learning produces observations/correlations only.")
     return "\n".join(lines)
 
 
-def _full_access_preflight(session: ReadOnlyLearningSession) -> tuple[str, ...]:
-    readable, unreadable = session.hidraw_access_report()
-    if unreadable:
-        raise PermissionError(
-            "full-access discovery requires every correlated hidraw sibling to be readable; "
-            "still unavailable: " + ", ".join(unreadable)
-        )
-    return tuple(str(path) for path in readable)
-
-
-def _check_sample_access(sample, *, require_complete_access: bool) -> None:
-    if require_complete_access and sample.unreadable_hidraw_paths:
-        raise PermissionError(
-            "a hidraw sibling became unavailable during full-access capture: "
-            + ", ".join(sample.unreadable_hidraw_paths)
-        )
-
-
-def _capture_controls(
-    session: ReadOnlyLearningSession,
-    *,
-    seconds: float,
-    require_complete_access: bool,
-):
-    """Capture negative controls before the labelled DPI action.
-
-    One quiet capture establishes idle/background traffic. The second captures
-    ordinary pointer/button traffic so report presence and transition motifs can
-    be compared with the later DPI-button actions. Sharing a report byte with
-    ordinary traffic is not itself enough to discard a DPI candidate.
-    """
-
-    controls = []
-    print(
-        "\nContrastive controls come first. These are still read-only and are used only "
-        "to learn what ordinary/non-DPI HID traffic looks like."
-    )
-    prompts = (
-        (
-            "[control 1/2] Press Enter, then leave the mouse completely untouched "
-            f"for {seconds:g}s... "
-        ),
-        (
-            "[control 2/2] Press Enter, then move the mouse normally and left-click once, "
-            f"but do NOT press DPI/profile buttons, during {seconds:g}s... "
-        ),
-    )
-    for prompt in prompts:
-        input(prompt)
-        sample = session.observe_action(seconds=seconds)
-        _check_sample_access(sample, require_complete_access=require_complete_access)
-        controls.append(sample)
-        print(
-            f"  control captured {len(sample.action.hid_reports)} HID report(s), "
-            f"{len(sample.action.evdev_events)} evdev event(s), "
-            f"{len(sample.action.feature_changes)} Feature byte change(s)"
-        )
-    return controls
-
-
 def _run_guided_learning(
-    selected,
-    result,
-    engine,
-    *,
-    seconds: float,
-    teacher: bool,
+    selected, result, engine, *, seconds: float, teacher: bool,
     require_complete_access: bool,
 ) -> None:
     print(
@@ -285,72 +192,28 @@ def _run_guided_learning(
         "every readable correlated evdev/hidraw interface while you press the physical "
         "DPI button exactly once per sample."
     )
-    session = ReadOnlyLearningSession(result.device, engine.descriptors)
-    if require_complete_access:
-        readable = _full_access_preflight(session)
+    if not teacher:
         print(
-            f"Full-access preflight: {len(readable)}/{len(result.device.hidraw_nodes)} "
-            "correlated hidraw sibling(s) readable."
+            "Native teacher is OFF. Inference uses Linux hidraw/evdev observations, "
+            "HID descriptors, repeated transition signatures, and negative controls."
         )
 
-    controls = _capture_controls(
-        session,
+    def prompt(step) -> bool:
+        input(
+            f"[{step.index}/5] {step.title}: {step.instructions} "
+            f"Press Enter to capture {seconds:g}s... "
+        )
+        return True
+
+    outcome = run_guided_dpi_learning(
+        selected, result, engine,
+        prompt=prompt,
+        progress=lambda message: print("  " + message),
         seconds=seconds,
+        teacher=teacher,
         require_complete_access=require_complete_access,
     )
-
-    reader = (lambda: read_teacher_labels(selected)) if teacher else None
-    if reader is None:
-        print(
-            "\nNative teacher is OFF. The next inference pass will rely only on Linux "
-            "hidraw/evdev observations, HID descriptors, guided-only report shapes, "
-            "repeated transition signatures, and the negative controls."
-        )
-    print(
-        "For the three guided samples, keep the mouse as still as practical and press only "
-        "the DPI button once. Accidental movement is tolerated but is treated as noise."
-    )
-
-    samples = []
-    for index in range(3):
-        # Capture teacher ground truth before the prompt, not immediately before
-        # raw acquisition. This keeps native-teacher protocol traffic outside
-        # the blind learner's capture window.
-        teacher_before = dict(reader()) if reader is not None else {}
-        input(
-            f"[{index + 1}/3] Press Enter, then press the DPI button exactly once "
-            f"within {seconds:g}s... "
-        )
-        sample = session.observe_action(
-            seconds=seconds,
-            teacher_reader=reader,
-            teacher_before_state=teacher_before,
-        )
-        _check_sample_access(sample, require_complete_access=require_complete_access)
-        samples.append(sample)
-        teacher_suffix = ""
-        if sample.teacher_before_state or sample.teacher_state:
-            teacher_suffix = (
-                f"; teacher={dict(sample.teacher_before_state)} -> "
-                f"{dict(sample.teacher_state)}"
-            )
-        print(
-            f"  captured {len(sample.action.hid_reports)} HID report(s), "
-            f"{len(sample.action.evdev_events)} evdev event(s), "
-            f"{len(sample.action.feature_changes)} Feature byte change(s)"
-            + teacher_suffix
-        )
-        if sample.unreadable_hidraw_paths:
-            print(
-                "  skipped unreadable hidraw sibling(s): "
-                + ", ".join(sample.unreadable_hidraw_paths)
-            )
-    learned = session.analyze(
-        samples,
-        trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
-        control_samples=controls,
-    )
-    print(_render_guided_learning(learned))
+    print(_render_guided_learning(outcome.learned))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -415,18 +278,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result_to_dict(result, profile_path=engine.profile_path), indent=2, sort_keys=True))
     else:
-        print(render_discovery_result(
-            result,
-            profile_path=engine.profile_path,
-            verbose=args.verbose,
-        ))
+        print(render_discovery_result(result, profile_path=engine.profile_path, verbose=args.verbose))
 
     if args.learn_dpi_button:
         try:
             _run_guided_learning(
-                selected,
-                result,
-                engine,
+                selected, result, engine,
                 seconds=args.learn_window,
                 teacher=args.teacher,
                 require_complete_access=args.full_access,

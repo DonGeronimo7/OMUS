@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mouse-control"
-version = "0.9.0"
+version = "0.9.1"
 description = "Linux mouse remapping with Automatic Discovery and validated DPI/polling control"
 authors = [
     {name = "Marc-A. Geronimo"}
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mouse-control = "mouse_control.cli:main"
+mouse-control = "mouse_control.app:main"
 mouse-control-discover = "mouse_control.discovery_cli:main"
 mouse-control-sensor-calibrate = "mouse_control.sensor_calibration_cli:main"
 mouse-control-write-trace = "mouse_control.write_trace_cli:main"

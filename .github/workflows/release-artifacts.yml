@@ -3,6 +3,7 @@ name: Release artifacts
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -124,4 +125,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-assets/*             --repo "$GITHUB_REPOSITORY"             --title "Mouse Control $GITHUB_REF_NAME"             --notes-file release-body.md             --verify-tag
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Mouse Control $GITHUB_REF_NAME" \
+            --notes-file release-body.md \
+            --verify-tag

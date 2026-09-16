@@ -29,9 +29,10 @@ def device(fd=10, batches=(), held=()):
 
 
 def run_capture(devices, ready=None, capture_function=None):
+    selector = ready or (lambda *_args, **_kwargs: (devices[:], [], []))
     with patch.object(capture, '_open_keyboards', return_value=devices), \
          patch.object(capture, '_capture_terminal', return_value=nullcontext()), \
-         patch.object(capture, 'select', side_effect=ready or [(devices[:], [], [])]):
+         patch.object(capture, 'select', side_effect=selector):
         return (capture_function or capture.capture_keyboard_key)()
 
 
@@ -42,24 +43,32 @@ def test_chord_capture_holds_keys_until_all_released():
         event(ecodes.KEY_LEFTSHIFT, 0), event(ecodes.KEY_LEFTCTRL, 0)]])
     assert run_capture([dev], capture_function=capture.capture_keyboard_chord) == (
         'chord:KEY_LEFTCTRL+KEY_LEFTSHIFT+KEY_S')
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
     dev.close.assert_called_once()
-    dev.grab.assert_not_called()
 
 
 def test_chord_capture_ignores_stale_and_one_key_attempts():
-    dev = device(held=[ecodes.KEY_ENTER], batches=[[
-        event(ecodes.KEY_ENTER), event(ecodes.KEY_ENTER, 0),
-        event(ecodes.KEY_A), event(ecodes.KEY_A, 0),
-        event(ecodes.KEY_LEFTCTRL), event(ecodes.KEY_C),
-        event(ecodes.KEY_C, 0), event(ecodes.KEY_LEFTCTRL, 0)]])
+    dev = device(held=[ecodes.KEY_ENTER], batches=[
+        [event(ecodes.KEY_ENTER, 0)],
+        [event(ecodes.KEY_A), event(ecodes.KEY_A, 0),
+         event(ecodes.KEY_LEFTCTRL), event(ecodes.KEY_C),
+         event(ecodes.KEY_C, 0), event(ecodes.KEY_LEFTCTRL, 0)],
+    ])
     assert run_capture([dev], capture_function=capture.capture_keyboard_chord) == (
         'chord:KEY_LEFTCTRL+KEY_C')
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
 
 
 def test_chord_capture_escape_and_disconnect_close_devices():
     first = device(10, [OSError('unplugged')])
     second = device(11, [[event(ecodes.KEY_ESC)]])
     assert run_capture([first, second], capture_function=capture.capture_keyboard_chord) is None
+    first.grab.assert_called_once()
+    second.grab.assert_called_once()
+    first.ungrab.assert_called_once()
+    second.ungrab.assert_called_once()
     first.close.assert_called_once()
     second.close.assert_called_once()
 
@@ -85,15 +94,36 @@ def test_capture_compatible_with_existing_config(code, name):
     assert parse_action(f'key:{name}').code == code
     assert f'key:{name}' in generate_config(MouseDevice('Mouse', '/dev/input/test'),
                                            {'BTN_EXTRA': f'key:{name}'})
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
     dev.close.assert_called_once()
-    dev.grab.assert_not_called()
+
+
+def test_print_screen_is_captured_exclusively():
+    dev = device(batches=[[event(ecodes.KEY_SYSRQ)]])
+    assert run_capture([dev]) == capture.keyboard_key_name(ecodes.KEY_SYSRQ)
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
+
+
+def test_super_shift_s_is_captured_exclusively():
+    dev = device(batches=[[
+        event(ecodes.KEY_LEFTMETA), event(ecodes.KEY_LEFTSHIFT), event(ecodes.KEY_S),
+        event(ecodes.KEY_S, 0), event(ecodes.KEY_LEFTSHIFT, 0),
+        event(ecodes.KEY_LEFTMETA, 0),
+    ]])
+    assert run_capture([dev], capture_function=capture.capture_keyboard_chord) == (
+        'chord:KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_S')
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
 
 
 def test_filters_events_and_menu_enter():
-    dev = device(held=[ecodes.KEY_ENTER], batches=[[
-        event(ecodes.KEY_ENTER), event(ecodes.KEY_ENTER, 2), event(ecodes.KEY_ENTER, 0),
-        event(ecodes.KEY_A, 0), event(ecodes.KEY_A, 2), event(ecodes.BTN_LEFT),
-        event(99999), event(0, kind=ecodes.EV_SYN), event(ecodes.KEY_F12)]])
+    dev = device(held=[ecodes.KEY_ENTER], batches=[
+        [event(ecodes.KEY_ENTER, 0)],
+        [event(ecodes.KEY_A, 0), event(ecodes.KEY_A, 2), event(ecodes.BTN_LEFT),
+         event(99999), event(0, kind=ecodes.EV_SYN), event(ecodes.KEY_F12)],
+    ])
     assert run_capture([dev]) == 'KEY_F12'
 
 
@@ -101,12 +131,40 @@ def test_queued_enter_is_drained_but_fresh_enter_can_be_bound():
     dev = device()
     dev.read.side_effect = [[event(ecodes.KEY_ENTER)], BlockingIOError(), [event(ecodes.KEY_ENTER)]]
     assert run_capture([dev]) == 'KEY_ENTER'
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
+
+
+def test_held_key_release_happens_before_exclusive_grab():
+    dev = device(held=[ecodes.KEY_ENTER], batches=[
+        [event(ecodes.KEY_ENTER, 0)], [event(ecodes.KEY_A)],
+    ])
+    order = []
+    dev.grab.side_effect = lambda: order.append('grab')
+
+    dev.read.side_effect = None
+    queued = [BlockingIOError(), [event(ecodes.KEY_ENTER, 0)], [event(ecodes.KEY_A)]]
+
+    def ordered_read():
+        value = queued.pop(0)
+        if isinstance(value, BaseException):
+            raise value
+        order.append('read')
+        return value
+
+    dev.read.side_effect = ordered_read
+    assert run_capture([dev]) == 'KEY_A'
+    assert order.index('read') < order.index('grab')
 
 
 def test_multiple_keyboards_disconnect_and_cleanup():
     first = device(10, [OSError('unplugged')])
     second = device(11, [[event(ecodes.KEY_VOLUMEUP)]])
     assert run_capture([first, second]) == 'KEY_VOLUMEUP'
+    first.grab.assert_called_once()
+    second.grab.assert_called_once()
+    first.ungrab.assert_called_once()
+    second.ungrab.assert_called_once()
     first.close.assert_called_once()
     second.close.assert_called_once()
 
@@ -115,14 +173,56 @@ def test_multiple_keyboards_disconnect_and_cleanup():
 def test_cancel_or_disconnect(failure):
     dev = device(batches=[failure])
     assert run_capture([dev]) is None
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
     dev.close.assert_called_once()
+
+
+def test_exception_after_grab_still_ungrabs_and_closes():
+    dev = device()
+    with patch.object(capture, '_open_keyboards', return_value=[dev]), \
+         patch.object(capture, '_capture_terminal', return_value=nullcontext()), \
+         patch.object(capture, 'select', side_effect=RuntimeError('boom')), \
+         pytest.raises(RuntimeError, match='boom'):
+        capture.capture_keyboard_key()
+    dev.grab.assert_called_once()
+    dev.ungrab.assert_called_once()
+    dev.close.assert_called_once()
+
+
+def test_partial_multi_device_grab_failure_rolls_back(capsys):
+    first = device(10)
+    second = device(11)
+    second.grab.side_effect = OSError(16, 'Device or resource busy')
+    assert run_capture([first, second]) is None
+    first.grab.assert_called_once()
+    second.grab.assert_called_once()
+    first.ungrab.assert_called_once()
+    second.ungrab.assert_not_called()
+    first.close.assert_called_once()
+    second.close.assert_called_once()
+    output = capsys.readouterr().out
+    assert 'Safe keyboard capture is unavailable' in output
+    assert 'No shortcut was recorded' in output
+    assert 'option 5' in output
+
+
+def test_chord_grab_failure_uses_manual_fallback(capsys):
+    dev = device()
+    dev.grab.side_effect = OSError(16, 'Device or resource busy')
+    assert run_capture([dev], capture_function=capture.capture_keyboard_chord) is None
+    dev.ungrab.assert_not_called()
+    dev.close.assert_called_once()
+    assert 'option 7' in capsys.readouterr().out
 
 
 def test_ctrl_c_and_ctrl_alone():
     dev = device(batches=[[event(ecodes.KEY_LEFTCTRL), event(ecodes.KEY_C)]])
     assert run_capture([dev]) is None
+    dev.ungrab.assert_called_once()
     dev = device(batches=[[event(ecodes.KEY_LEFTCTRL), event(ecodes.KEY_LEFTCTRL, 0)]])
     assert run_capture([dev]) == 'KEY_LEFTCTRL'
+    dev.ungrab.assert_called_once()
 
 
 def test_no_devices():

@@ -1,0 +1,56 @@
+name: Release trigger
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag-and-dispatch:
+    if: startsWith(github.event.head_commit.message, 'Release v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate release commit
+        env:
+          RELEASE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          first_line=$(printf '%s\n' "$RELEASE_COMMIT_MESSAGE" | head -n1)
+          case "$first_line" in
+            "Release v${version}"*) ;;
+            *)
+              echo "Release commit '$first_line' does not match project version v${version}." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Create release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          tag="v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists; leaving it unchanged."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Mouse Control ${tag}"
+            git push origin "$tag"
+          fi
+
+      - name: Dispatch release artifact workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          gh workflow run release-artifacts.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "v${version}"

@@ -1,3 +1,72 @@
+# Mouse Control v0.9.1
+
+## Setup that hides the protocol machinery
+
+Mouse Control 0.9.1 turns the existing setup flow into a full-screen,
+keyboard-driven terminal interface. Device selection, hardware capability
+status, button mappings, DPI, polling, service behavior, and final review are
+revisitable without exposing HID internals to ordinary users.
+
+Unknown mice now enter the existing Automatic Discovery workflow directly from
+`mouse-control setup`. Passive discovery runs first. When DPI behavior is still
+unknown, setup can guide the same safe five-sample observation workflow used by
+the advanced discovery CLI: quiet control, normal-use control, and three DPI
+button samples. The discovery CLI remains available for developers and hardware
+acceptance work.
+
+## DPI configuration
+
+DPI editing now separates **testing** from **accepting**. A candidate can be
+applied to the live mouse and moved around with before it changes the staged
+configuration. `Set to current` can capture the mouse's current verified DPI,
+including a value selected with the physical DPI button. Only an explicit
+Accept changes the setup stage. Back/Cancel restores the hardware DPI that was
+active when the editor opened and leaves the staged configuration untouched.
+
+## Safety remains unchanged
+
+Guided discovery begins read-only. Observation, descriptor similarity,
+VID/PID similarity, protocol-family resemblance, and known-device evidence do
+not grant write authority. Writable DPI or polling support still requires the
+existing exact-model PROVEN path, reversible proof, readback, physical
+verification where required, rollback, unambiguous identity, and safe control
+ownership. No speculative generic polling writer was added.
+
+Ordinary evdev/uinput remapping remains fully usable when DPI or polling is not
+yet learned.
+
+## Other v0.9.1 UX fixes
+
+- Interactive updater confirmations are visible again instead of waiting on an
+  unseen package-manager prompt.
+- Keyboard shortcut capture exclusively grabs the selected keyboard while the
+  capture is active, preventing the shortcut from leaking into the desktop.
+- Terminal setup uses the standard-library curses restoration path so success,
+  cancel, Ctrl+C, exceptions, resize handling, and hardware failures do not
+  intentionally leave terminal input/cursor state behind.
+
+## Compatibility
+
+The complete v0.9.0 runtime and safety contract is retained. Native HID++,
+learned DPI/polling, remapping, keyboard keys and chords, configured DPI-cycle,
+direct DPI notifications, reconnect and late receiver insertion, battery/tray,
+service behavior, updater behavior, and packaging remain regression-tested.
+
+## Validation
+
+The final feature branch passed 526 tests on Python 3.12, with the same full
+suite and compile checks passing on Python 3.13 and Python 3.14. Fedora 44 RPM
+CI also remains part of the release gate.
+
+## Downloads
+
+- [RPM: mouse-control-0.9.1-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse-control-0.9.1-1.fc44.noarch.rpm)
+- [DEB: mouse-control_0.9.1-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse-control_0.9.1-1_all.deb)
+- [AppImage: Mouse-Control-0.9.1-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/Mouse-Control-0.9.1-x86_64.AppImage)
+- [Wheel: mouse_control-0.9.1-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse_control-0.9.1-py3-none-any.whl)
+- [Source: mouse_control-0.9.1.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse_control-0.9.1.tar.gz)
+
+---
 # Mouse Control v0.9.0
 
 ## Automatic Discovery foundation
