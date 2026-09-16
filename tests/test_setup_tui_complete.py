@@ -49,6 +49,25 @@ def test_tui_writer_keeps_experiment_output_inside_transcript():
     assert seen == ["first", "second"]
 
 
+def test_labelled_cycle_parser_accepts_user_edited_cycle():
+    assert IntegratedCursesSetupApp._parse_cycle_labels("400, 800,1600,3200") == [
+        400, 800, 1600, 3200
+    ]
+
+
+@pytest.mark.parametrize(
+    "raw, message",
+    [
+        ("800", "at least two"),
+        ("800,800", "distinct"),
+        ("800,0", "positive"),
+    ],
+)
+def test_labelled_cycle_parser_rejects_invalid_cycle(raw, message):
+    with pytest.raises(ValueError, match=message):
+        IntegratedCursesSetupApp._parse_cycle_labels(raw)
+
+
 def test_button_capture_resolves_same_physical_mouse(monkeypatch):
     selected = MouseDevice(
         "Titan", "/dev/input/event-old", phys="usb-1/titan", vendor=0x1234,
