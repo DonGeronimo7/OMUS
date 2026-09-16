@@ -111,6 +111,18 @@ def _render_guided_learning(learned) -> str:
         f"Action-specific raw-trigger candidates: {len(learned.discriminative_trigger_candidates)}",
     ]
 
+    if learned.discriminative_trigger_candidates:
+        lines.append("Action-specific raw locations:")
+        for candidate in learned.discriminative_trigger_candidates:
+            roles = learned.descriptor_roles.get(
+                (candidate.report_key, candidate.offset),
+                ("unknown",),
+            )
+            lines.append(
+                f"  report={candidate.report_key!r} byte={candidate.offset} "
+                f"observations={candidate.observations} descriptor={','.join(roles)}"
+            )
+
     if learned.hypotheses:
         lines.append("Semantic hypotheses:")
         for hypothesis in learned.hypotheses:

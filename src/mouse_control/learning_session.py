@@ -8,7 +8,8 @@ fields. It never contains a HID write operation.
 Known native teachers may optionally provide semantic ground truth before and
 after each action. When no teacher exists, contrastive control captures provide
 negative evidence: raw activity that also occurs during ordinary mouse use is
-not allowed to masquerade as the guided vendor-specific action.
+not allowed to masquerade as the guided vendor-specific action. HID report
+descriptors provide independent structural context for each candidate byte.
 """
 
 from __future__ import annotations
@@ -29,7 +30,10 @@ from .event_correlation import (
     detect_repeated_report_transitions,
     diff_feature_snapshots,
 )
-from .hid_descriptor import ParsedHidDescriptor
+from .hid_descriptor import (
+    ParsedHidDescriptor,
+    fields_overlapping_wire_byte,
+)
 from .hid_probe import ReadOnlyHidProbe
 from .protocol_grammar import SemanticBehavior
 from .semantic_inference import (
@@ -40,6 +44,7 @@ from .semantic_inference import (
 
 
 TeacherReader = Callable[[], Mapping[str, object]]
+CandidateLocation = tuple[object, int]
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,7 @@ class LearningResult:
     control_samples: tuple[LearningSample, ...] = ()
     control_trigger_candidates: tuple[CorrelationCandidate, ...] = ()
     discriminative_trigger_candidates: tuple[CorrelationCandidate, ...] = ()
+    descriptor_roles: Mapping[CandidateLocation, tuple[str, ...]] = field(default_factory=dict)
 
 
 class ReadOnlyLearningSession:
@@ -113,8 +119,67 @@ class ReadOnlyLearningSession:
         return None
 
     @staticmethod
-    def _candidate_location(candidate: CorrelationCandidate) -> tuple[object, int]:
+    def _candidate_location(candidate: CorrelationCandidate) -> CandidateLocation:
         return candidate.report_key, candidate.offset
+
+    def _descriptor_for_report_key(
+        self,
+        report_key: object,
+    ) -> tuple[ParsedHidDescriptor, str, int] | None:
+        """Resolve one stable raw-report key back to its parsed HID descriptor."""
+
+        if not isinstance(report_key, tuple) or len(report_key) < 8:
+            return None
+        report_type = report_key[0]
+        if report_type not in {"input", "output", "feature"}:
+            return None
+        bus, vendor_id, product_id, interface_number, descriptor_sha256 = report_key[1:6]
+        report_id = report_key[-1]
+        if not isinstance(report_id, int):
+            return None
+        for node, descriptor in self.descriptors.items():
+            if (
+                node.bus,
+                node.vendor_id,
+                node.product_id,
+                node.interface_number,
+                node.descriptor_sha256,
+            ) == (
+                bus,
+                vendor_id,
+                product_id,
+                interface_number,
+                descriptor_sha256,
+            ):
+                return descriptor, str(report_type), report_id
+        return None
+
+    def descriptor_roles_for_candidate(
+        self,
+        candidate: CorrelationCandidate,
+    ) -> tuple[str, ...]:
+        """Describe the Linux HID fields overlapping a raw candidate byte.
+
+        Roles are structural only: pointer, button, consumer, vendor, padding,
+        report_id, undeclared, or unknown. In particular, ``vendor`` never means
+        DPI; it only means the descriptor used a vendor-defined usage page.
+        """
+
+        resolved = self._descriptor_for_report_key(candidate.report_key)
+        if resolved is None:
+            return ("unknown",)
+        descriptor, report_type, report_id = resolved
+        if report_id and candidate.offset == 0:
+            return ("report_id",)
+        fields = fields_overlapping_wire_byte(
+            descriptor,
+            report_type=report_type,
+            report_id=report_id,
+            byte_offset=candidate.offset,
+        )
+        if not fields:
+            return ("undeclared",)
+        return tuple(sorted({field.role for field in fields}))
 
     def snapshot_features(self) -> dict[tuple[object, ...], bytes]:
         """Read every descriptor-declared Feature report that permits GET_FEATURE."""
@@ -257,6 +322,10 @@ class ReadOnlyLearningSession:
             for candidate in trigger_candidates
             if self._candidate_location(candidate) not in control_locations
         )
+        descriptor_roles = {
+            self._candidate_location(candidate): self.descriptor_roles_for_candidate(candidate)
+            for candidate in trigger_candidates
+        }
 
         stage_hypotheses = [
             *infer_stage_hypotheses(feature_candidates),
@@ -321,6 +390,7 @@ class ReadOnlyLearningSession:
             control_samples=controls,
             control_trigger_candidates=control_trigger_candidates,
             discriminative_trigger_candidates=discriminative_trigger_candidates,
+            descriptor_roles=descriptor_roles,
         )
 
     @classmethod

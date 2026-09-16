@@ -1,7 +1,14 @@
 """Regression tests for teacher-free contrastive guided learning."""
 
-from mouse_control.discovery_models import PhysicalDevice
-from mouse_control.event_correlation import PhysicalAction, TimedReport
+from pathlib import Path
+
+from mouse_control.discovery_models import DeviceNode, PhysicalDevice
+from mouse_control.event_correlation import (
+    CorrelationCandidate,
+    PhysicalAction,
+    TimedReport,
+)
+from mouse_control.hid_descriptor import parse_report_descriptor
 from mouse_control.learning_session import LearningSample, ReadOnlyLearningSession
 from mouse_control.protocol_grammar import SemanticBehavior
 
@@ -128,3 +135,39 @@ def test_one_control_is_not_enough_for_teacher_free_validation():
         and hypothesis.confidence == "validated"
         for hypothesis in learned.hypotheses
     )
+
+
+def test_candidate_gets_linux_descriptor_role_from_stable_stream_identity():
+    node = DeviceNode(
+        path=Path("/dev/hidraw9"),
+        sysfs_path=None,
+        subsystem="hidraw",
+        node_type="hidraw",
+        bus=3,
+        vendor_id=0x1234,
+        product_id=0x5678,
+        interface_number=1,
+        descriptor_sha256="descriptor-sha",
+    )
+    physical = PhysicalDevice(
+        "Unknown Mouse",
+        0x1234,
+        0x5678,
+        3,
+        None,
+        hidraw_nodes=[node],
+        model_fingerprint="model",
+    )
+    descriptor = parse_report_descriptor(
+        bytes.fromhex("06 00 FF 85 02 75 08 95 03 81 02")
+    )
+    session = ReadOnlyLearningSession(physical, {node: descriptor})
+    candidate = CorrelationCandidate(
+        report_key=("input", 3, 0x1234, 0x5678, 1, "descriptor-sha", 4, 2),
+        offset=2,
+        observations=3,
+        values=(0, 1),
+        transitions=((0, 1), (0, 1), (0, 1)),
+    )
+
+    assert session.descriptor_roles_for_candidate(candidate) == ("vendor",)
