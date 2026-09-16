@@ -1,9 +1,13 @@
 """Semantic-only teachers for generic protocol learning.
 
-Teachers are answer keys, never protocol implementations.  They may expose
+Teachers are answer keys, never protocol implementations. They may expose
 confirmed device semantics such as current DPI, polling rate or battery state,
 but they cannot expose packet bytes, report offsets, feature indexes, command
 IDs or write primitives to the generic learner.
+
+Vendor protocol implementations live behind this boundary. In particular,
+Razer teaching uses mouse-control's native Razer protocol reader and has no
+runtime dependency on OpenRazer, its daemon, D-Bus service or Python client.
 """
 
 from __future__ import annotations
@@ -100,7 +104,12 @@ BackendFactory = Callable[[], object]
 
 
 class _BackendTeacher:
-    """Read-only adapter over an already-proven mouse-control backend."""
+    """Read-only adapter over an already-proven mouse-control backend.
+
+    This remains appropriate for HID++ because mouse-control already owns that
+    native protocol backend. Third-party runtime backends must not be used as
+    teacher dependencies.
+    """
 
     name = "backend"
     backend_name = "Hardware"
@@ -204,10 +213,10 @@ class _BackendTeacher:
 
 
 class HidppTeacher(_BackendTeacher):
-    """Semantic teacher backed by the native HID++ implementation."""
+    """Semantic teacher backed by mouse-control's native HID++ implementation."""
 
     name = "hidpp"
-    backend_name = "Native HID"
+    backend_name = "Native HID++"
     vendor_ids = frozenset({0x046D})
 
     # The G305 is the current locally exercised teacher reference. Other
@@ -227,18 +236,45 @@ class HidppTeacher(_BackendTeacher):
         return TeacherTrust.READ_VERIFIED
 
 
-class OpenRazerTeacher(_BackendTeacher):
-    """Semantic teacher backed by exact VID:PID OpenRazer matching."""
+class NativeRazerTeacher:
+    """Semantic teacher backed only by mouse-control's native Razer reader."""
 
-    name = "openrazer"
-    backend_name = "OpenRazer"
+    name = "razer"
+    backend_name = "Native Razer protocol"
     vendor_ids = frozenset({0x1532})
-    default_trust = TeacherTrust.READ_VERIFIED
 
-    def _make_backend(self):
-        from .hardware.openrazer import OpenRazerBackend
+    def __init__(self, reader: Callable[[MouseDevice], object | None] | None = None) -> None:
+        self._reader = reader
 
-        return OpenRazerBackend()
+    def read_state(self, device: MouseDevice) -> TeacherState | None:
+        if device.vendor not in self.vendor_ids:
+            return None
+
+        reader = self._reader
+        if reader is None:
+            from .native_razer import read_native_razer_state
+
+            reader = read_native_razer_state
+
+        semantic = reader(device)
+        if semantic is None:
+            return None
+
+        state = TeacherState(
+            dpi=getattr(semantic, "dpi", None),
+            polling_rate=getattr(semantic, "polling_rate", None),
+            battery=getattr(semantic, "battery", None),
+            charging=getattr(semantic, "charging", None),
+            firmware=getattr(semantic, "firmware", None),
+            model=getattr(semantic, "model", None),
+            provenance=TeacherProvenance(
+                teacher=self.name,
+                backend=self.backend_name,
+                trust=TeacherTrust.READ_VERIFIED,
+                device_identity=(device.bustype, device.vendor, device.product),
+            ),
+        )
+        return state if state.labels() else None
 
 
 class TeacherRegistry:
@@ -246,7 +282,7 @@ class TeacherRegistry:
 
     def __init__(self, adapters: Sequence[TeacherAdapter] | None = None) -> None:
         self.adapters: tuple[TeacherAdapter, ...] = tuple(
-            adapters if adapters is not None else (HidppTeacher(), OpenRazerTeacher())
+            adapters if adapters is not None else (HidppTeacher(), NativeRazerTeacher())
         )
 
     def read_all(self, device: MouseDevice) -> tuple[TeacherState, ...]:

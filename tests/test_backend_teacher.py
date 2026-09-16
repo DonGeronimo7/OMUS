@@ -4,7 +4,7 @@ from dataclasses import fields
 
 from mouse_control.backend_teacher import (
     HidppTeacher,
-    OpenRazerTeacher,
+    NativeRazerTeacher,
     TeacherProvenance,
     TeacherRegistry,
     TeacherState,
@@ -13,6 +13,7 @@ from mouse_control.backend_teacher import (
 )
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware.capabilities import BatteryState, DpiState
+from mouse_control.native_razer import NativeRazerState
 
 
 class FakeBackend:
@@ -66,6 +67,16 @@ def g305():
     )
 
 
+def razer():
+    return MouseDevice(
+        "Razer Viper V3 Pro",
+        "/dev/input/event20",
+        vendor=0x1532,
+        product=0x00C1,
+        bustype=3,
+    )
+
+
 def test_hidpp_teacher_reads_semantics_only_and_marks_local_proven():
     backend = FakeBackend()
     state = HidppTeacher(backend_factory=lambda: backend).read_state(g305())
@@ -84,6 +95,45 @@ def test_hidpp_teacher_reads_semantics_only_and_marks_local_proven():
     assert state.provenance.trust is TeacherTrust.LOCAL_PROVEN
     assert backend.closed is True
     assert backend.write_calls == 0
+
+
+def test_native_razer_teacher_uses_native_reader_semantics_only():
+    calls = []
+
+    def reader(device):
+        calls.append(device)
+        return NativeRazerState(
+            model="Viper V3 Pro",
+            firmware="1.12",
+            dpi=(1600, 1600),
+            polling_rate=1000,
+            battery=90,
+            charging=False,
+        )
+
+    state = NativeRazerTeacher(reader=reader).read_state(razer())
+
+    assert calls == [razer()]
+    assert state is not None
+    assert state.labels() == {
+        "dpi": 1600,
+        "polling_rate": 1000,
+        "battery": 90,
+        "charging": False,
+        "firmware": "1.12",
+        "model": "Viper V3 Pro",
+    }
+    assert state.provenance is not None
+    assert state.provenance.teacher == "razer"
+    assert state.provenance.backend == "Native Razer protocol"
+    assert state.provenance.trust is TeacherTrust.READ_VERIFIED
+
+
+def test_native_razer_teacher_rejects_non_razer_before_reader():
+    calls = []
+    state = NativeRazerTeacher(reader=lambda _device: calls.append(True)).read_state(g305())
+    assert state is None
+    assert calls == []
 
 
 def test_teacher_state_has_no_protocol_escape_hatch():
@@ -115,14 +165,6 @@ def test_teacher_state_has_no_protocol_escape_hatch():
         "firmware",
         "model",
     }
-
-
-def test_openrazer_teacher_rejects_non_razer_before_constructing_backend():
-    constructed = []
-    teacher = OpenRazerTeacher(backend_factory=lambda: constructed.append(True))
-    state = teacher.read_state(g305())
-    assert state is None
-    assert constructed == []
 
 
 class StaticTeacher:
