@@ -7,7 +7,12 @@ import os
 import sys
 
 from .discovery import get_mouse_devices, select_mouse_device
-from .sensor_calibration import CalibrationError, capture_evdev_motion, measure_sensor_state
+from .sensor_calibration import (
+    CalibrationError,
+    capture_evdev_motion,
+    measure_sensor_state,
+    measure_sensor_state_auto,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -28,9 +33,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--axis",
-        choices=("x", "y"),
-        default="x",
-        help="ruler axis used for the measurement (default: x)",
+        choices=("auto", "x", "y"),
+        default="auto",
+        help="Linux relative axis to measure; default auto selects the dominant motion axis",
     )
     parser.add_argument(
         "--window",
@@ -75,9 +80,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"evdev source: {mouse.path} -> {resolved_path}")
     print(
         f"Place the mouse against a ruler. After pressing Enter, move it exactly "
-        f"{args.distance_mm:g} mm ({inches:g} in) along the {args.axis.upper()} axis in one "
-        "direction, then stop. Do not press the DPI button during this pass."
+        f"{args.distance_mm:g} mm ({inches:g} in) in one straight direction, then stop. "
+        "Do not press the DPI button during this pass."
     )
+    if args.axis == "auto":
+        print("Mouse Control will determine which Linux relative axis carries the movement.")
+    else:
+        print(f"Diagnostic override: measuring REL_{args.axis.upper()} explicitly.")
     print(
         "Calibration will exclusively grab this physical evdev stream during the capture. "
         "If mouse-control is currently remapping it, stop the service first."
@@ -86,20 +95,24 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         events = capture_evdev_motion(mouse.path, seconds=args.window, exclusive=True)
-        result = measure_sensor_state(
-            events,
-            distance_mm=args.distance_mm,
-            axis=args.axis,
-        )
+        if args.axis == "auto":
+            result = measure_sensor_state_auto(events, distance_mm=args.distance_mm)
+        else:
+            result = measure_sensor_state(
+                events,
+                distance_mm=args.distance_mm,
+                axis=args.axis,
+            )
     except (CalibrationError, OSError, PermissionError) as exc:
         print(f"Calibration failed: {exc}", file=sys.stderr)
         return 1
 
     print("\nMeasured sensor state")
     print("---------------------")
-    print(f"Raw {args.axis.upper()} net counts: {result.net_counts}")
-    print(f"Raw {args.axis.upper()} path counts: {result.path_counts}")
-    other_axis = "Y" if args.axis == "x" else "X"
+    print(f"Detected motion axis: REL_{result.axis.upper()}")
+    print(f"Raw {result.axis.upper()} net counts: {result.net_counts}")
+    print(f"Raw {result.axis.upper()} path counts: {result.path_counts}")
+    other_axis = "Y" if result.axis == "x" else "X"
     print(f"Cross-axis {other_axis} path counts: {result.cross_axis_counts}")
     print(f"Movement straightness: {result.straightness * 100:.1f}%")
     print(f"Estimated DPI: {result.estimated_dpi:.1f} (~{result.rounded_dpi})")
@@ -112,11 +125,6 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Observed peak polling: {result.peak_polling_hz:.1f} Hz "
             f"(~{result.standard_polling_hz} Hz)"
-        )
-    if result.cross_axis_counts > result.path_counts:
-        print(
-            "Diagnostic: cross-axis motion exceeded the requested-axis motion. "
-            "Retry with --axis y if the physical ruler movement maps to REL_Y on this stream."
         )
     print("Vendor protocol used: none")
     return 0
