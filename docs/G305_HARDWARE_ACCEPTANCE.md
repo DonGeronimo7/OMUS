@@ -1,7 +1,7 @@
 # Logitech G305 core hardware acceptance
 
 Run this checklist on the USB Logitech G305 Lightspeed receiver
-(`0003:046d:4074`) after installing the stabilization branch. These checks are
+(`0003:046d:4074`) after installing v0.9.0 or a release candidate built from its release commit. These checks are
 intentionally physical and are not claimed by the automated suite.
 
 ## Preparation
@@ -91,43 +91,27 @@ cycling, remapping, keyboard mappings, notifications, and battery reporting all
 return. Review the journal for rollback failures, ambiguity refusals, reader
 errors, or repeated reconnect loops before accepting the branch.
 
-## Resume after the 2026-09-15 polling-choice blocker
+## Historical note — 2026-09-15 polling-choice blocker (resolved)
 
-The initial doctor checkpoint passed, but the first `1000 -> 500 Hz` step
-stopped at "Report-rate changes are unavailable", before any polling write.
-Investigation found `/usr/bin/mouse-control` loading the older system package
-from `/usr/lib/python3.14/site-packages/mouse_control`, not this checkout.
-Both report version `0.8.1`; a branch/HEAD check and version number alone do
-not establish which implementation setup is executing.
+The first acceptance attempt was blocked before any polling write because the
+interactive command resolved to an older installed 0.8.1 package rather than
+the development checkout. That environment mismatch is retained here only as
+historical provenance.
 
-The installed driver's discovery cached `writable = (mode == Host)`. Its
-backend forwarded that boolean and had no Onboard -> Host transaction.
-The reviewed checkout already separates protocol capability from the exact
-USB G305 transition policy. Deterministic fixtures reproduce the installed
-failure and exercise the checkout's selectable and verified transaction.
-The actual physical control mode was not captured by this investigation;
-Onboard mode reproduces the observed output, but is not a new physical reading.
+Subsequent controlled testing against the current implementation completed the
+hardware proof required for v0.9.0:
 
-To resume setup against the tested checkout, first run this exact command:
+- report-rate transitions at 1000, 500, 250, and 125 Hz were physically
+  measured and read back;
+- the learned report-rate operation required and passed persistent-session
+  testing;
+- exact rollback to the original state was demonstrated;
+- exact-model learned DPI writes were independently physically verified;
+- Host-mode physical DPI-button press/release traffic was observed separately
+  from transaction replies;
+- the production learned runtime routes that read-only action trigger through
+  the existing configured `DpiCycler` and confirmed write/readback path.
 
-```sh
-PYTHONPATH=/home/mgeronimo/Mouse-control/src python3 -m mouse_control.cli setup
-```
-
-Retain the existing mappings and stages `800, 1500, 2000, 2500, 3000`.
-At Polling rate, confirm current hardware readback is `1000 Hz`, choose
-`2. 500 Hz`, and accept the reviewed configuration. Require the message
-`Hardware polling rate set and verified at 500 Hz through Native HID.`
-If choices remain unavailable or verification fails, stop and preserve the
-error; do not advance to the next rate. No physical rate transition has been
-validated by this engineering session.
-
-Before using ordinary `mouse-control setup` or continuing service/reconnect
-acceptance, install the locally built stabilization package and restart the
-service so both CLI and daemon use it. The source command above selects code
-for that invocation only; it does not upgrade the installed service. A local
-RPM with the same NEVRA as the installed `0.8.1-1` needs a reinstall operation,
-not an ordinary upgrade. Verify the loaded module path and compare the installed
-`hidpp_driver.py` and `hardware/native_hid.py` against this checkout; a shared
-version string is insufficient. Continue `500 -> 250 -> 125 -> 1000` only after
-the first physical transition succeeds, then complete all sections above.
+This historical section is not a current acceptance blocker. Other mouse
+models still require their own exact evidence before any write authority is
+promoted.

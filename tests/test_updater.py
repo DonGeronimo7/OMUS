@@ -2,6 +2,7 @@ from pathlib import Path
 import subprocess
 
 import pytest
+from packaging.version import Version
 
 from mouse_control import updater
 
@@ -12,6 +13,12 @@ def result(code=0, out="", err=""):
 
 def release(version="0.8.0", assets=()):
     return updater.Release(version, tuple(assets))
+
+
+def future_release_version():
+    current = Version(updater.__version__)
+    major, minor, micro = (current.release + (0, 0, 0))[:3]
+    return f"{major}.{minor}.{micro + 1}"
 
 
 def asset(name):
@@ -52,6 +59,11 @@ def test_asset_selection_normalizes_architecture_and_rejects_ambiguity(monkeypat
             asset("mouse-control-0.8.0-2.noarch.rpm"),
         )), ".rpm")
 
+
+
+
+def test_future_release_version_is_newer_than_current():
+    assert updater.is_newer(future_release_version(), updater.__version__)
 
 @pytest.mark.parametrize(("installed", "latest", "expected"), [
     ("0.7.4", "0.8.0", True), ("0.9.9", "0.10.0", True),
@@ -357,7 +369,7 @@ def test_editable_and_unknown_are_never_updated(monkeypatch, capsys):
         install = updater.Installation(kind, Path("/tmp/mouse-control"))
         monkeypatch.setattr(updater, "detect_installation", lambda _, value=install: value)
         monkeypatch.setattr(updater, "_shadowed", lambda _: None)
-        assert updater.run_update(check=False, assume_yes=True, fetcher=lambda: release("0.8.3")) == 1
+        assert updater.run_update(check=False, assume_yes=True, fetcher=lambda: release(future_release_version())) == 1
     assert "cannot be updated automatically" in capsys.readouterr().err
 
 
@@ -410,10 +422,10 @@ def test_successful_update_restarts_only_active_service(monkeypatch):
     monkeypatch.setattr(updater, "is_service_active", lambda: True)
     restarted = []
     monkeypatch.setattr(updater, "restart_service", lambda: restarted.append(True))
-    assert updater.run_update(assume_yes=True, fetcher=lambda: release("0.8.3"), runner=lambda _: result()) == 0
+    assert updater.run_update(assume_yes=True, fetcher=lambda: release(future_release_version()), runner=lambda _: result()) == 0
     assert restarted == [True]
     monkeypatch.setattr(updater, "is_service_active", lambda: False)
-    assert updater.run_update(assume_yes=True, fetcher=lambda: release("0.8.3"), runner=lambda _: result()) == 0
+    assert updater.run_update(assume_yes=True, fetcher=lambda: release(future_release_version()), runner=lambda _: result()) == 0
     assert restarted == [True]
 
 
@@ -423,6 +435,6 @@ def test_failed_service_restart_does_not_claim_install_failed(monkeypatch, capsy
     monkeypatch.setattr(updater, "_shadowed", lambda _: None)
     monkeypatch.setattr(updater, "is_service_active", lambda: True)
     monkeypatch.setattr(updater, "restart_service", lambda: (_ for _ in ()).throw(OSError("no bus")))
-    assert updater.run_update(assume_yes=True, fetcher=lambda: release("0.8.3"), runner=lambda _: result()) == 1
+    assert updater.run_update(assume_yes=True, fetcher=lambda: release(future_release_version()), runner=lambda _: result()) == 1
     output = capsys.readouterr()
     assert "updated successfully" in output.out and "could not be restarted" in output.err

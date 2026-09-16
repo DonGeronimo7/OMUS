@@ -1,6 +1,14 @@
 # Mouse Control Project Status
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
+
+## v0.9.0 release status
+
+Automatic Discovery is now integrated into the production runtime. A single
+protocol-neutral learned HID session can share exact-model PROVEN DPI and
+report-rate transactions with validated read-only physical action events.
+Normal polling reconciliation retains the no-takeover safety boundary, and
+v0.8.2 behavior remains the compatibility contract for future releases.
 
 ## Current architecture
 
@@ -69,13 +77,9 @@ The native session, HID++ transaction, lifecycle, reconnect, notification,
 remapping, configuration, service, and backend behavior use deterministic fixtures and require no
 physical hardware in CI. The Logitech G305 Lightspeed Wireless Gaming Mouse is
 the reference identity for automatic native detection and Host-mode policy.
-The new transactional polling writes, Host-mode physical DPI-event behavior,
-and unified state reconciliation are covered by fixtures but still require the
-physical acceptance procedure in `docs/G305_HARDWARE_ACCEPTANCE.md`. Other
-Logitech devices remain subject to device-specific physical validation.
+The Logitech G305 reference path has completed physical validation for exact-model learned DPI writes, 1000/500/250/125 Hz report-rate changes, persistent-session requirements, exact rollback, and Host-mode physical DPI-button trigger behavior. Deterministic fixtures continue to cover session, reconnect, notification, remapping, configuration, service, and backend behavior without requiring hardware in CI. Other devices still require their own device-specific physical validation.
 
-Future hardware support should supply a capability adapter for an exactly
-identified and validated protocol, then pass the universal behavior suite.
+Future hardware support may supply a validated protocol adapter or promote an exact-model learned operation only after the required proof, then must pass the universal behavior suite.
 Hardware additions should not redesign established remapping, notification,
 lifecycle, or service behavior.
 

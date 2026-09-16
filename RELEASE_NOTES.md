@@ -1,3 +1,47 @@
+# Mouse Control v0.9.0
+
+**Automatic Discovery foundation release**
+
+Mouse Control 0.9.0 moves hardware support onto the Automatic Discovery
+runtime while preserving the complete v0.8.2 remapping, notification,
+reconnect, setup, service, updater, and packaging behavior as a compatibility
+contract.
+
+- Adds protocol-neutral physical-device discovery across matching HID
+  interfaces instead of treating a known vendor backend as the generic
+  backbone.
+- Promotes exact-model learned DPI and report-rate operations only after
+  reversible transaction proof, hardware readback, independent physical
+  verification, and exact rollback. Read evidence alone never grants write
+  authority.
+- Adds a single-reader learned HID session so learned transactions and
+  unsolicited events can safely share one hidraw interface without competing
+  readers.
+- Integrates validated read-only physical action triggers with the existing
+  configured `dpi-cycle` path, confirmed write/readback, and direct DPI
+  notifications.
+- Preserves polling ownership safety: normal startup/reconnect reconciliation
+  never takes Host/software control merely to apply a saved polling rate.
+  Explicit user-requested changes may use only a separately PROVEN reversible
+  takeover branch.
+- Keeps unknown hardware conservative: unsupported devices retain evdev/uinput
+  remapping and read-only discovery evidence until their own exact protocol is
+  safely demonstrated and promoted.
+- The Logitech G305 remains the physically validated reference device for the
+  v0.9.0 learned-runtime path; its write authority is never generalized to
+  other models.
+
+## Known issue
+
+Interactive `mouse-control update` can still wait for package-manager
+confirmation without displaying the prompt. If that occurs, type `y` and press
+Enter, or use `mouse-control update --yes` for the non-interactive path.
+
+The v0.8.2 stability and functionality contract remains a release blocker for
+all future development.
+
+
+---
 # Mouse Control v0.8.2
 
 This stabilization release keeps ordinary evdev/uinput remapping independent

@@ -9,6 +9,5 @@ Rules-Requires-Root: no
 Package: mouse-control
 Architecture: all
 Depends: ${misc:Depends}, ${python3:Depends}, python3-evdev, python3-dbus-next, python3-packaging, udev
-Description: mouse remapping with optional hardware backends
- Headless evdev/uinput mouse remapping with native HID and optional OpenRazer
- hardware controls. Generic remapping remains available without optional backends.
+Description: Linux mouse remapping with Automatic Discovery
+ Automatic Discovery provides conservative exact-model hardware control only after proof; native HID/HID++, optional OpenRazer, and evdev/uinput remapping remain available through their validated paths.

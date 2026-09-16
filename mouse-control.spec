@@ -1,7 +1,7 @@
 Name:           mouse-control
-Version:        0.8.2
+Version:        0.9.0
 Release:        1%{?dist}
-Summary:        Mouse remapping with optional hardware backends
+Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
 Source0:        mouse_control-%{version}.tar.gz
 BuildArch:      noarch
@@ -58,12 +58,10 @@ sed -i '\|__pycache__|d' %{pyproject_files}
 %check
 /usr/bin/python3 -m pytest -q tests
 /usr/bin/python3 -m compileall -q src tests
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
-  %{buildroot}%{_bindir}/mouse-control --help
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
-  %{buildroot}%{_bindir}/mouse-control-discover --help
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
-  %{buildroot}%{_bindir}/mouse-control-sensor-calibrate --help
+for command in mouse-control mouse-control-discover mouse-control-sensor-calibrate mouse-control-write-trace mouse-control-write-promote mouse-control-discovery-monitor mouse-control-polling-promote; do
+  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
+    %{buildroot}%{_bindir}/$command --help >/dev/null
+done
 
 %files -f %{pyproject_files}
 %license LICENSE
@@ -72,11 +70,18 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_bindir}/mouse-control
 %{_bindir}/mouse-control-discover
 %{_bindir}/mouse-control-sensor-calibrate
+%{_bindir}/mouse-control-write-trace
+%{_bindir}/mouse-control-write-promote
+%{_bindir}/mouse-control-discovery-monitor
+%{_bindir}/mouse-control-polling-promote
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
-
 %changelog
+* Wed Sep 16 2026 Marc-Anthony Geronimo - 0.9.0-1
+- Release Automatic Discovery learned runtime integration.
+- Preserve the v0.8.2 compatibility contract.
+
 * Tue Sep 15 2026 Marc-Anthony Geronimo - 0.8.2-1
 - Stabilize native hardware control and reconnect fallback behavior.
 - Preserve remaps and setup configuration while hardware options are reviewed.

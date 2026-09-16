@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.0 — 2026-09-16
+
+### Automatic Discovery runtime
+
+- Make Automatic Discovery the common hardware surface while keeping ordinary
+  evdev/uinput remapping independent from optional hardware control.
+- Add exact-model learned DPI and report-rate promotion with reversible
+  transactions, readback, physical verification, and rollback requirements.
+- Add one protocol-neutral learned HID reader per interface and route
+  transaction replies and unsolicited events without competing readers.
+- Add validated read-only `DPI_CYCLE_TRIGGER` evidence and integrate it with the
+  existing configured DPI cycler and deliberate notification path.
+- Preserve no-takeover polling reconciliation at startup/reconnect; explicit
+  polling changes may use only a PROVEN reversible ownership transition.
+- Preserve the full v0.8.2 behavior contract across remapping, notifications,
+  reconnect, setup, service/runtime, updater, packaging, and backend APIs.
+
+
+
 ## 0.8.2 — 2026-09-15
 
 - Preserve valid remaps, configurable `dpi-cycle`, untouched DPI/polling

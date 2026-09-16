@@ -1,3 +1,10 @@
+mouse-control (0.9.0-1) unstable; urgency=medium
+
+  * Release the Automatic Discovery runtime and learned exact-model DPI/polling support.
+  * Preserve the v0.8.2 stability and behavior contract.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Wed, 16 Sep 2026 08:00:00 +0000
+
 mouse-control (0.8.2-1) unstable; urgency=medium
 
   * Stabilize native hardware control and reconnect fallback behavior.

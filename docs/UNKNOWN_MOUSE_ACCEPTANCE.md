@@ -53,7 +53,7 @@ sudo env PYTHONPATH="$PWD/src" python -m mouse_control.discovery_cli \
     --verbose
 ```
 
-For an installed v1 package the equivalent command is:
+For an installed package (v0.9.0 or later) the equivalent command is:
 
 ```fish
 sudo mouse-control-discover \

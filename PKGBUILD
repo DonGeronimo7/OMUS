@@ -1,7 +1,7 @@
 pkgname=mouse-control
-pkgver=0.8.2
+pkgver=0.9.0
 pkgrel=1
-pkgdesc='Headless evdev/uinput mouse remapping with optional hardware backends'
+pkgdesc='Linux mouse remapping with Automatic Discovery and validated hardware control'
 arch=('any')
 url='https://github.com/DonGeronimo7/mouse-control'
 license=('GPL-3.0-or-later')

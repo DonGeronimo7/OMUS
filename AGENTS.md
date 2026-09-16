@@ -45,9 +45,7 @@ failed hardware backend must never prevent ordinary remapping from starting.
   erase report-rate, battery, button, or other independently proven support.
 - Discovery profiles must be path-independent and may cache only proven facts;
   runtime backends still enforce their own write policy.
-- Do not make automatic discovery part of `mouse-control run` or setup until
-  the G305 physical acceptance test validates topology grouping and exactly one
-  protocol responder.
+- Automatic Discovery may participate in runtime/setup only through an unambiguous physical binding and independently PROVEN exact-model operations. Read-only evidence never grants write authority.
 
 ## Current backend policy
 
@@ -62,6 +60,8 @@ failed hardware backend must never prevent ordinary remapping from starting.
 
 ## Development workflow
 
+- Treat every green architectural milestone as a checkpoint: run the full gate, commit it, push it, and start the next architectural layer from a clean tree.
+- Keep at most one architectural layer dirty at a time. If a corrective patch itself needs another corrective patch, stop and consolidate from the last known-good checkpoint instead of stacking more patches.
 - Read `docs/AI_HANDOFF_PROTOCOL.md` before beginning implementation work.
 - Read `docs/PROJECT_STATUS.md` before changing hardware architecture.
 - Read the latest entry in `docs/AI_HANDOFF_LOG.md` when it exists.
