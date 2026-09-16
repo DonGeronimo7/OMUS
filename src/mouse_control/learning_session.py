@@ -124,6 +124,17 @@ class ReadOnlyLearningSession:
                 os.close(fd)
         return tuple(readable), tuple(skipped)
 
+    def hidraw_access_report(self) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+        """Report passive capture access for every correlated hidraw sibling.
+
+        Full-evidence discovery uses this as a preflight invariant: privilege is
+        allowed to increase visibility, but the learner must never silently
+        claim a complete capture when one of the selected mouse's HID siblings
+        could not be opened.
+        """
+
+        return self._readable_hidraw_paths()
+
     def observe_action(
         self,
         *,
