@@ -401,16 +401,23 @@ class CursesSetupApp:
             )
 
         try:
+            self.controller.backend.close()
+        except Exception:
+            pass
+
+        try:
             status = int(self._suspend_curses(execute))
         except (OSError, PermissionError, ValueError, HardwareError) as exc:
-            self.controller.status = f"Discovery lab failed: {exc}"
+            self.controller.refresh_discovery_backend(status=f"Discovery lab failed: {exc}")
             return
+
         if status == 0:
-            self.controller.refresh_discovery_backend(status=f"✓ {spec.label} completed; capabilities refreshed.")
+            message = f"✓ {spec.label} completed; capabilities refreshed."
         elif status == 130:
-            self.controller.status = f"{spec.label} cancelled."
+            message = f"{spec.label} cancelled; capabilities refreshed."
         else:
-            self.controller.refresh_discovery_backend(status=f"{spec.label} did not produce new PROVEN authority (exit {status}).")
+            message = f"{spec.label} did not produce new PROVEN authority (exit {status}); capabilities refreshed."
+        self.controller.refresh_discovery_backend(status=message)
 
     def _read_text(self, title: str, *, hint: str = "") -> str | None:
         value = ""
