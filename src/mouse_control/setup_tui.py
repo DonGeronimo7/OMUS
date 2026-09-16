@@ -393,17 +393,16 @@ class SetupController:
                 DisplayRow("Press Enter on a device in the left pane to bind it."),
             ]
         if self.section is SetupSection.HARDWARE:
-            rows = [DisplayRow("Automatic Discovery — complete evidence ladder")]
-            rows.extend(DisplayRow(line) for line in self.hardware_lines())
-            rows.extend((
-                DisplayRow(""),
+            rows = [
+                DisplayRow("Automatic Discovery — complete evidence ladder"),
                 DisplayRow("OBSERVE → CORRELATE → VALIDATE → PROVE", dim=True),
-                DisplayRow("Read-only measurement is never write authority.", dim=True),
-                DisplayRow("Write labs remain guarded and may refuse unsafe/incomplete evidence.", dim=True),
+                DisplayRow("Read-only evidence never grants write authority.", dim=True),
                 DisplayRow(""),
-            ))
+            ]
             for index, (_kind, label, _payload) in enumerate(self.hardware_actions()):
                 rows.append(DisplayRow(label, index))
+            rows.extend((DisplayRow(""), DisplayRow("Detected capabilities", dim=True)))
+            rows.extend(DisplayRow(line) for line in self.hardware_lines())
             return rows
         if self.section is SetupSection.BUTTONS:
             return [
