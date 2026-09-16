@@ -7,8 +7,13 @@ from mouse_control.sensor_calibration import (
     REL_X,
     SYN_REPORT,
     measure_sensor_state_auto,
+    summarize_calibrations,
 )
-from mouse_control.sensor_calibration_cli import _polling_consensus, _weaker_confidence
+from mouse_control.sensor_calibration_cli import (
+    _cpi_consistency,
+    _polling_consensus,
+    _weaker_confidence,
+)
 
 
 def _sample(*, rate: int | None):
@@ -49,6 +54,53 @@ def test_polling_consensus_is_low_without_standard_rate_evidence():
 
     assert rate is None
     assert matches == 0
+    assert confidence == "low"
+
+
+def test_cpi_consistency_is_high_when_all_passes_cluster_tightly():
+    base = _sample(rate=1000)
+    results = (
+        replace(base, estimated_dpi=1490.0),
+        replace(base, estimated_dpi=1500.0),
+        replace(base, estimated_dpi=1510.0),
+    )
+    summary = summarize_calibrations(results)
+
+    worst, spread, confidence = _cpi_consistency(results, summary)
+
+    assert worst < 0.01
+    assert spread < 0.02
+    assert confidence == "high"
+
+
+def test_cpi_consistency_downgrades_one_outlier_hidden_by_small_mad():
+    base = _sample(rate=1000)
+    results = (
+        replace(base, estimated_dpi=1412.0),
+        replace(base, estimated_dpi=1528.6),
+        replace(base, estimated_dpi=1562.0),
+    )
+    summary = summarize_calibrations(results)
+
+    worst, spread, confidence = _cpi_consistency(results, summary)
+
+    assert summary.confidence == "high"
+    assert worst > 0.05
+    assert spread > 0.08
+    assert confidence == "medium"
+
+
+def test_cpi_consistency_is_low_for_large_disagreement():
+    base = _sample(rate=1000)
+    results = (
+        replace(base, estimated_dpi=800.0),
+        replace(base, estimated_dpi=1000.0),
+        replace(base, estimated_dpi=1300.0),
+    )
+    summary = summarize_calibrations(results)
+
+    _, _, confidence = _cpi_consistency(results, summary)
+
     assert confidence == "low"
 
 
