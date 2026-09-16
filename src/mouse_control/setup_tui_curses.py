@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from evdev import InputDevice, ecodes
 
+from . import __version__
 from .device_topology import TopologyError
 from .guided_discovery import GuidedDiscoveryCancelled, GuidedStep, run_guided_discovery
 from .hardware import HardwareError
@@ -16,10 +17,130 @@ from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
 from .wizard import ButtonCaptureError, get_button_name
 
 
+def _dpi_number(value: Any) -> int | None:
+    if value is None:
+        return None
+    if hasattr(value, "display_value"):
+        value = value.display_value
+    if isinstance(value, tuple):
+        value = value[0]
+    return int(value)
+
+
+class DpiEditSession:
+    """One reversible DPI-stage edit with separate live-test and accept phases."""
+
+    def __init__(self, controller: SetupController, index: int) -> None:
+        self.controller = controller
+        self.index = index
+        self.candidate = int(controller.choices.stages[index])
+        self.tested_value: int | None = None
+        self.original_hardware = self._read_current()
+        if self.original_hardware is None:
+            self.original_hardware = controller.choices.original_dpi
+
+    def _read_current(self) -> int | None:
+        try:
+            return _dpi_number(self.controller.backend.get_dpi(self.controller.selected))
+        except (HardwareError, OSError, TypeError, ValueError, AttributeError):
+            return None
+
+    def _validate(self, requested: int) -> bool:
+        choices = self.controller.choices
+        if not choices.dpi_writable:
+            self.controller.status = "Live DPI tuning is unavailable for this mouse."
+            return False
+        values = choices.dpi_values
+        if not values:
+            self.controller.status = "The mouse did not report safe DPI values for live tuning."
+            return False
+        if requested not in values:
+            self.controller.status = (
+                f"{requested} DPI is unsupported; choose a hardware-reported value "
+                f"between {values[0]} and {values[-1]}."
+            )
+            return False
+        return True
+
+    def test_live(self, requested: int) -> bool:
+        """Write and verify a candidate without changing the staged config."""
+        if not self._validate(requested):
+            return False
+        try:
+            result = self.controller.backend.set_dpi(self.controller.selected, requested)
+            confirmed = _dpi_number(result)
+            if confirmed is None:
+                confirmed = self._read_current()
+            if confirmed != requested:
+                self.controller.status = (
+                    f"Mouse reported {confirmed} DPI; {requested} DPI was not accepted."
+                )
+                return False
+        except (HardwareError, OSError, TypeError, ValueError) as exc:
+            self.controller.status = f"Could not test DPI: {exc}"
+            return False
+        self.candidate = requested
+        self.tested_value = requested
+        self.controller.status = (
+            f"Testing {requested} DPI live. Move the mouse; accept it only if it feels right."
+        )
+        return True
+
+    def set_to_current(self) -> int | None:
+        """Read the mouse's current verified DPI into the candidate field."""
+        current = self._read_current()
+        if current is None:
+            self.controller.status = "Could not read the mouse's current DPI."
+            return None
+        if not self._validate(current):
+            return None
+        self.candidate = current
+        self.tested_value = current
+        self.controller.status = f"Candidate set to the mouse's current {current} DPI."
+        return current
+
+    def accept(self, requested: int | None = None) -> bool:
+        """Explicitly commit a verified candidate to the setup stage."""
+        target = self.candidate if requested is None else int(requested)
+        if self.tested_value != target and not self.test_live(target):
+            return False
+        self.candidate = target
+        self.controller.choices.stages[self.index] = target
+        if self.index == 0:
+            self.controller.choices.active_dpi = target
+        self.controller.choices.dpi_changed = True
+        self.controller.status = f"Stage {self.index + 1} accepted at {target} DPI."
+        return True
+
+    def cancel(self) -> None:
+        """Discard the edit and restore the hardware DPI active on entry."""
+        if self.original_hardware is None:
+            self.controller.status = "DPI edit cancelled; staged configuration was unchanged."
+            return
+        try:
+            self.controller.backend.set_dpi(self.controller.selected, self.original_hardware)
+            self.controller.status = (
+                "DPI edit cancelled; staged configuration was unchanged and the previous "
+                "hardware DPI was restored."
+            )
+        except (HardwareError, OSError, TypeError, ValueError) as exc:
+            self.controller.status = (
+                "DPI edit cancelled; staged configuration was unchanged, but the previous "
+                f"hardware DPI could not be restored: {exc}"
+            )
+
+
 class CursesSetupApp:
+    """Yazi-inspired curses renderer around the pure setup controller."""
+
     def __init__(self, controller: SetupController) -> None:
         self.controller = controller
         self.stdscr = None
+        self._highlight = curses.A_REVERSE
+        self._ok = curses.A_BOLD
+        self._accent = curses.A_BOLD
+        self._warn = 0
+        self._muted = curses.A_DIM
 
     @staticmethod
     def _put(window, y: int, x: int, text: str, width: int, attr: int = 0) -> None:
@@ -31,57 +152,155 @@ class CursesSetupApp:
         except curses.error:
             pass
 
+    def _init_colors(self) -> None:
+        if not curses.has_colors():
+            return
+        try:
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
+            curses.init_pair(2, curses.COLOR_GREEN, -1)
+            curses.init_pair(3, curses.COLOR_CYAN, -1)
+            curses.init_pair(4, curses.COLOR_YELLOW, -1)
+            self._highlight = curses.color_pair(1) | curses.A_BOLD
+            self._ok = curses.color_pair(2) | curses.A_BOLD
+            self._accent = curses.color_pair(3) | curses.A_BOLD
+            self._warn = curses.color_pair(4)
+        except curses.error:
+            # Monochrome/reverse-video defaults remain fully usable.
+            pass
+
+    def _line_attr(self, text: str, *, selected: bool = False, dim: bool = False) -> int:
+        if selected:
+            return self._highlight
+        if dim:
+            return self._muted
+        if text.startswith("✓"):
+            return self._ok
+        if text.startswith("?"):
+            return self._warn
+        return 0
+
+    @staticmethod
+    def _device_identity(device: Any) -> str:
+        parts: list[str] = []
+        if device.vendor is not None and device.product is not None:
+            parts.append(f"{device.vendor:04x}:{device.product:04x}")
+        if device.path:
+            parts.append(str(device.path))
+        return "   ".join(parts)
+
     def _draw(self) -> None:
         assert self.stdscr is not None
         stdscr = self.stdscr
         height, width = stdscr.getmaxyx()
         stdscr.erase()
-        if height < 18 or width < 72:
-            self._put(stdscr, 1, 2, "Mouse Control — Setup", max(0, width - 4), curses.A_BOLD)
-            self._put(stdscr, 3, 2, "Terminal is too small. Resize to at least 72×18.", max(0, width - 4))
-            self._put(stdscr, max(0, height - 2), 2, "q Cancel   ? Help", max(0, width - 4), curses.A_REVERSE)
+
+        if height < 20 or width < 80:
+            self._put(stdscr, 1, 2, f"Mouse Control — Setup v{__version__}", max(0, width - 4), curses.A_BOLD)
+            self._put(
+                stdscr,
+                3,
+                2,
+                "Terminal is too small. Resize to at least 80×20.",
+                max(0, width - 4),
+            )
+            self._put(
+                stdscr,
+                max(0, height - 2),
+                2,
+                "q Cancel   ? Help",
+                max(0, width - 4),
+                self._highlight,
+            )
             stdscr.refresh()
             return
 
-        header = " Mouse Control — Setup "
-        self._put(stdscr, 0, 2, header, width - 4, curses.A_BOLD)
-        tabs = "  ".join(
-            (f"[{section.value}]" if section is self.controller.section else section.value)
-            for section in SECTIONS
+        sidebar = max(22, min(28, width // 4))
+        self._put(
+            stdscr,
+            0,
+            2,
+            f" Mouse Control — Setup v{__version__} ",
+            width - 4,
+            curses.A_BOLD,
         )
-        self._put(stdscr, 1, 2, tabs, width - 4, curses.A_BOLD)
-
-        left = max(24, min(32, width // 3))
-        split = left
         try:
-            stdscr.vline(2, split, curses.ACS_VLINE, height - 5)
+            stdscr.vline(1, sidebar, curses.ACS_VLINE, height - 4)
             stdscr.hline(height - 3, 0, curses.ACS_HLINE, width)
         except curses.error:
             pass
-        self._put(stdscr, 3, 2, "Devices", left - 4, curses.A_BOLD)
-        for index, device in enumerate(self.controller.devices):
-            prefix = "▶ " if index == self.controller.selected_index else "  "
-            attr = curses.A_REVERSE if (
-                self.controller.section is SetupSection.DEVICE
-                and index == self.controller.device_cursor
-            ) else 0
-            self._put(stdscr, 5 + index, 2, prefix + device.name, left - 4, attr)
 
-        self._put(stdscr, 3, split + 2, self.controller.section.value, width - split - 4, curses.A_BOLD)
-        y = 5
-        for row in self.controller.detail_rows():
-            if y >= height - 4:
-                break
-            attr = curses.A_DIM if row.dim else 0
-            if row.cursor_index is not None and row.cursor_index == self.controller.row_cursor:
-                attr |= curses.A_REVERSE
-            self._put(stdscr, y, split + 2, row.text, width - split - 4, attr)
+        for index, section in enumerate(SECTIONS):
+            label = f" {index + 1}. {section.value} "
+            self._put(
+                stdscr,
+                2 + index,
+                1,
+                label,
+                sidebar - 2,
+                self._highlight if section is self.controller.section else 0,
+            )
+
+        x = sidebar + 2
+        content_width = width - x - 2
+        self._put(stdscr, 2, x, self.controller.section.value, content_width, self._accent)
+        y = 4
+
+        if self.controller.section is SetupSection.DEVICE:
+            self._put(stdscr, y, x, "Select a device", content_width, curses.A_BOLD)
             y += 1
+            self._put(
+                stdscr,
+                y,
+                x,
+                "Choose the mouse you want to configure.",
+                content_width,
+                self._muted,
+            )
+            y += 2
+            for index, device in enumerate(self.controller.devices):
+                if y >= height - 5:
+                    break
+                selected = index == self.controller.device_cursor
+                bound = index == self.controller.selected_index
+                prefix = "●" if bound else "○"
+                name = f" {prefix}  {device.name}"
+                self._put(
+                    stdscr,
+                    y,
+                    x,
+                    name,
+                    content_width,
+                    self._line_attr(name, selected=selected),
+                )
+                y += 1
+                identity = self._device_identity(device)
+                if identity:
+                    self._put(stdscr, y, x, f"    {identity}", content_width, self._muted)
+                y += 2
+        else:
+            for row in self.controller.detail_rows():
+                if y >= height - 4:
+                    break
+                selected = (
+                    row.cursor_index is not None
+                    and row.cursor_index == self.controller.row_cursor
+                )
+                self._put(
+                    stdscr,
+                    y,
+                    x,
+                    row.text,
+                    content_width,
+                    self._line_attr(row.text, selected=selected, dim=row.dim),
+                )
+                y += 1
 
         status = self.controller.status or self.controller.notice
-        self._put(stdscr, height - 2, 1, f" {status} ", width - 2)
+        self._put(stdscr, height - 2, 1, f" {status} ", width - 2, self._accent)
         footer = " Enter Select/Edit   ↑↓ Navigate   ←→ Sections   b Back   q Quit   ? Help "
-        self._put(stdscr, height - 1, 0, footer, width, curses.A_REVERSE)
+        self._put(stdscr, height - 1, 0, footer, width, self._highlight)
         stdscr.refresh()
 
     def _modal(self, title: str, lines: list[str], *, prompt: str = "Enter Continue   b Back") -> None:
@@ -95,7 +314,10 @@ class CursesSetupApp:
             return
         y0 = max(0, (height - box_h) // 2)
         x0 = max(0, (width - box_w) // 2)
-        win = curses.newwin(box_h, box_w, y0, x0)
+        try:
+            win = curses.newwin(box_h, box_w, y0, x0)
+        except curses.error:
+            return
         win.erase()
         try:
             win.box()
@@ -104,31 +326,19 @@ class CursesSetupApp:
         self._put(win, 1, 2, title, box_w - 4, curses.A_BOLD)
         for index, line in enumerate(lines[: box_h - 5]):
             self._put(win, 3 + index, 2, line, box_w - 4)
-        self._put(win, box_h - 2, 2, prompt, box_w - 4, curses.A_REVERSE)
+        self._put(win, box_h - 2, 2, prompt, box_w - 4, self._highlight)
         win.refresh()
 
     def _confirm(self, title: str, lines: list[str], *, yes="Enter Confirm", no="b Back") -> bool:
         while True:
             self._modal(title, lines, prompt=f"{yes}   {no}")
             key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
             if key in (10, 13, curses.KEY_ENTER):
                 return True
             if key in (27, ord("b"), ord("B"), ord("q"), ord("Q")):
                 return False
-
-    def _read_number(self, title: str, initial: int) -> int | None:
-        value = str(initial)
-        while True:
-            self._modal(title, [f"Value: {value or ' '}"], prompt="Digits Type   Enter Test/Accept   Esc Cancel")
-            key = self.stdscr.getch()
-            if key in (10, 13, curses.KEY_ENTER):
-                return int(value) if value else None
-            if key == 27:
-                return None
-            if key in (curses.KEY_BACKSPACE, 127, 8):
-                value = value[:-1]
-            elif ord("0") <= key <= ord("9") and len(value) < 6:
-                value += chr(key)
 
     def _show_help(self) -> None:
         self._confirm(
@@ -215,6 +425,8 @@ class CursesSetupApp:
                 prompt="Type action   Enter Accept   Esc Cancel",
             )
             key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
             if key in (10, 13, curses.KEY_ENTER):
                 value = value.strip()
                 return value or None
@@ -245,6 +457,8 @@ class CursesSetupApp:
             ]
             self._modal("Choose button action", lines, prompt="↑↓ Navigate   Enter Select   Esc Cancel")
             key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
             if key == curses.KEY_UP:
                 cursor = (cursor - 1) % len(options)
             elif key == curses.KEY_DOWN:
@@ -289,12 +503,11 @@ class CursesSetupApp:
                 device.close()
             raise ButtonCaptureError(f"Could not reserve the mouse for button capture: {exc}") from exc
 
-        old_nodelay = False
+        nodelay_enabled = False
         try:
             self.stdscr.nodelay(True)
-            old_nodelay = True
-            done = False
-            while not done:
+            nodelay_enabled = True
+            while True:
                 self._modal(
                     "Button mapping",
                     [
@@ -304,6 +517,8 @@ class CursesSetupApp:
                     prompt="Enter Finish   Esc Finish",
                 )
                 key = self.stdscr.getch()
+                if key == curses.KEY_RESIZE:
+                    continue
                 if key in (10, 13, curses.KEY_ENTER, 27):
                     break
                 try:
@@ -324,7 +539,7 @@ class CursesSetupApp:
                     break
                 curses.napms(20)
         finally:
-            if old_nodelay:
+            if nodelay_enabled:
                 self.stdscr.nodelay(False)
             try:
                 device.ungrab()
@@ -332,14 +547,154 @@ class CursesSetupApp:
                 pass
             device.close()
 
+    def _draw_dpi_editor(self, session: DpiEditSession, value: str, action_cursor: int) -> None:
+        assert self.stdscr is not None
+        stdscr = self.stdscr
+        height, width = stdscr.getmaxyx()
+        if height < 16 or width < 56:
+            stdscr.erase()
+            self._put(stdscr, 1, 2, "DPI editor paused", max(0, width - 4), curses.A_BOLD)
+            self._put(
+                stdscr,
+                3,
+                2,
+                "Resize the terminal to at least 56×16 to continue.",
+                max(0, width - 4),
+            )
+            stdscr.refresh()
+            return
+
+        box_w = min(width - 6, 72)
+        box_h = min(height - 4, 16)
+        y0 = max(1, (height - box_h) // 2)
+        x0 = max(2, (width - box_w) // 2)
+        try:
+            win = curses.newwin(box_h, box_w, y0, x0)
+        except curses.error:
+            return
+        win.erase()
+        try:
+            win.box()
+        except curses.error:
+            pass
+
+        self._put(win, 1, 2, f"DPI Configuration — Stage {session.index + 1}", box_w - 4, self._accent)
+        self._put(
+            win,
+            3,
+            2,
+            f"Accepted stage value: {self.controller.choices.stages[session.index]} DPI",
+            box_w - 4,
+        )
+        self._put(win, 4, 2, f"Candidate DPI:       {value or ' '}", box_w - 4, curses.A_BOLD)
+        if session.tested_value is not None:
+            self._put(
+                win,
+                5,
+                2,
+                f"Live test:           {session.tested_value} DPI",
+                box_w - 4,
+                self._ok,
+            )
+        else:
+            self._put(win, 5, 2, "Live test:           not tested", box_w - 4, self._muted)
+
+        actions = ("Test live", "Accept value", "Set to current", "Cancel")
+        for index, label in enumerate(actions):
+            prefix = "▶ " if index == action_cursor else "  "
+            self._put(
+                win,
+                7 + index,
+                2,
+                prefix + label,
+                box_w - 4,
+                self._highlight if index == action_cursor else 0,
+            )
+        self._put(
+            win,
+            box_h - 2,
+            2,
+            "Type DPI   ↑↓ Action   Enter Run   Esc Cancel",
+            box_w - 4,
+            self._muted,
+        )
+        win.refresh()
+
+    def _dpi_editor(self, index: int) -> None:
+        session = DpiEditSession(self.controller, index)
+        value = str(session.candidate)
+        editing_started = False
+        action_cursor = 0
+
+        while True:
+            self._draw_dpi_editor(session, value, action_cursor)
+            key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
+            if key in (27, ord("b"), ord("B"), ord("q"), ord("Q")):
+                session.cancel()
+                return
+            if key == curses.KEY_UP:
+                action_cursor = (action_cursor - 1) % 4
+                continue
+            if key == curses.KEY_DOWN:
+                action_cursor = (action_cursor + 1) % 4
+                continue
+            if key in (curses.KEY_BACKSPACE, 127, 8):
+                if not editing_started:
+                    value = ""
+                    editing_started = True
+                else:
+                    value = value[:-1]
+                session.tested_value = None
+                continue
+            if ord("0") <= key <= ord("9"):
+                if not editing_started:
+                    value = ""
+                    editing_started = True
+                if len(value) < 6:
+                    value += chr(key)
+                    session.tested_value = None
+                continue
+            if key not in (10, 13, curses.KEY_ENTER):
+                continue
+
+            requested = int(value) if value else None
+            if action_cursor == 0:
+                if requested is None:
+                    self.controller.status = "Enter a DPI value to test."
+                elif session.test_live(requested):
+                    value = str(session.candidate)
+                    editing_started = False
+            elif action_cursor == 1:
+                if requested is None:
+                    self.controller.status = "Enter a DPI value to accept."
+                elif session.accept(requested):
+                    return
+            elif action_cursor == 2:
+                current = session.set_to_current()
+                if current is not None:
+                    value = str(current)
+                    editing_started = False
+            else:
+                session.cancel()
+                return
+
     @staticmethod
     def _symbolic_key(key: int) -> str | None:
         mapping = {
-            curses.KEY_UP: "UP", curses.KEY_DOWN: "DOWN",
-            curses.KEY_LEFT: "LEFT", curses.KEY_RIGHT: "RIGHT",
-            10: "ENTER", 13: "ENTER", curses.KEY_ENTER: "ENTER",
-            27: "ESC", ord("b"): "BACK", ord("B"): "BACK",
-            ord("q"): "QUIT", ord("Q"): "QUIT",
+            curses.KEY_UP: "UP",
+            curses.KEY_DOWN: "DOWN",
+            curses.KEY_LEFT: "LEFT",
+            curses.KEY_RIGHT: "RIGHT",
+            10: "ENTER",
+            13: "ENTER",
+            curses.KEY_ENTER: "ENTER",
+            27: "ESC",
+            ord("b"): "BACK",
+            ord("B"): "BACK",
+            ord("q"): "QUIT",
+            ord("Q"): "QUIT",
             ord("?"): "HELP",
         }
         return mapping.get(key)
@@ -347,10 +702,12 @@ class CursesSetupApp:
     def run(self, stdscr) -> bool:
         self.stdscr = stdscr
         stdscr.keypad(True)
+        self._init_colors()
         try:
             curses.curs_set(0)
         except curses.error:
             pass
+
         while True:
             self._draw()
             key = stdscr.getch()
@@ -360,21 +717,20 @@ class CursesSetupApp:
             if symbolic is None:
                 continue
             action = self.controller.handle_key(symbolic)
+
             if action.kind is ActionKind.HELP:
                 self._show_help()
             elif action.kind is ActionKind.CANCEL:
                 if self._confirm(
                     "Cancel setup?",
-                    ["Existing configuration will remain unchanged.", "Temporary DPI tests will be restored."],
+                    [
+                        "Existing configuration will remain unchanged.",
+                        "Temporary DPI tests will be restored.",
+                    ],
                 ):
                     return False
             elif action.kind is ActionKind.EDIT_DPI:
-                index = int(action.payload)
-                requested = self._read_number(
-                    f"Edit DPI stage {index + 1}", self.controller.choices.stages[index]
-                )
-                if requested is not None:
-                    self.controller.set_dpi_value(index, requested)
+                self._dpi_editor(int(action.payload))
             elif action.kind is ActionKind.CAPTURE_BUTTONS:
                 try:
                     self._button_editor()
