@@ -321,11 +321,14 @@ class ReadOnlyLearningSession:
         *,
         behavior: SemanticBehavior,
     ) -> tuple[SemanticHypothesis, ...]:
-        """Validate a raw trigger when the teacher independently confirms DPI moved.
+        """Validate the semantic action without claiming a unique raw byte.
 
-        The teacher proves only the semantic transition. It never identifies
-        which raw byte carries the event, and this method never invents a raw
-        DPI value when the device exposes only a momentary trigger.
+        The native teacher independently proves that the guided physical action
+        changed DPI. Raw report candidates remain correlated evidence underneath
+        that semantic event until additional observations establish which field
+        or report is the actual protocol encoding. This separation prevents a
+        teacher from turning every co-changing byte into a supposedly proven
+        packet location.
         """
 
         transitions: list[tuple[int, int]] = []
@@ -336,24 +339,21 @@ class ReadOnlyLearningSession:
                 continue
             transitions.append((before, after))
 
-        if len(transitions) < 2 or any(before == after for before, after in transitions):
+        if (
+            not candidates
+            or len(transitions) < 2
+            or any(before == after for before, after in transitions)
+        ):
             return ()
 
-        result: list[SemanticHypothesis] = []
-        for candidate in candidates:
-            if candidate.observations < 2 or len(candidate.values) < 2:
-                continue
-            result.append(
-                SemanticHypothesis(
-                    behavior=behavior,
-                    confidence="validated",
-                    reason=(
-                        f"momentary raw transition repeated in {candidate.observations} guided samples "
-                        f"while the native teacher independently confirmed DPI changed in "
-                        f"{len(transitions)} before/after action pairs"
-                    ),
-                    report_key=candidate.report_key,
-                    offset=candidate.offset,
-                )
-            )
-        return tuple(result)
+        return (
+            SemanticHypothesis(
+                behavior=behavior,
+                confidence="validated",
+                reason=(
+                    f"guided action produced {len(candidates)} correlated raw trigger candidate(s) "
+                    f"while the native teacher independently confirmed DPI changed in "
+                    f"{len(transitions)} before/after action pairs; raw locations remain candidates"
+                ),
+            ),
+        )
