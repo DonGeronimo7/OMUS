@@ -12,6 +12,7 @@ from mouse_control.sensor_calibration import (
 from mouse_control.sensor_calibration_cli import (
     _cpi_consistency,
     _polling_consensus,
+    _robust_cpi_subset,
     _weaker_confidence,
 )
 
@@ -102,6 +103,53 @@ def test_cpi_consistency_is_low_for_large_disagreement():
     _, _, confidence = _cpi_consistency(results, summary)
 
     assert confidence == "low"
+
+
+def test_three_passes_never_discard_a_possible_outlier():
+    base = _sample(rate=1000)
+    results = (
+        replace(base, estimated_dpi=1628.0),
+        replace(base, estimated_dpi=2035.0),
+        replace(base, estimated_dpi=2042.0),
+    )
+
+    used, rejected = _robust_cpi_subset(results)
+
+    assert used == results
+    assert rejected == ()
+
+
+def test_fourth_consistent_pass_can_confirm_and_reject_one_clear_outlier():
+    base = _sample(rate=1000)
+    results = (
+        replace(base, estimated_dpi=1628.0),
+        replace(base, estimated_dpi=2035.0),
+        replace(base, estimated_dpi=2042.0),
+        replace(base, estimated_dpi=2040.0),
+    )
+
+    used, rejected = _robust_cpi_subset(results)
+
+    assert [round(sample.estimated_dpi) for sample in used] == [2035, 2042, 2040]
+    assert [round(sample.estimated_dpi) for sample in rejected] == [1628]
+    summary = summarize_calibrations(used)
+    _, _, confidence = _cpi_consistency(used, summary)
+    assert confidence == "high"
+
+
+def test_robust_subset_does_not_hide_genuine_split_behavior():
+    base = _sample(rate=1000)
+    results = (
+        replace(base, estimated_dpi=1600.0),
+        replace(base, estimated_dpi=1650.0),
+        replace(base, estimated_dpi=2000.0),
+        replace(base, estimated_dpi=2050.0),
+    )
+
+    used, rejected = _robust_cpi_subset(results)
+
+    assert used == results
+    assert rejected == ()
 
 
 def test_overall_confidence_uses_the_weaker_dimension():
