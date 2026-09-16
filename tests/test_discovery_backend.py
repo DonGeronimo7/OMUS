@@ -106,7 +106,9 @@ def test_discovery_backend_reuses_calibrated_read_mapping_without_write_authorit
     device = MouseDevice("G305", "/dev/input/test", vendor=0x046D, product=0x4074, bustype=3)
 
     assert backend.supports_device(device)
-    assert backend.supports_dpi(device)
+    # supports_dpi() is the historical writable-control contract. Learned
+    # profiles expose DPI through capabilities/events without becoming writable.
+    assert not backend.supports_dpi(device)
     assert backend.supports_dpi_events(device)
     assert not backend.supports_dpi_monitoring(device)
     assert backend.get_dpi_values(device) == [800, 1500, 2000, 2500, 3000]
