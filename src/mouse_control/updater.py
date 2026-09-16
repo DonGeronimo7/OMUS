@@ -60,8 +60,19 @@ def is_newer(latest: str, installed: str) -> bool:
         raise UpdateError(f"Unsupported release version: {exc}") from exc
 
 
-def _run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+def _run_capture(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    """Run a command whose stdout/stderr Mouse Control must inspect."""
     return subprocess.run(args, text=True, capture_output=True, **kwargs)  # type: ignore[arg-type]
+
+
+def _run_interactive(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    """Run a terminal-owned command with inherited stdin/stdout/stderr."""
+    return subprocess.run(args, text=True, **kwargs)  # type: ignore[arg-type]
+
+
+def _run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    """Compatibility alias for captured query commands."""
+    return _run_capture(args, **kwargs)
 
 
 def running_executable(argv0: str | None = None) -> Path:
@@ -217,7 +228,7 @@ def _sudo(command: list[str]) -> list[str]:
     return ["sudo", *command]
 
 
-def _installed_package_version(installation: Installation, run: Callable) -> str | None:
+def _installed_package_version(installation: Installation, run_capture: Callable) -> str | None:
     """Return the installed upstream version, or ``None`` when unverified.
 
     RPM's VERSION field deliberately excludes its packaging release.  Debian
@@ -228,7 +239,7 @@ def _installed_package_version(installation: Installation, run: Callable) -> str
     command = (['rpm', '-q', '--qf', '%{VERSION}\\n', package]
                if installation.kind == 'rpm'
                else ['dpkg-query', '-W', '-f=${Version}\\n', package])
-    result = run(command)
+    result = run_capture(command)
     if result.returncode:
         return None
     version = result.stdout.strip()
@@ -238,8 +249,9 @@ def _installed_package_version(installation: Installation, run: Callable) -> str
     return version or None
 
 
-def _package_is_current(installation: Installation, release: Release, run: Callable) -> bool:
-    installed = _installed_package_version(installation, run)
+def _package_is_current(installation: Installation, release: Release,
+                        run_capture: Callable) -> bool:
+    installed = _installed_package_version(installation, run_capture)
     if installed is None:
         return False
     try:
@@ -248,20 +260,45 @@ def _package_is_current(installation: Installation, release: Release, run: Calla
         return False
 
 
-def _package_update(installation: Installation, release: Release, run: Callable = _run,
-                    assume_yes: bool = False) -> None:
+def _package_error(result: subprocess.CompletedProcess[str]) -> str:
+    """Return captured diagnostics when available, otherwise a safe generic error."""
+    stderr = getattr(result, "stderr", None) or ""
+    stdout = getattr(result, "stdout", None) or ""
+    return stderr.strip() or stdout.strip() or "Package manager did not install the requested release."
+
+
+def _package_update(installation: Installation, release: Release,
+                    run: Callable | None = None, assume_yes: bool = False, *,
+                    run_capture: Callable | None = None,
+                    run_interactive: Callable | None = None) -> None:
+    # ``run`` is retained as a compatibility injection point for existing tests
+    # and callers. Production code leaves it unset and uses distinct captured
+    # and terminal-owned execution paths.
+    if run is not None:
+        run_capture = run_capture or run
+        run_interactive = run_interactive or run
+    run_capture = run_capture or _run_capture
+    run_interactive = run_interactive or _run_interactive
     if installation.kind == "arch":
         raise UpdateError("This pacman-owned installation is not updated automatically. Update it using the package source that installed it.")
     manager = "dnf" if installation.kind == "rpm" else "apt"
     if not shutil.which(manager):
         raise UpdateError(f"{manager} is unavailable; package-owned files were not changed.")
     package = installation.package or "mouse-control"
-    # First let the enabled native repository perform a normal upgrade.
-    native = _sudo([manager, "upgrade", *(["--assumeyes"] if assume_yes else []), package] if manager == "dnf"
-                   else [manager, "install", "--only-upgrade", package])
-    run(native)
-    if _package_is_current(installation, release, run):
+    yes_args = (["--assumeyes"] if manager == "dnf" else ["--yes"]) if assume_yes else []
+
+    if not assume_yes:
+        print(f"\nStarting {manager.upper()}.\nReview the transaction below before approving it.", flush=True)
+
+    # First let the enabled native repository perform a normal upgrade. Package
+    # manager transactions inherit the user's terminal; only follow-up version
+    # queries are captured for programmatic verification.
+    native = _sudo([manager, "upgrade", *yes_args, package] if manager == "dnf"
+                   else [manager, "install", "--only-upgrade", *yes_args, package])
+    run_interactive(native)
+    if _package_is_current(installation, release, run_capture):
         return
+
     # A direct GitHub package can be upgraded safely through the same manager.
     suffix = ".rpm" if installation.kind == "rpm" else ".deb"
     asset = select_asset(release, suffix)
@@ -271,16 +308,15 @@ def _package_update(installation: Installation, release: Release, run: Callable 
         if destination.parent != Path(directory).resolve():
             raise UpdateError("Release asset destination escaped its temporary directory.")
         artifact = _download(asset, destination)
-        command = [manager, "install", *(["--assumeyes"] if installation.kind == "rpm" and assume_yes else []),
-                   str(artifact)]
-        result = run(_sudo(command))
+        command = [manager, "install", *yes_args, str(artifact)]
+        result = run_interactive(_sudo(command))
     if installation.kind == "rpm":
-        installed_current = _package_is_current(installation, release, run)
+        installed_current = _package_is_current(installation, release, run_capture)
     else:
-        installed_current = not result.returncode and _package_is_current(installation, release, run)
+        installed_current = not result.returncode and _package_is_current(
+            installation, release, run_capture)
     if not installed_current:
-        raise UpdateError(result.stderr.strip() or result.stdout.strip()
-                          or "Package manager did not install the requested release.")
+        raise UpdateError(_package_error(result))
 
 
 def _appimage_update(installation: Installation, release: Release, opener: Callable = urlopen) -> None:
@@ -309,7 +345,8 @@ def _shadowed(executable: Path) -> Path | None:
 
 
 def run_update(*, check: bool = False, assume_yes: bool = False, executable: Path | None = None,
-               fetcher: Callable[[], Release] = fetch_latest, runner: Callable = _run,
+               fetcher: Callable[[], Release] = fetch_latest, runner: Callable = _run_capture,
+               interactive_runner: Callable | None = None,
                input_func: Callable[[str], str] = input, opener: Callable = urlopen) -> int:
     installation = detect_installation(executable)
     shadow = _shadowed(installation.executable)
@@ -351,13 +388,21 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
         active = False
     try:
         if installation.kind in {"rpm", "deb", "arch"}:
-            _package_update(installation, release, runner, assume_yes=assume_yes)
+            package_interactive_runner = interactive_runner
+            if package_interactive_runner is None:
+                package_interactive_runner = (_run_interactive if runner is _run_capture
+                                              else runner)
+            _package_update(installation, release, assume_yes=assume_yes,
+                            run_capture=runner, run_interactive=package_interactive_runner)
         elif installation.kind == "appimage":
             _appimage_update(installation, release, opener)
         elif installation.kind == "pip":
             result = runner([sys.executable, "-m", "pip", "install", "--upgrade", "mouse-control"])
             if result.returncode:
                 raise UpdateError(result.stderr.strip() or "pip update failed.")
+    except KeyboardInterrupt:
+        print("\nUpdate cancelled.")
+        return 0
     except UpdateError as exc:
         print(f"Update failed. Your existing installation was not manually replaced.\nReason: {exc}", file=sys.stderr)
         return 1
