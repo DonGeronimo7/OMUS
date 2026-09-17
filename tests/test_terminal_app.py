@@ -18,12 +18,12 @@ class TtyBuffer(io.StringIO):
         return True
 
 
-def test_no_argument_interactive_dispatches_to_home_screen(monkeypatch):
+def test_no_argument_interactive_dispatches_to_tui_setup(monkeypatch):
     monkeypatch.setattr(cli.sys, "stdin", TtyBuffer())
     monkeypatch.setattr(cli.sys, "stdout", TtyBuffer())
-    with patch.object(cli, "run_home_screen", return_value=0) as home:
+    with patch.object(cli, "run_setup_wizard", return_value=0) as setup:
         assert cli.main([]) == 0
-    home.assert_called_once_with()
+    setup.assert_called_once_with()
 
 
 def test_explicit_command_bypasses_home_screen():

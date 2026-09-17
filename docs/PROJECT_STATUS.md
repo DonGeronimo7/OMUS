@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-17
 
+## TUI-only interactive setup
+
+The full-screen setup TUI is the sole supported interactive setup experience.
+Both `mouse-control` in a terminal and `mouse-control setup` route directly to
+the same TUI transaction, as do retained home-screen setup choices. Redirected
+or programmatic CLI setup is rejected before curses is imported or invoked;
+it never falls back to the retired line-oriented prompt wizard. The legacy
+routing alias, prompt flow, action menus, and setup-only compatibility tests
+have been removed. Runtime/configuration APIs remain available independently
+for noninteractive operation.
+
 ## v0.9.3 release preparation
 
 The accepted Automatic Discovery checkpoint is

@@ -1,5 +1,17 @@
 # AI handoff log
 
+## 2026-09-17 — TUI-only setup routing
+
+- Removed the `_LEGACY_SETUP`/TTY fallback and the superseded line-oriented
+  setup implementation, prompt screens, action menus, and stale tests.
+- Interactive `mouse-control`, explicit `mouse-control setup`, and home-screen
+  setup routes now select the same full-screen TUI transaction.
+- Noninteractive setup exits before curses is invoked and does not resurrect
+  an old UI. Configuration/runtime APIs remain separate for automation.
+- Focused setup/entry/native-HID suite passed 103 tests. Full validation passed
+  626 tests with one existing GLib deprecation warning; compileall and diff
+  whitespace checks passed.
+
 ## 2026-09-17 — v0.9.3 installed production and reconnect acceptance
 
 - The locally built Fedora 44 RPM upgraded the installed package from 0.9.1 to

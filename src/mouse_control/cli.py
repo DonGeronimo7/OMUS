@@ -21,9 +21,7 @@ from .notifications import DpiMonitorSupervisor
 from .battery import BatteryMonitorSupervisor
 from .hidpp_debug import debug_dpi
 from .generic_hid import capture_input_reports, discover_hid_devices
-from .wizard import ButtonCaptureError, map_mouse_buttons
-from .setup_flow import (SetupChoices, discover_choices, restore_dpi, dpi_screen,
-                         polling_screen, review_screen)
+from .setup_flow import SetupChoices
 
 from .service import (install_service, is_service_active, start_service, stop_service,
                       restart_service, status_service, ServiceNotInstalled)
@@ -226,268 +224,24 @@ def run_support(*, guided: bool = False) -> int:
     return 0
 
 
-def _choose_default_dpi(backend: HardwareBackend, device: MouseDevice) -> tuple[list[int], int]:
-    """Use the project's preferred DPI stages, adapting only when hardware rejects them."""
-    try:
-        supported = backend.get_dpi_values(device)
-    except HardwareError as exc:
-        print(f"{backend.name} DPI query unavailable: {exc}")
-        return DEFAULT_DPI_STAGES, DEFAULT_DPI
-
-    print(f"\nDefault DPI stages: {', '.join(map(str, DEFAULT_DPI_STAGES))}")
-    if supported:
-        print(f"Mouse-reported DPI values: {', '.join(map(str, supported))}")
-        unsupported = [value for value in DEFAULT_DPI_STAGES if value not in supported]
-        if unsupported:
-            print(
-                "Note: the mouse does not currently report all preferred stages; "
-                "available hardware slots will be used where possible."
-            )
-    return DEFAULT_DPI_STAGES, DEFAULT_DPI
-
-def _select_max_polling_rate(backend: HardwareBackend, device: MouseDevice) -> int | None:
-    """Select the highest reported rate for subsequent application."""
-    try:
-        supported = backend.get_polling_rates(device)
-        current = backend.get_polling_rate(device)
-    except HardwareError as exc:
-        print(f"{backend.name} polling-rate query unavailable: {exc}")
-        return None
-
-    if not supported:
-        print(f"No supported polling rates were reported by {backend.name}.")
-        return current
-
-    maximum = max(supported)
-    print(f"Supported polling rates: {', '.join(str(value) + ' Hz' for value in supported)}")
-    print(f"Selected maximum polling rate for setup: {maximum} Hz")
-    print("The wizard will report separately whether the hardware write is verified.")
-    return maximum
-
-def _ask_enable_service() -> bool:
-    """Ask whether mouse-control should start automatically at login."""
-    while True:
-        answer = input(
-            "\nEnable Mouse Control to run automatically at login? [Y/n]: "
-        ).strip().lower()
-
-        if answer in ("", "y", "yes"):
-            return True
-
-        if answer in ("n", "no"):
-            return False
-
-        print("Please enter Y or N.")
-
-
 def run_setup_wizard() -> int:
-    print_banner()
-    print(style("Mouse Control Setup Wizard", "purple"))
-    print("Automatic Discovery enabled; proven protocol adapters and learned hardware evidence are reused when available.")
-    was_active = is_service_active()
-    service_restored = False
-    selected = None
-    backend = None
-    choices = None
-    saved = False
-    if was_active:
-        print("Mouse Control background service is running.")
-        print("Temporarily stopping it for setup...")
-        try:
-            stop_service()
-        except Exception as exc:
-            print(f"Could not stop the background service: {exc}", file=sys.stderr)
-            return 1
+    """Run the sole supported interactive setup UI.
 
-    try:
-        mice = get_mouse_devices()
-        if not mice:
-            print("No mouse devices found. Check input permissions.")
-            return 1
-
-        selected = select_mouse_device(mice)
-        if selected is None:
-            print("Setup cancelled.")
-            return 0
-
-        print(f"\nSelected: {selected.name}")
-        backend = get_backend(selected)
-        try:
-            hardware_name = backend.get_device_name(selected)
-            if hardware_name and hardware_name != selected.name:
-                identity = (f" [{selected.vendor:04x}:{selected.product:04x}]"
-                            if selected.vendor is not None and selected.product is not None else "")
-                print(f"Hardware name: {hardware_name}{identity}")
-        except HardwareError as exc:
-            logging.info("Hardware name lookup unavailable: %s", exc)
-        existing_config = _load_setup_config()
-        choices = _initial_choices(existing_config)
-        discover_choices(backend, selected, choices)
-        page = 'buttons'
-        review_return = False
-        finished = False
-        while not finished:
-            if page == 'buttons':
-                print('\nButton mappings: press buttons to configure; Ctrl+C ends capture.')
-                print('[Enter] Configure buttons  [S] Skip/keep mappings  [B] Back  [Q] Cancel setup')
-                answer = input('> ').strip().lower()
-                if answer == 'q':
-                    break
-                if answer == 'b':
-                    replacement = select_mouse_device(mice)
-                    if replacement is None:
-                        break
-                    if replacement != selected:
-                        restore_dpi(backend, selected, choices.original_dpi)
-                        selected = replacement
-                        backend = get_backend(selected)
-                        choices = _initial_choices(existing_config)
-                        discover_choices(backend, selected, choices)
-                        review_return = False
-                    continue
-                if answer not in ('', 'e', 'edit', 's', 'skip'):
-                    print('Press Enter, S, B, or Q.')
-                    continue
-                if answer in ('', 'e', 'edit'):
-                    choices.mappings.update(map_mouse_buttons(selected.path))
-                page = 'review' if review_return else 'dpi'
-            elif page == 'dpi':
-                action = dpi_screen(backend, selected, choices)
-                if action == 'q':
-                    break
-                page = ('review' if review_return else 'buttons') if action == 'b' else 'review' if review_return else 'polling'
-            elif page == 'polling':
-                action = polling_screen(choices)
-                if action == 'q':
-                    break
-                page = ('review' if review_return else 'dpi') if action == 'b' else 'review' if review_return else 'service'
-            elif page == 'service':
-                print('\nEnable Mouse Control at login?')
-                print('[Enter/Y] Yes  [N] No  [B] Back  [Q] Cancel setup')
-                answer = input('> ').strip().lower()
-                if answer == 'q':
-                    break
-                if answer == 'b':
-                    page = 'polling'
-                elif answer in ('', 'y', 'yes', 'n', 'no'):
-                    choices.enable_service = answer not in ('n', 'no')
-                    page = 'review'
-                else:
-                    print('Choose Y, N, B, or Q.')
-            else:
-                action = review_screen(selected, choices)
-                if action == 'q':
-                    break
-                if action == 'b':
-                    review_return = False
-                    page = 'service'
-                elif action in ('1', '2', '3'):
-                    review_return = True
-                    page = {'1': 'dpi', '2': 'polling', '3': 'buttons'}[action]
-                elif action in ('', 's'):
-                    # review_screen documents Enter as Finish and returns ''.
-                    # Keep 's' accepted for compatibility with any older caller.
-                    finished = True
-                else:
-                    print('Choose S, 1, 2, 3, B, or Q.')
-
-        if not finished:
-            print("Setup cancelled; existing configuration left unchanged.")
-            return 0
-
-        assert selected is not None and backend is not None and choices is not None
-        stages = choices.stages
-        active_dpi = choices.active_dpi
-        polling_rate = choices.polling_rate
-        mappings = choices.mappings
-        enable_service = choices.enable_service
-
-        existing_device = existing_config.get("device", {})
-        if not isinstance(existing_device, dict):
-            existing_device = {}
-        configured_phys = existing_device.get("phys")
-        selected_phys = selected.phys
-        device_changed = (
-            existing_device.get("vendor") != selected.vendor
-            or existing_device.get("product") != selected.product
-            or (
-                bool(configured_phys)
-                and bool(selected_phys)
-                and configured_phys != selected_phys
-            )
+    Redirected and programmatic CLI execution is intentionally rejected before
+    importing curses. Such callers should use configuration/runtime APIs rather
+    than attempting to drive an interactive setup session.
+    """
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print(
+            "Mouse Control setup requires an interactive terminal. "
+            "No legacy prompt fallback is available.",
+            file=sys.stderr,
         )
+        return 2
 
-        existing_dpi = existing_config.get("dpi")
-        dpi_preference_exists = (
-            isinstance(existing_dpi, dict)
-            and "active" in existing_dpi
-            and "stages" in existing_dpi
-        )
-        existing_polling = existing_config.get("polling")
-        polling_preference_exists = (
-            isinstance(existing_polling, dict)
-            and "rate_hz" in existing_polling
-        )
+    from .setup_entry import run_tui_setup_wizard
 
-        apply_dpi = choices.dpi_changed or not dpi_preference_exists or device_changed
-        apply_polling = (
-            choices.polling_changed
-            or not polling_preference_exists
-            or device_changed
-        )
-        _apply_hardware(
-            backend,
-            selected,
-            stages,
-            active_dpi if apply_dpi else 0,
-            polling_rate if apply_polling else None,
-            setup=True,
-        )
-        content = merge_setup_config(
-            existing_config,
-            selected,
-            mappings=mappings,
-            dpi_stages=stages,
-            active_dpi=active_dpi,
-            polling_rate_hz=polling_rate,
-        )
-        path = save_config(content)
-        saved = True
-        print(f"\nConfiguration saved to: {path}")
-
-        if enable_service:
-            try:
-                install_service()
-                service_restored = True
-                print("Mouse Control background service enabled and started.")
-            except Exception as exc:
-                print(f"Warning: could not enable background service: {exc}")
-                print("Your mouse configuration was still saved successfully.")
-        else:
-            print(
-                "Background service not enabled. "
-                "You can enable it later with: mouse-control install-service"
-            )
-        return 0
-    except ButtonCaptureError:
-        print("Setup failed; the existing configuration was not changed.", file=sys.stderr)
-        return 1
-    except KeyboardInterrupt:
-        print("\nSetup cancelled; the existing configuration was not changed.")
-        return 1
-    except Exception as exc:
-        print(f"Setup failed: {exc}", file=sys.stderr)
-        print("The existing configuration was not changed.", file=sys.stderr)
-        return 1
-    finally:
-        if not saved and selected is not None and backend is not None and choices is not None:
-            restore_dpi(backend, selected, choices.original_dpi)
-        if was_active and not service_restored:
-            try:
-                restart_service()
-            except Exception as exc:
-                print(f"Warning: could not restart the background service: {exc}",
-                      file=sys.stderr)
+    return run_tui_setup_wizard()
 
 
 def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
@@ -771,7 +525,7 @@ def main(argv: list[str] | None = None) -> int:
     supplied_argv = sys.argv[1:] if argv is None else argv
     if not supplied_argv:
         if sys.stdin.isatty() and sys.stdout.isatty():
-            return run_home_screen()
+            return run_setup_wizard()
         _build_parser().print_help()
         return 0
 

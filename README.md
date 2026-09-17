@@ -48,6 +48,11 @@ sections for:
 - Service
 - Review / Save
 
+Running `mouse-control` without a command from an interactive terminal opens
+this same TUI immediately. Redirected or otherwise noninteractive setup is
+rejected with a clear error before curses starts; there is no legacy prompt
+wizard fallback.
+
 If the selected mouse already has proven hardware support, setup simply shows
 those capabilities and lets you configure them. If the mouse is unknown,
 setup can offer **Guided Discovery** directly. Users do not need to know HID,
