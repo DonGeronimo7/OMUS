@@ -2,6 +2,36 @@
 
 Last updated: 2026-09-17
 
+## v0.9.3 release preparation
+
+The accepted Automatic Discovery checkpoint is
+`2995cbed24f9cef30ce5e94bfc7c29555e438639`. It includes descriptor-backed
+semantic persistence and exact-member rebinding, teacher-free read-only DPI
+recognition, generation-aware RESYNC/LIVE handling, and independently PROVEN
+exact-model learned transactions. Native HID++, OpenRazer, remapping, polling,
+notifications, reconnect, service behavior, configuration compatibility, and
+the current full-screen TUI remain separate established paths under the v0.8.2
+compatibility baseline.
+
+Automated release-entry validation passes 658 tests with one existing GLib
+deprecation warning. The Fedora 44 RPM upgrades the installed v0.9.1 package to
+v0.9.3 without changing the existing configuration. The installed full-screen
+TUI selects the G305, preserves its remaps, and starts the packaged service from
+`/usr`; production Native HID discovery, 1000 Hz polling, 3000 DPI reconciliation,
+remapping, and one-popup-per-physical-press behavior are physically validated.
+
+Two receiver reconnect cycles recovered the exact G305 evdev identity and
+settled back to the Native HID adapter. RESYNC/rebind emitted zero false DPI
+popups; after the watcher entered LIVE, rapid physical presses produced ordered
+one-for-one notifications with no stale-generation duplicates. The first cycle
+had a minor cursor recovery delay and several transient learned-adapter response
+timeouts before Native HID became available; the service then settled without
+continued generation churn or resource growth. This is a non-blocking lifecycle
+observation, not a new support claim. The existing physical record also
+validates the teacher-free five-stage cycle, wraparound, representative learned
+writes with readback, and conservative SIGMACHIP abstention. Published-asset
+validation remains the final release gate.
+
 ## 2026-09-17 G305 member-level corpus replay
 
 The read-only HID corpus replay path now profiles stable members independently

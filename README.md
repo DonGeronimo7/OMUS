@@ -6,7 +6,7 @@ Open-source Linux gaming mouse remapping and hardware discovery: map mouse
 buttons to keyboard keys, configure proven DPI and polling rates, and safely
 help expand support for new hardware.
 
-[![Current release: v0.9.1](https://img.shields.io/badge/current%20release-v0.9.1-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.1)
+[![Current release: v0.9.3](https://img.shields.io/badge/current%20release-v0.9.3-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.3)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
@@ -22,12 +22,14 @@ polling/report-rate control. Native Logitech HID++ support is built in,
 OpenRazer is optional, and Automatic Discovery can safely gather evidence for
 unknown hardware without guessing write commands.
 
-## Current release: v0.9.1
+## Current release: v0.9.3
 
-The current release is [v0.9.1](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.1).
+The current release is [v0.9.3](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.3).
 
-Mouse Control v0.9.1 makes the safe Automatic Discovery architecture from
-v0.9.0 accessible from the normal setup workflow.
+Mouse Control v0.9.3 promotes the validated Automatic Hardware Discovery
+checkpoint: learned HID state is persisted with descriptor-backed semantic
+identity, rebound conservatively after reconnect, and exposed through the
+normal setup and runtime paths without guessing unknown-device writes.
 
 Run:
 
@@ -82,7 +84,7 @@ remapping remains available.
 
 ## DPI configuration
 
-The v0.9.1 DPI editor separates **live testing** from **accepting** a stage.
+The DPI editor separates **live testing** from **accepting** a stage.
 Choose a DPI stage, enter a candidate value, and test it on the real mouse.
 Moving the mouse at that temporary value does not silently change the staged
 configuration.
@@ -120,19 +122,19 @@ and unrelated hardware features.
 
 ## Get Mouse Control
 
-Release page: [Mouse Control v0.9.1](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.1)
+Release page: [Mouse Control v0.9.3](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.3)
 
-- **Fedora / Nobara / RPM:** [mouse-control-0.9.1-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse-control-0.9.1-1.fc44.noarch.rpm)
-- **Debian / Ubuntu / Mint:** [mouse-control_0.9.1-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse-control_0.9.1-1_all.deb)
-- **Other distributions:** [Mouse-Control-0.9.1-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/Mouse-Control-0.9.1-x86_64.AppImage)
+- **Fedora / Nobara / RPM:** [mouse-control-0.9.3-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control-0.9.3-1.fc44.noarch.rpm)
+- **Debian / Ubuntu / Mint:** [mouse-control_0.9.3-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control_0.9.3-1_all.deb)
+- **Other distributions:** [Mouse-Control-0.9.3-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/Mouse-Control-0.9.3-x86_64.AppImage)
 - **Arch Linux:** included [`PKGBUILD`](PKGBUILD)
-- **Python wheel:** [mouse_control-0.9.1-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse_control-0.9.1-py3-none-any.whl)
-- **Source:** [mouse_control-0.9.1.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.1/mouse_control-0.9.1.tar.gz)
+- **Python wheel:** [mouse_control-0.9.3-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3-py3-none-any.whl)
+- **Source:** [mouse_control-0.9.3.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3.tar.gz)
 
 ### Fedora, Nobara, and other RPM systems
 
 ```bash
-sudo dnf install ./mouse-control-0.9.1-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.9.3-1.fc44.noarch.rpm
 ```
 
 The RPM installs the Python/runtime dependencies, desktop launcher, icons, and
@@ -141,14 +143,14 @@ Mouse Control udev rules. It does not silently enable the background service.
 ### Debian, Ubuntu, Mint, and other DEB systems
 
 ```bash
-sudo apt install ./mouse-control_0.9.1-1_all.deb
+sudo apt install ./mouse-control_0.9.3-1_all.deb
 ```
 
 ### AppImage
 
 ```bash
-chmod +x Mouse-Control-0.9.1-x86_64.AppImage
-./Mouse-Control-0.9.1-x86_64.AppImage setup
+chmod +x Mouse-Control-0.9.3-x86_64.AppImage
+./Mouse-Control-0.9.3-x86_64.AppImage setup
 ```
 
 The AppImage bundles user-space application components but does not replace host
@@ -172,7 +174,7 @@ mouse-control update
 ```
 
 Use `mouse-control update --check` for a non-modifying check and
-`mouse-control update --yes` for a non-interactive update. v0.9.1 restores
+`mouse-control update --yes` for a non-interactive update. v0.9.3 retains
 visible interactive package-manager confirmation input instead of waiting for
 an unseen prompt.
 
@@ -344,8 +346,9 @@ the logged-in desktop user so both applications share the desktop session.
 
 ## Safety and compatibility contract
 
-The v0.9.0 runtime behavior remains the compatibility baseline for v0.9.1 and
-future releases. In particular, development must not regress:
+The complete v0.8.2 stability contract, plus the v0.9.0 runtime behavior and
+v0.9.1 TUI, remains the compatibility baseline for v0.9.3 and future releases.
+In particular, development must not regress:
 
 - ordinary evdev/uinput remapping;
 - keyboard keys and held chords;
@@ -368,9 +371,9 @@ PYTHONPATH=src pytest -q
 python -m compileall -q src tests
 ```
 
-The v0.9.1 development branch reached 526 passing tests on Python 3.12, with the
-full suite and compile checks also passing on Python 3.13 and 3.14 before release
-packaging. Fedora 44 RPM building remains a CI release gate.
+The v0.9.3 release checkpoint passes 658 automated tests with one known GLib
+deprecation warning. Compile and whitespace checks, packaging, physical
+hardware smoke, and published-asset validation remain explicit release gates.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions and hardware reports.
 See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for release-specific details.

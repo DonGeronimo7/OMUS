@@ -1,3 +1,84 @@
+# Mouse Control v0.9.3
+
+## Automatic Hardware Discovery becomes materially functional
+
+Mouse Control 0.9.3 promotes the validated Automatic Hardware Discovery
+checkpoint while preserving the mature v0.8.2 runtime contract and the current
+full-screen setup TUI. Discovery correlates one physical mouse across evdev and
+hidraw, parses its HID descriptor into stable report/field/member identities,
+collects contrastive evidence from real actions, and persists only semantics
+that meet the required evidence level.
+
+For the physically validated G305 acceptance path, the teacher-free runtime can
+rebind the exact persisted descriptor member and recognize the configured DPI
+cycle `800 → 1500 → 2000 → 2500 → 3000 → 800`. Those confirmed read-side states
+flow through the existing `DpiState` and desktop-notification path with the
+native/vendor backend bypassed and generic writes disabled.
+
+## Proven learned transactions
+
+Automatic Discovery can execute an exact-model learned raw-HID transaction only
+after its write semantics have been independently promoted to PROVEN under the
+existing policy. The validated G305 acceptance path uses the shared transaction
+engine, exact write readback, and a matching independent learned read query.
+This is separate from production native Logitech HID++, which remains the
+preferred backend for known Logitech hardware.
+
+## Reconnect and notification continuity
+
+Descriptor-backed profiles do not persist `/dev/hidrawN` as identity. After a
+disconnect, Mouse Control rediscovers the same unambiguous physical device,
+reparses the live replacement descriptor, and rebinds the exact saved semantic
+member. Each replacement watcher establishes a silent RESYNC baseline before it
+enters LIVE notification handling; retired generations cannot emit late events.
+Malformed, changed, or ambiguous replacement identity is refused rather than
+falling back to a raw byte.
+
+## Safety and conservative unknown-device handling
+
+- Unknown HID discovery is read-only.
+- Writes require independently validated, PROVEN, exact-model semantics.
+- Mouse Control does not blindly probe arbitrary HID writes or borrow packets
+  from another device family.
+- Unsupported devices remain remapping-only instead of receiving guessed DPI or
+  polling behavior.
+- Missing optional hardware control never prevents ordinary evdev/uinput
+  remapping from starting.
+
+The SIGMACHIP `1c4f:0048` generalization experiment correctly found ordinary
+mouse traffic but no action-specific DPI evidence and no write semantics. The
+result remained unsupported rather than being converted into a capability
+claim.
+
+## Compatibility
+
+The v0.9.3 release retains native HID++ production behavior, OpenRazer,
+configured DPI stages and software cycling, polling safety policy, one popup per
+real transition, remapping and keyboard chords, reconnect and late insertion,
+configuration preservation, user-service behavior, and the v0.9.1 TUI flow.
+The complete v0.8.2 stability and functionality contract remains the baseline.
+
+## Known limitations
+
+- Some mice expose no host-visible DPI state or control and remain remapping-only.
+- New hardware may require an explicit learning/discovery pass.
+- Write semantics require strong independent evidence; read-side correlation
+  alone never grants write authority.
+- Automatic Discovery cannot manufacture protocol information that a device
+  does not expose.
+- G305 is a hardware validation target for both native HID++ production and
+  learned acceptance; that evidence does not imply universal automatic support
+  for every mouse.
+
+## Downloads
+
+- [RPM: mouse-control-0.9.3-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control-0.9.3-1.fc44.noarch.rpm)
+- [DEB: mouse-control_0.9.3-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control_0.9.3-1_all.deb)
+- [AppImage: Mouse-Control-0.9.3-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/Mouse-Control-0.9.3-x86_64.AppImage)
+- [Wheel: mouse_control-0.9.3-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3-py3-none-any.whl)
+- [Source: mouse_control-0.9.3.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3.tar.gz)
+
+---
 # Mouse Control v0.9.1
 
 ## Setup that hides the protocol machinery

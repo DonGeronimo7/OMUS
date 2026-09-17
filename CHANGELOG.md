@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.9.3 — 2026-09-17
+
+### Descriptor-backed Automatic Hardware Discovery
+
+- Persist learned HID semantics by stable descriptor, report, field, and member
+  identity instead of volatile `/dev/hidrawN` paths, and reparse replacement
+  descriptors before exact-device rebinding.
+- Recognize physically validated DPI stage state through the teacher-free,
+  read-only runtime path and the existing canonical notification pipeline.
+- Execute learned raw-HID transactions only through independently PROVEN,
+  exact-model operations with transaction readback and an independent learned
+  read query.
+- Make reconnect handling generation-aware: replacement watchers establish a
+  silent RESYNC baseline before LIVE notifications, while retired generations
+  cannot emit late events.
+- Expand descriptor/report modeling, semantic candidate generation, contrastive
+  inference, negative controls, guided learning, and reproducible trace evidence.
+
+### Safety and compatibility
+
+- Keep unknown HID discovery read-only. Mouse Control does not blindly probe
+  arbitrary HID writes; unsupported hardware remains remapping-only when safe
+  protocol evidence is absent.
+- Preserve the current full-screen TUI, native Logitech HID++ production path,
+  OpenRazer integration, remapping, DPI cycling, polling, notifications,
+  reconnect behavior, service behavior, and configuration compatibility.
+- Retain the complete v0.8.2 stability contract as the release baseline.
+
 ## 0.9.1 — 2026-09-16
 
 ### Setup TUI and guided discovery

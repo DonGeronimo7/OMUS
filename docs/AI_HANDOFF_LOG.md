@@ -1,5 +1,31 @@
 # AI handoff log
 
+## 2026-09-17 — v0.9.3 installed production and reconnect acceptance
+
+- The locally built Fedora 44 RPM upgraded the installed package from 0.9.1 to
+  0.9.3. RPM verification passed, `/usr/bin/mouse-control --version` reported
+  0.9.3, imports resolved from `/usr/lib/python3.14/site-packages`, and the
+  pre-upgrade configuration hash remained unchanged.
+- The installed full-screen TUI opened as the normal setup path, selected the
+  Logitech G305 (`046d:4074`), preserved the existing remaps and notification
+  preference, and restarted the packaged user service. The operator reported
+  the wizard, remapping, DPI, polling, and physical notifications worked; the
+  wizard felt somewhat slow, which is retained as a non-blocking UX observation.
+- Production runtime selected `Automatic Discovery (Native HID adapter)`, read
+  and reconciled 1000 Hz polling and 3000 DPI, and initialized the canonical DPI
+  notification watcher. Rapid physical cycles emitted exactly one ordered
+  notification per real press with `replaces_id=0`.
+- Two receiver reconnect cycles recovered the stable G305 evdev identity and
+  returned to Native HID. The operator observed zero reconnect/RESYNC popups;
+  post-LIVE physical presses remained one-for-one. Retired generations emitted
+  no late notification. The first cycle briefly retried a PROVEN learned adapter
+  while the receiver enumerated and logged response timeouts before Native HID
+  became available; it then settled at six service tasks with no continued
+  generation churn. A minor cursor recovery delay was observed.
+- The SIGMACHIP device was not attached for a new installed-package smoke. Its
+  accepted physical abstention evidence remains unchanged: no semantics or write
+  authority were inferred from absent evidence.
+
 ## 2026-09-17 — Discovery DPI watcher reconnect
 
 - Physical evidence supplied by the operator: the teacher-free schema-v2
