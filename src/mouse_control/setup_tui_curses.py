@@ -621,7 +621,10 @@ class CursesSetupApp:
                 if key in (10, 13, curses.KEY_ENTER, 27):
                     break
                 try:
-                    events = device.read()
+                    # evdev.read() returns a lazy iterator; force iteration inside
+                    # the protected block so EAGAIN raised by device_read_many()
+                    # is handled as the normal nonblocking idle state.
+                    events = tuple(device.read())
                 except BlockingIOError:
                     # evdev is opened O_NONBLOCK. No queued input is the normal
                     # idle state while waiting for a button press.
