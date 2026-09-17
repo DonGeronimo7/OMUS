@@ -146,6 +146,7 @@ class SetupController:
         self.guided_outcome: GuidedDiscoveryOutcome | None = None
         self.deep_learning_outcome: Any | None = None
         self.research_plan: Any | None = None
+        self.research_probe_outcome: Any | None = None
         self.discovery_engine: Any | None = None
         self.polling_measurement: Any | None = None
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
@@ -246,6 +247,7 @@ class SetupController:
         self.guided_outcome = None
         self.deep_learning_outcome = None
         self.research_plan = None
+        self.research_probe_outcome = None
         self.discovery_engine = None
         self.polling_measurement = None
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
@@ -685,6 +687,15 @@ class SetupController:
             self.status = outcome.learning_skipped_reason
         else:
             self.status = "Guided observation finished; no speculative write authority was added."
+
+    def apply_research_probe_outcome(self, outcome: Any) -> None:
+        self.research_probe_outcome = outcome
+        if getattr(outcome, "any_possible", False):
+            self.status = (
+                "Generic reversible write possibility physically validated; runtime write authority remains unchanged."
+            )
+        else:
+            self.status = "Reversible research probe did not validate a generic write path."
 
     def apply_deep_learning_outcome(self, outcome: Any) -> None:
         self.deep_learning_outcome = outcome

@@ -17,6 +17,7 @@ from .polling_observation import measure_current_polling
 from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
+from .research_probe import ResearchProbeError, run_reversible_research_probes
 from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
 from .wizard import ButtonCaptureError, get_button_name
 
@@ -411,16 +412,19 @@ class CursesSetupApp:
         self.controller.apply_automatic_discovery(outcome)
         plan = getattr(outcome, "research_plan", None)
         if plan is not None and getattr(plan, "reversible_probe_available", False):
-            self._confirm(
-                "Reversible write research available",
+            if self._confirm(
+                "Run reversible write-possibility research?",
                 [
                     "Mouse Control found an exact-model DEMONSTRATED transaction grammar.",
-                    "It is not runtime write authority yet; physical promotion is still required.",
-                    "Deeper read-side learning is deferred until this evidence-backed probe is resolved.",
+                    "Only previously demonstrated semantic values will be tested.",
+                    "Raw readback and independent physical behavior must agree.",
+                    "The original value will be restored through the same generic path.",
+                    "Success validates possibility only; runtime write authority stays disabled.",
                 ],
-                yes="Enter Continue",
-                no="Esc Continue",
-            )
+                yes="Enter Begin reversible probe",
+                no="b Not now",
+            ):
+                self._run_research_probe()
         elif plan is not None and getattr(plan, "deeper_learning_recommended", False):
             if self._confirm(
                 "Continue to deeper protocol learning?",
@@ -434,6 +438,62 @@ class CursesSetupApp:
                 no="b Not now",
             ):
                 self._run_guided()
+
+    def _run_research_probe(self) -> None:
+        if self.controller.discovery_result is None or self.controller.research_plan is None:
+            self.controller.status = "Run Automatic Discovery before reversible write research."
+            return
+
+        def prompt(title: str, lines: tuple[str, ...]) -> bool:
+            return self._confirm(
+                title,
+                list(lines),
+                yes="Enter Begin",
+                no="b Cancel probe",
+            )
+
+        def progress(message: str) -> None:
+            self.controller.status = message
+            self._draw()
+
+        try:
+            outcome = run_reversible_research_probes(
+                self.controller.selected,
+                self.controller.discovery_result.device,
+                self.controller.research_plan,
+                prompt=prompt,
+                progress=progress,
+            )
+        except (ResearchProbeError, PermissionError, OSError, HardwareError) as exc:
+            self.controller.status = f"Reversible write research stopped safely: {exc}"
+            self._confirm(
+                "Write-possibility probe stopped",
+                [
+                    str(exc),
+                    "No runtime write authority was granted.",
+                    "Any completed generic transition requested its rollback before exit.",
+                ],
+                yes="Enter Continue",
+                no="Esc Continue",
+            )
+            return
+        self.controller.apply_research_probe_outcome(outcome)
+        lines = []
+        for item in (outcome.dpi, outcome.polling):
+            if item is None:
+                continue
+            label = "DPI" if item.semantic == "dpi" else "Polling"
+            if item.possible:
+                lines.append(
+                    f"✓ {label}: generic reversible write possibility validated "
+                    f"({item.original_value} → {item.target_value} → {item.original_value})"
+                )
+            elif item.attempted:
+                lines.append(f"? {label}: probe did not validate a writable path")
+            else:
+                lines.append(f"• {label}: {item.detail}")
+        lines.append("Runtime authority remains unchanged until explicit promotion reaches PROVEN.")
+        self._confirm("Reversible research result", lines, yes="Enter Continue", no="Esc Continue")
 
     def _run_polling_measurement(self) -> None:
         if not self._confirm(
