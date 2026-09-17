@@ -297,7 +297,12 @@ class SetupController:
             pass
         self.backend = self._backend_factory(self.selected)
         self._discover_into_choices()
-        self.status = "Automatic Discovery complete. Review capabilities before configuration."
+        self.status = (
+            "Automatic Discovery complete. No verified host-accessible DPI/polling write path; "
+            "continue with DPI-stage observation and button remapping."
+            if self.no_write_path
+            else "Automatic Discovery complete. Review capabilities before configuration."
+        )
 
     def apply_discovery_error(self, message: str) -> None:
         self.discovery_error = message
@@ -352,7 +357,11 @@ class SetupController:
                 detail += " — " + "/".join(map(str, self.choices.dpi_values))
             lines.append(detail)
         else:
-            lines.append("? DPI capability not yet discovered")
+            lines.append(
+                "— DPI write path unavailable; no verified host-accessible DPI protocol"
+                if self.discovery_complete
+                else "? DPI capability not yet discovered"
+            )
 
         if self.choices.polling_readable or self.choices.polling_writable:
             mode = "read/write" if self.choices.polling_writable else "read-only"
@@ -361,10 +370,18 @@ class SetupController:
                 detail += " — " + " / ".join(f"{hz} Hz" for hz in self.choices.polling_rates)
             lines.append(detail)
         else:
-            lines.append("? Polling capability not yet discovered")
+            lines.append(
+                "— Polling write path unavailable; no verified host-accessible polling protocol"
+                if self.discovery_complete
+                else "? Polling capability not yet discovered"
+            )
+
+        if self.no_write_path:
+            lines.append("✓ Discovery complete: no verified host-accessible DPI/polling write path")
+            lines.append("✓ Button remapping remains available through evdev")
 
         if self._supports_dpi_events():
-            lines.append("✓ Physical DPI events")
+            lines.append("✓ Physical DPI events / stage notifications available")
         if self.guided_outcome and self.guided_outcome.dpi_action_identified:
             lines.append("✓ DPI button behavior identified")
             if not self.choices.dpi_writable:
@@ -374,6 +391,45 @@ class SetupController:
         if self.discovery_error:
             lines.append(f"? Discovery issue: {self.discovery_error}")
         return lines
+
+    @property
+    def no_write_path(self) -> bool:
+        """True after discovery completes without DPI or polling write authority."""
+        return (
+            self.discovery_complete
+            and not self.choices.dpi_writable
+            and not self.choices.polling_writable
+        )
+
+    def _next_configuration_section(self, section: SetupSection | None = None) -> SetupSection:
+        """Skip configuration pages that cannot change the selected hardware."""
+        section = self.section if section is None else section
+        if section is SetupSection.HARDWARE:
+            if self.choices.dpi_writable:
+                return SetupSection.DPI
+            if self.choices.polling_writable:
+                return SetupSection.POLLING
+            return SetupSection.BUTTONS
+        if section is SetupSection.DPI:
+            return SetupSection.POLLING if self.choices.polling_writable else SetupSection.BUTTONS
+        if section is SetupSection.POLLING:
+            return SetupSection.BUTTONS
+        return SECTIONS[min(SECTIONS.index(section) + 1, len(SECTIONS) - 1)]
+
+    def _previous_configuration_section(self, section: SetupSection | None = None) -> SetupSection:
+        """Reverse navigation mirrors capability-driven forward navigation."""
+        section = self.section if section is None else section
+        if section is SetupSection.BUTTONS:
+            if self.choices.polling_writable:
+                return SetupSection.POLLING
+            if self.choices.dpi_writable:
+                return SetupSection.DPI
+            return SetupSection.HARDWARE
+        if section is SetupSection.POLLING:
+            return SetupSection.DPI if self.choices.dpi_writable else SetupSection.HARDWARE
+        if section is SetupSection.DPI:
+            return SetupSection.HARDWARE
+        return SECTIONS[max(SECTIONS.index(section) - 1, 0)]
 
     def row_count(self) -> int:
         if self.section is SetupSection.DEVICE:
@@ -425,13 +481,23 @@ class SetupController:
                 SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS
             }:
                 self.nav.back()
+            elif self.section in {SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS}:
+                self._go(self._previous_configuration_section(), remember=False)
             else:
                 self.nav.sequential(-1)
             self.row_cursor = self.device_cursor if self.section is SetupSection.DEVICE else 0
             self._clamp_cursor()
             return ControllerAction()
         if key == "RIGHT":
-            self.nav.sequential(1)
+            if self.nav.return_to is SetupSection.REVIEW and self.section in {
+                SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS
+            }:
+                self.nav.current = SetupSection.REVIEW
+                self.nav.return_to = None
+            elif self.section in {SetupSection.HARDWARE, SetupSection.DPI, SetupSection.POLLING}:
+                self._go(self._next_configuration_section())
+            else:
+                self.nav.sequential(1)
             self.row_cursor = self.device_cursor if self.section is SetupSection.DEVICE else 0
             self._clamp_cursor()
             return ControllerAction()
@@ -464,9 +530,9 @@ class SetupController:
             if self.guided_discovery_available:
                 if self.row_cursor == 1:
                     return ControllerAction(ActionKind.GUIDED_DISCOVERY)
-                self._go(SetupSection.DPI)
+                self._go(self._next_configuration_section(SetupSection.HARDWARE))
                 return ControllerAction()
-            self._go(SetupSection.DPI)
+            self._go(self._next_configuration_section(SetupSection.HARDWARE))
             return ControllerAction()
 
         if self.section is SetupSection.DPI:
@@ -607,11 +673,13 @@ class SetupController:
                     0,
                 )
             )
+            next_section = self._next_configuration_section(SetupSection.HARDWARE)
+            next_label = f"Continue to {next_section.value.lower()} configuration"
             if self.guided_discovery_available:
                 rows.append(DisplayRow("Continue deeper guided DPI learning", 1))
-                rows.append(DisplayRow("Continue to DPI configuration", 2))
+                rows.append(DisplayRow(next_label, 2))
             else:
-                rows.append(DisplayRow("Continue to DPI configuration", 1))
+                rows.append(DisplayRow(next_label, 1))
             rows.append(
                 DisplayRow(
                     "Unknown hardware remains read-only until exact write semantics are PROVEN.",

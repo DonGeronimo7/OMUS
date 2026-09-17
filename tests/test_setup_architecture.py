@@ -157,3 +157,56 @@ def test_hardware_summary_keeps_dpi_and_polling_independent():
     lines = controller.hardware_lines()
     assert any("DPI capability not yet discovered" in line for line in lines)
     assert any("Polling capability: read/write" in line for line in lines)
+
+
+class ObserveOnlyBackend(RangeBackend):
+    def get_capabilities(self, _device):
+        return HardwareCapabilities()
+
+    def supports_dpi(self, _device): return False
+    def get_dpi_values(self, _device): return []
+    def supports_polling_rate(self, _device): return False
+    def supports_polling_rate_writes(self, _device): return False
+    def get_polling_rates(self, _device): return []
+    def supports_dpi_events(self, _device): return True
+
+
+def test_no_write_path_is_successful_discovery_and_skips_write_pages():
+    backend = ObserveOnlyBackend()
+    controller = SetupController(
+        [MOUSE1],
+        {},
+        choices_factory=choices_factory,
+        backend_factory=lambda _device: backend,
+    )
+    controller.discovery_complete = True
+
+    assert controller.no_write_path is True
+    lines = controller.hardware_lines()
+    assert any("no verified host-accessible DPI/polling write path" in line for line in lines)
+    assert any("Button remapping remains available" in line for line in lines)
+    assert any("stage notifications available" in line for line in lines)
+
+    controller.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    controller.row_cursor = controller.row_count() - 1
+    controller.handle_key("ENTER")
+    assert controller.section is SetupSection.BUTTONS
+    controller.handle_key("LEFT")
+    assert controller.section is SetupSection.HARDWARE
+
+
+def test_capability_navigation_only_shows_writable_hardware_pages():
+    controller, _ = make_controller()
+    controller.choices.dpi_writable = False
+    controller.choices.polling_writable = True
+    controller.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    controller.handle_key("RIGHT")
+    assert controller.section is SetupSection.POLLING
+
+    controller.choices.dpi_writable = True
+    controller.choices.polling_writable = False
+    controller.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    controller.handle_key("RIGHT")
+    assert controller.section is SetupSection.DPI
+    controller.handle_key("RIGHT")
+    assert controller.section is SetupSection.BUTTONS

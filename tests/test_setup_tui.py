@@ -185,7 +185,8 @@ def test_unknown_device_offers_guided_discovery_and_can_skip():
     assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
     app.row_cursor = 2
     assert app.handle_key("ENTER").kind is ActionKind.NONE
-    assert app.section is SetupSection.DPI
+    # No verified write path is a successful result; skip non-configurable pages.
+    assert app.section is SetupSection.BUTTONS
     assert "BTN_LEFT" in app.choices.mappings
 
 
