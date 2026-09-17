@@ -9,7 +9,10 @@ from evdev import InputDevice, ecodes
 
 from . import __version__
 from .device_topology import TopologyError
-from .guided_discovery import GuidedDiscoveryCancelled, GuidedStep, run_guided_discovery
+from .guided_discovery import (
+    GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_guided_discovery,
+)
+from .polling_observation import measure_current_polling
 from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
@@ -50,15 +53,17 @@ class DpiEditSession:
         if not choices.dpi_writable:
             self.controller.status = "Live DPI tuning is unavailable for this mouse."
             return False
-        values = choices.dpi_values
-        if not values:
-            self.controller.status = "The mouse did not report safe DPI values for live tuning."
+        if not (choices.dpi_values or choices.dpi_ranges):
+            self.controller.status = "The mouse did not report a safe DPI set or range for live tuning."
             return False
-        if requested not in values:
-            self.controller.status = (
-                f"{requested} DPI is unsupported; choose a hardware-reported value "
-                f"between {values[0]} and {values[-1]}."
-            )
+        if not choices.accepts_dpi(requested):
+            if choices.dpi_minimum is not None and choices.dpi_maximum is not None:
+                self.controller.status = (
+                    f"{requested} DPI is outside {choices.dpi_minimum}–{choices.dpi_maximum} "
+                    "or does not match the native increment."
+                )
+            else:
+                self.controller.status = f"{requested} DPI is not a hardware-reported value."
             return False
         return True
 
@@ -68,8 +73,9 @@ class DpiEditSession:
             return False
         try:
             result = self.controller.backend.set_dpi(self.controller.selected, requested)
-            confirmed = _dpi_number(result)
-            if confirmed is None:
+            if bool(getattr(result, "confirmed", False)):
+                confirmed = _dpi_number(result)
+            else:
                 confirmed = self._read_current()
             if confirmed != requested:
                 self.controller.status = (
@@ -370,6 +376,65 @@ class CursesSetupApp:
             message = "Some hardware interfaces could not be observed"
         self.controller.status = message
         self._draw()
+
+    def _run_automatic(self) -> None:
+        self.controller.discovery_progress.clear()
+
+        def progress(message: str) -> None:
+            self.controller.record_discovery_progress(message)
+            self._draw()
+
+        try:
+            outcome = run_automatic_discovery(
+                self.controller.selected,
+                progress=progress,
+            )
+        except PermissionError as exc:
+            self.controller.apply_discovery_error(
+                f"Permission failure while reading hardware: {exc}. Check hidraw/input permissions and retry."
+            )
+            return
+        except TopologyError as exc:
+            self.controller.apply_discovery_error(
+                f"Physical-device binding could not be established: {exc}."
+            )
+            return
+        except (TimeoutError, OSError, HardwareError) as exc:
+            self.controller.apply_discovery_error(
+                f"Hardware discovery was interrupted or the mouse disconnected: {exc}."
+            )
+            return
+        except Exception as exc:
+            self.controller.apply_discovery_error(f"Discovery stage failed: {exc}")
+            return
+        self.controller.apply_automatic_discovery(outcome)
+
+    def _run_polling_measurement(self) -> None:
+        if not self._confirm(
+            "Measure current polling rate",
+            [
+                "This is read-only and does not change mouse firmware or report rate.",
+                "Move the mouse rapidly and continuously for about 3 seconds.",
+            ],
+            yes="Enter Begin measurement",
+            no="b Cancel",
+        ):
+            return
+        self.controller.status = "• Measuring current report-rate behavior from evdev timestamps…"
+        self._draw()
+        try:
+            measurement = measure_current_polling(
+                self.controller.selected.path,
+                seconds=3.0,
+                exclusive=True,
+            )
+        except PermissionError as exc:
+            self.controller.status = f"Polling measurement needs input access: {exc}"
+            return
+        except OSError as exc:
+            self.controller.status = f"Polling measurement interrupted: {exc}"
+            return
+        self.controller.apply_polling_measurement(measurement)
 
     def _run_guided(self) -> None:
         try:
@@ -729,6 +794,12 @@ class CursesSetupApp:
                     ],
                 ):
                     return False
+            elif action.kind in {ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY}:
+                self._run_automatic()
+            elif action.kind is ActionKind.GUIDED_DISCOVERY:
+                self._run_guided()
+            elif action.kind is ActionKind.MEASURE_POLLING:
+                self._run_polling_measurement()
             elif action.kind is ActionKind.EDIT_DPI:
                 self._dpi_editor(int(action.payload))
             elif action.kind is ActionKind.CAPTURE_BUTTONS:
@@ -736,8 +807,6 @@ class CursesSetupApp:
                     self._button_editor()
                 except ButtonCaptureError as exc:
                     self.controller.status = str(exc)
-            elif action.kind is ActionKind.GUIDED_DISCOVERY:
-                self._run_guided()
             elif action.kind is ActionKind.SAVE:
                 if self._confirm(
                     "Save configuration?",

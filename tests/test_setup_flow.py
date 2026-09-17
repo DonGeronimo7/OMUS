@@ -12,9 +12,13 @@ MOUSE = MouseDevice('Example', '/dev/input/example')
 def backend():
     result = Mock()
     result.supports_dpi.return_value = True
-    result.get_dpi.return_value = 800
+    dpi_state = {'value': 800}
+    result.get_dpi.side_effect = lambda device: dpi_state['value']
     result.get_dpi_values.return_value = list(range(200, 3201, 50))
-    result.set_dpi.side_effect = lambda device, value: value
+    def set_dpi(device, value):
+        dpi_state['value'] = value
+        return value
+    result.set_dpi.side_effect = set_dpi
     result.supports_polling_rate.return_value = True
     result.get_polling_rate.return_value = 500
     result.supports_polling_rate_writes.return_value = True

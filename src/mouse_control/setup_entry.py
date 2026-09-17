@@ -73,16 +73,13 @@ def run_tui_setup_wizard() -> int:
             print("Setup cancelled; existing configuration left unchanged.")
             return 0
 
-        device_changed = _device_changed(existing_config, selected)
         apply_dpi = (
             choices.dpi_changed
             or not _preference_exists(existing_config, "dpi", "active", "stages")
-            or device_changed
         )
         apply_polling = (
             choices.polling_changed
             or not _preference_exists(existing_config, "polling", "rate_hz")
-            or device_changed
         )
 
         cli._apply_hardware(
@@ -122,7 +119,7 @@ def run_tui_setup_wizard() -> int:
     except ButtonCaptureError:
         print("Setup failed; the existing configuration was not changed.", file=sys.stderr)
         return 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         print("\nSetup cancelled; the existing configuration was not changed.")
         return 1
     except Exception as exc:

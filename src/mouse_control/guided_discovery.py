@@ -33,6 +33,14 @@ class GuidedStep:
 
 
 @dataclass(frozen=True)
+class AutomaticDiscoveryOutcome:
+    """One complete safe Automatic Discovery pass and its reusable engine."""
+
+    result: Any
+    engine: DiscoveryEngine
+
+
+@dataclass(frozen=True)
 class GuidedDpiLearningOutcome:
     """Result of the five-sample DPI-button observation workflow."""
 
@@ -227,6 +235,19 @@ def run_guided_dpi_learning(
     )
 
 
+def run_automatic_discovery(
+    selected: Any,
+    *,
+    progress: ProgressCallback | None = None,
+    engine_factory: Callable[[], DiscoveryEngine] = DiscoveryEngine,
+) -> AutomaticDiscoveryOutcome:
+    """Run the shared comprehensive safe discovery engine with progress events."""
+    report = progress or (lambda _message: None)
+    engine = engine_factory()
+    result = engine.discover(selected, progress=report)
+    return AutomaticDiscoveryOutcome(result=result, engine=engine)
+
+
 def run_guided_discovery(
     selected: Any,
     *,
@@ -244,13 +265,13 @@ def run_guided_discovery(
     """
 
     report = progress or (lambda _message: None)
-    report("Inspecting mouse…")
-    engine = engine_factory()
-    result = engine.discover(selected)
-    report("✓ Physical device identified")
-    report(f"✓ {len(result.device.hidraw_nodes)} hardware interface(s) correlated")
-    report(f"✓ {len(engine.descriptors)} hardware descriptor(s) read")
-    report("✓ Existing protocol teachers and exact-model learned support checked")
+    automatic = run_automatic_discovery(
+        selected,
+        progress=report,
+        engine_factory=engine_factory,
+    )
+    engine = automatic.engine
+    result = automatic.result
 
     dpi = result.capabilities.get("dpi")
     if dpi is not None and dpi.writable:

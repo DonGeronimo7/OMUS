@@ -82,9 +82,10 @@ def controller(*, backends=None, existing=None):
 def test_device_selection_restores_temporary_state_before_switch():
     app, backends = controller()
     app.handle_key("DOWN")
-    app.handle_key("ENTER")
+    action = app.handle_key("ENTER")
     assert app.selected == MOUSE2
     assert app.section is SetupSection.HARDWARE
+    assert action.kind is ActionKind.AUTOMATIC_DISCOVERY
     assert backends[MOUSE1.path].set_dpi_calls[-1] == 800
     assert backends[MOUSE1.path].closed is True
 
@@ -95,7 +96,7 @@ def test_left_right_and_back_navigate_sections_without_terminal():
     app.handle_key("RIGHT")
     assert app.section is SetupSection.HARDWARE
     app.handle_key("RIGHT")
-    assert app.section is SetupSection.BUTTONS
+    assert app.section is SetupSection.DPI
     app.handle_key("BACK")
     assert app.section is SetupSection.HARDWARE
     app.handle_key("LEFT")
@@ -177,11 +178,14 @@ def test_unknown_device_offers_guided_discovery_and_can_skip():
     app, _ = controller(backends=unknown)
     app.section_index = SECTIONS.index(SetupSection.HARDWARE)
     assert app.guided_discovery_available is True
-    assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
+    assert app.handle_key("ENTER").kind in {
+        ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY
+    }
     app.row_cursor = 1
+    assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
+    app.row_cursor = 2
     assert app.handle_key("ENTER").kind is ActionKind.NONE
-    assert app.discovery_skipped is True
-    assert app.section is SetupSection.BUTTONS
+    assert app.section is SetupSection.DPI
     assert "BTN_LEFT" in app.choices.mappings
 
 

@@ -1,5 +1,18 @@
 # AI handoff log
 
+## 2026-09-16 — Discovery-first setup/TUI stabilization
+
+- Root cause: the production full-screen TUI existed, but it ordered Buttons
+  before DPI/Polling, did not make the comprehensive DiscoveryEngine the normal
+  setup driver for known devices, and duplicated list-only DPI validation.
+- Correction: discovery now drives setup before configuration; navigation uses
+  explicit history/review-return state; DPI supports min/max/step capabilities;
+  polling exposes protocol state separately from read-only timing measurement;
+  device switches invalidate device-specific discovery state after rollback.
+- Safety: unknown HID remains read-only. No speculative generic HID write path
+  was added; write authority remains protocol-backed or exact-model PROVEN.
+- Physical validation: pending on the G305 after installing/running this branch.
+
 ## 2026-09-15 — G305 polling acceptance runtime mismatch
 
 Request: user attachment `pasted-text.txt`, continuing reviewed commit

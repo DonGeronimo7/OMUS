@@ -101,8 +101,10 @@ class DiscoveryEngine:
         if not self._phases or self._phases[-1] is not phase:
             self._phases.append(phase)
 
-    def discover(self, mouse: MouseDevice) -> DiscoveryResult:
-        """Run automatic discovery for one already-selected evdev mouse."""
+    def discover(
+        self, mouse: MouseDevice, *, progress: Callable[[str], None] | None = None
+    ) -> DiscoveryResult:
+        """Run automatic discovery for one selected mouse with optional stage progress."""
 
         self._descriptors.clear()
         self._feature_snapshots.clear()
@@ -110,25 +112,37 @@ class DiscoveryEngine:
         self._observations.clear()
         self._phases.clear()
         self._profile_path = None
+        report = progress or (lambda _message: None)
 
+        report("• Establishing physical-device topology…")
         self._phase(DiscoveryPhase.ENUMERATE)
         physical = self.build_topology(mouse)
+        report("✓ Physical mouse identified")
         self._phase(DiscoveryPhase.CORRELATE)
+        report(f"✓ {len(physical.hidraw_nodes)} HID interface(s) correlated")
 
+        report("• Reading HID descriptors safely…")
         self._phase(DiscoveryPhase.DESCRIPTORS)
         self.inspect_descriptors(physical)
+        report(f"✓ {len(self._descriptors)} HID descriptor(s) collected")
 
+        report("• Searching known protocol teachers and repertoire…")
         self._phase(DiscoveryPhase.PROTOCOL)
         protocol = self.detect_protocol(physical)
 
         if protocol is not None:
+            report(f"✓ Known protocol matched: {protocol.name}")
             capabilities = self.query_known_protocol(protocol)
         else:
+            report("• No proven protocol match; observing unknown hardware read-only…")
             self._phase(DiscoveryPhase.OBSERVE)
             capabilities = self.observe_unknown_device(physical)
 
         self._phase(DiscoveryPhase.VALIDATE)
         result = self.validate(physical, protocol, capabilities)
+        for name, capability in sorted(result.capabilities.items()):
+            mode = "read/write" if capability.writable else "read-only" if capability.readable else "unknown"
+            report(f"✓ {name.replace('_', ' ')} capability: {mode}")
         self._phase(DiscoveryPhase.COMPLETE)
         result.phases = list(self._phases)
 
@@ -437,9 +451,14 @@ class DiscoveryEngine:
             # Generic writes are still forbidden unless the capability carries
             # explicit PROVEN learned-operation promotion evidence.
             for name, item in tuple(normalized.items()):
-                learned_proven = any(
+                proof_codes = {
+                    "dpi": "learned-operation-proven",
+                    "report_rate": "learned-polling-operation-proven",
+                }
+                required_code = proof_codes.get(name)
+                learned_proven = required_code is not None and any(
                     evidence.level is EvidenceLevel.PROVEN
-                    and evidence.code == "learned-operation-proven"
+                    and evidence.code == required_code
                     for evidence in item.evidence
                 )
                 if item.writable and not learned_proven:

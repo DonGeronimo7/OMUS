@@ -10,6 +10,25 @@ report-rate transactions with validated read-only physical action events.
 Normal polling reconciliation retains the no-takeover safety boundary, and
 v0.8.2 behavior remains the compatibility contract for future releases.
 
+## 2026-09-16 discovery-first setup stabilization
+
+Interactive setup now follows Device -> Hardware Discovery -> DPI -> Polling ->
+Buttons -> Service -> Review. Selecting a mouse triggers the same comprehensive
+safety-first DiscoveryEngine used by diagnostics, with stage progress surfaced
+inside the full-screen TUI. Known protocol capabilities, exact-model learned
+operations, range-based DPI, and independent polling facts are consumed before
+configuration.
+
+DPI setup accepts either enumerated values or min/max/step ranges; live tests
+remain reversible and require confirmed hardware state before the staged value
+changes. Polling setup distinguishes protocol-reported state from read-only evdev
+timing measurement. Review edits carry an explicit return target, and device
+switching rolls back temporary DPI where possible and invalidates all
+device-specific discovery state.
+
+This architecture change is automated-testable but is not a new physical hardware
+validation claim. G305 acceptance remains a separate physical gate.
+
 ## Current architecture
 
 Mouse Control keeps evdev/uinput remapping independent from hardware control.
