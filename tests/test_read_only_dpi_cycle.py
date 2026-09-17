@@ -21,6 +21,21 @@ def test_three_stage_trigger_cycle_preserves_order_and_wraparound():
     assert all(state.cycle_trigger is False for state in states)
 
 
+def test_five_stage_trigger_cycle_preserves_order_and_wraparound():
+    tracker = ReadOnlyDpiCycleTracker(
+        (800, 1500, 2000, 2500, 3000), initial_dpi=800
+    )
+
+    states = []
+    for _ in range(5):
+        states.append(tracker.observe_trigger(True))
+        tracker.observe_trigger(False)
+
+    assert [state.display_value for state in states] == [
+        1500, 2000, 2500, 3000, 800
+    ]
+
+
 def test_trigger_without_synchronization_never_invents_stage():
     tracker = ReadOnlyDpiCycleTracker((800, 1500, 2000))
 

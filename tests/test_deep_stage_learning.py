@@ -6,6 +6,8 @@ from mouse_control.guided_discovery import (
     _distance_label,
     run_deep_dpi_stage_learning,
 )
+from mouse_control.transition_sources import CalibratedTransitionSource
+from mouse_control.discovery_models import DeviceNode
 
 
 def test_deep_stage_learning_uses_full_calibrated_methodology():
@@ -188,4 +190,62 @@ def test_physical_only_profile_retries_runtime_learning_without_ruler(tmp_path):
     assert outcome.profile_path == existing_path
     assert outcome.transition_sources == ()
     assert session.observe_action.call_count == 2
+    ruler.assert_not_called()
+
+
+def test_runtime_source_can_be_added_later_without_repeating_calibration(tmp_path):
+    states = [
+        {"configured_dpi": dpi, "measured_cpi": float(dpi),
+         "polling_hz": 1000, "confidence": "high"}
+        for dpi in (800, 1500, 800)
+    ]
+    profile = {
+        "dpi_cycle": {"configured_order": [800, 1500], "states": states,
+                      "wrap_confirmed": True},
+        "transition_sources": [], "raw_mappings": [],
+    }
+    node = DeviceNode(
+        path=Path("/dev/hidraw-test"), sysfs_path=None, subsystem="hidraw",
+        node_type="hidraw", bus=3, vendor_id=0x1234, product_id=0x5678,
+        interface_number=1, descriptor_sha256="descriptor",
+    )
+    device = SimpleNamespace(
+        ambiguous=False, hidraw_nodes=[node], evdev_nodes=[], vendor_id=0x1234,
+        product_id=0x5678, bus=3, model_fingerprint="model",
+        instance_fingerprint=None,
+    )
+    sample = SimpleNamespace(
+        action=SimpleNamespace(hid_reports=(), evdev_events=(), feature_changes=()),
+    )
+    session = Mock(descriptors={})
+    session.observe_action.return_value = sample
+    session.analyze.return_value = SimpleNamespace(samples=(), report_candidates=())
+    source = CalibratedTransitionSource(
+        kind="hid_cycle_trigger", cycle_order=(800, 1500), observations=2,
+        report_key=("input", 3, 0x1234, 0x5678, 1, "descriptor", 5, 2),
+        press_pattern=bytes.fromhex("0220000000"),
+        release_pattern=bytes.fromhex("0200000000"),
+    )
+    saved_path = tmp_path / "upgraded.json"
+
+    with (
+        patch("mouse_control.guided_discovery.find_calibrated_profile",
+              return_value=(tmp_path / "physical-only.json", profile)),
+        patch("mouse_control.guided_discovery.capture_calibrated_motion") as ruler,
+        patch("mouse_control.guided_discovery.refine_teacher_free",
+              return_value=SimpleNamespace(report_shapes=(), candidates=(), hypotheses=())),
+        patch("mouse_control.guided_discovery.infer_calibrated_transition_sources",
+              return_value=(source,)),
+        patch("mouse_control.guided_discovery.save_calibrated_profile",
+              return_value=saved_path) as save,
+    ):
+        outcome = run_deep_dpi_stage_learning(
+            SimpleNamespace(path="/dev/input/test"), SimpleNamespace(device=device),
+            SimpleNamespace(descriptors={node: object()}), prompt=lambda _step: True,
+            calibration_passes=1, session_factory=lambda *_args: session,
+        )
+
+    assert outcome.profile_path == saved_path
+    assert outcome.transition_sources == (source,)
+    assert save.call_args.args[0]["transition_sources"][0]["kind"] == "hid_cycle_trigger"
     ruler.assert_not_called()

@@ -9,8 +9,24 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-from .hardware.capabilities import DpiState
+if TYPE_CHECKING:
+    from .hardware.capabilities import DpiState
+
+
+def _state(dpi: int) -> DpiState:
+    # Import lazily so this protocol-neutral tracker does not participate in
+    # hardware package initialization (DiscoveryBackend itself uses it).
+    from .hardware.capabilities import DpiState
+
+    return DpiState(
+        dpi,
+        dpi,
+        active_stage=None,
+        confirmed=True,
+        cycle_trigger=False,
+    )
 
 
 class ReadOnlyDpiCycleTracker:
@@ -73,13 +89,7 @@ class ReadOnlyDpiCycleTracker:
             if self._stage_index == index:
                 return None
             self._stage_index = index
-            return DpiState(
-                int(dpi),
-                int(dpi),
-                active_stage=None,
-                confirmed=True,
-                cycle_trigger=False,
-            )
+            return _state(int(dpi))
 
     def observe_trigger(self, pressed: bool) -> DpiState | None:
         """Advance once for one press; holds/echoes are ignored until release."""
@@ -94,13 +104,7 @@ class ReadOnlyDpiCycleTracker:
                 return None
             self._stage_index = (self._stage_index + 1) % len(self._order)
             dpi = self._order[self._stage_index]
-            return DpiState(
-                dpi,
-                dpi,
-                active_stage=None,
-                confirmed=True,
-                cycle_trigger=False,
-            )
+            return _state(dpi)
 
     def invalidate_trigger_sync(self) -> None:
         """Forget unsupported trigger-only certainty after continuity is lost."""

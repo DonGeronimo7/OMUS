@@ -1,5 +1,24 @@
 # AI handoff log
 
+## 2026-09-17 — Calibrated read-only DPI runtime integration
+
+- Physical DPI cycles are saved as schema-v2 read-only profiles even when no
+  runtime source is isolated; later runs reuse calibration and retry only
+  transition capture.
+- Runtime binding resolves path-independent HID/evdev source identities against
+  current physical nodes and refuses ambiguous matches. Live paths may change
+  the supervisor signature without becoming persisted identity.
+- HID and shared-owner evdev absolute/trigger decoders feed
+  `ReadOnlyDpiCycleTracker`. Trigger-only state never advances while
+  unsynchronized and is invalidated on continuity loss. Observed states are
+  confirmed, have no writable stage, and never invoke `set_dpi()`.
+- Existing PROVEN learned-action cycling, native HID++, polling, remapping, and
+  notification behavior remain separate and pass the full automated gate.
+- `feature_state` is explicitly deferred: no polling is started until bounded
+  read-only GET_FEATURE ownership can be implemented safely.
+- Automated validation: 607 tests passed, plus compileall and whitespace
+  checks. Physical Titan validation remains pending.
+
 ## 2026-09-16 — Discovery-first setup/TUI stabilization
 
 - Root cause: the production full-screen TUI existed, but it ordered Buttons

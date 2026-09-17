@@ -1,6 +1,6 @@
 # Mouse Control Project Status
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 ## v0.9.0 release status
 
@@ -9,6 +9,19 @@ protocol-neutral learned HID session can share exact-model PROVEN DPI and
 report-rate transactions with validated read-only physical action events.
 Normal polling reconciliation retains the no-takeover safety boundary, and
 v0.8.2 behavior remains the compatibility contract for future releases.
+
+Physically calibrated schema-v2 DPI profiles now persist independently from
+runtime-source inference. Later guided runs reuse the ruler/wrap calibration
+and retry only passive transition capture. At runtime, stable interface facts
+bind HID absolute/trigger and evdev absolute/trigger sources to current nodes;
+ambiguous matches are refused. Absolute observations resynchronize a read-only
+cycle tracker, while trigger-only observations advance only from genuinely
+synchronized state and lose synchronization on continuity loss. Evdev evidence
+is observed inside the existing grabbed `MouseRemapper` stream, so no competing
+event-node reader is opened. These paths emit confirmed observed DPI without
+calling writable `DpiCycler.cycle()` or granting generic write authority.
+Passive `feature_state` polling remains deliberately unsupported until a
+bounded read-only GET_FEATURE owner can be added without competing HID readers.
 
 ## 2026-09-16 discovery-first setup stabilization
 
