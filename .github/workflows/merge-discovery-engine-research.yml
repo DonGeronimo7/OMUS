@@ -1,0 +1,86 @@
+name: Merge Discovery Engine Research
+
+on:
+  push:
+    branches: [feat/automatic-hardware-discovery]
+    paths:
+      - tools/merge-discovery-engine-research.py
+      - .github/workflows/merge-discovery-engine-research.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/automatic-hardware-discovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Apply Discovery Engine research integration
+        run: python tools/merge-discovery-engine-research.py
+      - name: Install test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest
+      - name: Discovery research methodology gate
+        run: |
+          PYTHONPATH=src pytest -q \
+            tests/test_discovery_research_plan.py \
+            tests/test_deep_stage_learning.py \
+            tests/test_setup_write_authority.py \
+            tests/test_discovery_core.py \
+            tests/test_discovery_backend.py \
+            tests/test_guided_discovery.py \
+            tests/test_calibrated_discovery.py \
+            tests/test_calibrated_profiles.py \
+            tests/test_sensor_calibration.py \
+            tests/test_sensor_calibration_cli.py \
+            tests/test_contrastive_learning.py \
+            tests/test_contrastive_inference.py \
+            tests/test_transaction_inference.py \
+            tests/test_learning_transaction.py \
+            tests/test_learned_operations.py \
+            tests/test_learned_polling.py \
+            tests/test_learned_polling_transport.py \
+            tests/test_learned_hid_session.py \
+            tests/test_learned_hid_transport.py \
+            tests/test_learned_runtime_integration.py \
+            tests/test_polling_measurement.py \
+            tests/test_polling_replay.py \
+            tests/test_polling_state_machine_lab.py \
+            tests/test_notifications.py \
+            tests/test_dpi_cycle.py \
+            tests/test_setup_architecture.py \
+            tests/test_setup_flow.py \
+            tests/test_setup_persistence.py \
+            tests/test_setup_service.py \
+            tests/test_setup_state_machine.py \
+            tests/test_setup_tui.py \
+            tests/test_setup_tui_entry.py \
+            tests/test_button_capture_ownership.py \
+            tests/test_button_capture_eagain.py \
+            tests/test_keyboard_capture.py \
+            tests/test_keyboard_capture_mouse_exclusion.py \
+            tests/test_keyboard_capture_tui.py \
+            tests/test_keyboard_chords.py \
+            tests/test_remapper_reconnect.py
+      - name: Full regression gate
+        run: PYTHONPATH=src pytest -q
+      - name: Compile gate
+        run: python -m compileall -q src tests
+      - name: Whitespace gate
+        run: git diff --check
+      - name: Commit validated integration
+        run: |
+          rm -f tools/merge-discovery-engine-research.py .github/workflows/merge-discovery-engine-research.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Integrate complete discovery research methodology'
+          git push origin HEAD:feat/automatic-hardware-discovery
