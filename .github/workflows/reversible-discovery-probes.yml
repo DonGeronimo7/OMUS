@@ -1,0 +1,66 @@
+name: Reversible Discovery Probes
+
+on:
+  push:
+    branches: [feat/automatic-hardware-discovery]
+    paths:
+      - tools/install-reversible-discovery-probes.py
+      - .github/workflows/reversible-discovery-probes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/automatic-hardware-discovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Apply reversible probe integration
+        run: python tools/install-reversible-discovery-probes.py
+      - name: Install test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest
+      - name: Reversible probe methodology gate
+        run: |
+          PYTHONPATH=src pytest -q \
+            tests/test_research_probe.py \
+            tests/test_discovery_research_plan.py \
+            tests/test_transaction_inference.py \
+            tests/test_learning_transaction.py \
+            tests/test_learned_operations.py \
+            tests/test_learned_hid_session.py \
+            tests/test_learned_hid_transport.py \
+            tests/test_polling_replay.py \
+            tests/test_learned_polling.py \
+            tests/test_learned_polling_transport.py \
+            tests/test_polling_measurement.py \
+            tests/test_polling_state_machine_lab.py \
+            tests/test_sensor_calibration.py \
+            tests/test_calibrated_discovery.py \
+            tests/test_setup_tui.py \
+            tests/test_setup_tui_entry.py \
+            tests/test_setup_write_authority.py \
+            tests/test_button_capture_ownership.py \
+            tests/test_button_capture_eagain.py
+      - name: Full regression gate
+        run: PYTHONPATH=src pytest -q
+      - name: Compile gate
+        run: python -m compileall -q src tests
+      - name: Whitespace gate
+        run: git diff --check
+      - name: Commit validated probes
+        run: |
+          rm -f tools/install-reversible-discovery-probes.py .github/workflows/reversible-discovery-probes.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Execute reversible discovery write probes'
+          git push origin HEAD:feat/automatic-hardware-discovery
