@@ -623,11 +623,20 @@ class CursesSetupApp:
                 try:
                     events = device.read()
                 except BlockingIOError:
+                    # evdev is opened O_NONBLOCK. No queued input is the normal
+                    # idle state while waiting for a button press.
                     events = ()
                 except OSError as exc:
-                    raise ButtonCaptureError(
-                        self._input_error_message(exc, phase="reading mouse events")
-                    ) from exc
+                    # evdev 2.x/platform combinations may surface the same
+                    # nonblocking empty-read condition as plain OSError rather
+                    # than BlockingIOError. EAGAIN/EWOULDBLOCK is not a device
+                    # failure and must never abort button remapping.
+                    if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
+                        events = ()
+                    else:
+                        raise ButtonCaptureError(
+                            self._input_error_message(exc, phase="reading mouse events")
+                        ) from exc
                 for event in events:
                     if event.type != ecodes.EV_KEY or event.value != 1:
                         continue
