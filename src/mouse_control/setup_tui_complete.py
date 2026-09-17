@@ -8,6 +8,7 @@ exclusive button capture.  It deliberately refuses ambiguous replacements.
 from __future__ import annotations
 
 import curses
+import errno
 from typing import Any, Callable
 
 from evdev import InputDevice, ecodes
@@ -23,6 +24,15 @@ from .wizard import ButtonCaptureError, get_button_name
 
 class CompleteCursesSetupApp(IntegratedCursesSetupApp):
     """Complete user-facing setup: one TUI, full discovery ladder, stable capture."""
+
+    @staticmethod
+    def _input_error_message(exc: OSError) -> str:
+        if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY}:
+            return (
+                "The input device is temporarily busy. Mouse Control kept the current "
+                "mappings unchanged; release the competing grab and try button capture again."
+            )
+        return f"Input capture failed: {exc}"
 
     def _hardware_viewport(self, height: int):
         rows = self.controller.detail_rows()
@@ -114,10 +124,11 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
             device.grab()
         except OSError as exc:
             if device is not None:
-                device.close()
-            raise ButtonCaptureError(
-                f"Could not reserve the selected mouse for button capture: {exc}"
-            ) from exc
+                try:
+                    device.close()
+                except OSError:
+                    pass
+            raise ButtonCaptureError(self._input_error_message(exc)) from exc
 
         nodelay_enabled = False
         try:
@@ -143,20 +154,31 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                 except BlockingIOError:
                     events = ()
                 except OSError as exc:
-                    raise ButtonCaptureError(
-                        f"Mouse disconnected during button capture: {exc}"
-                    ) from exc
+                    raise ButtonCaptureError(self._input_error_message(exc)) from exc
                 for event in events:
                     if event.type != ecodes.EV_KEY or event.value != 1:
                         continue
                     button = get_button_name(event.code)
                     self.stdscr.nodelay(False)
-                    action = self._choose_button_action(button)
-                    self.stdscr.nodelay(True)
+                    try:
+                        action = self._choose_button_action(button)
+                    except OSError as exc:
+                        # Keyboard/key-chord capture can transiently lose an
+                        # input fd or encounter an existing exclusive grab.
+                        # Treat that as a recoverable editor failure rather than
+                        # aborting the entire setup transaction.
+                        self.controller.status = self._input_error_message(exc)
+                        action = None
+                    finally:
+                        self.stdscr.nodelay(True)
                     if action is not None:
                         self.controller.apply_button_mapping(button, action)
                     break
                 curses.napms(20)
+        except OSError as exc:
+            # No transient evdev I/O failure is allowed to escape the button
+            # editor and tear down setup. Existing staged mappings are intact.
+            raise ButtonCaptureError(self._input_error_message(exc)) from exc
         finally:
             if nodelay_enabled:
                 self.stdscr.nodelay(False)
@@ -165,7 +187,10 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                     device.ungrab()
                 except OSError:
                     pass
-                device.close()
+                try:
+                    device.close()
+                except OSError:
+                    pass
 
 
 def run_complete_setup_tui(
