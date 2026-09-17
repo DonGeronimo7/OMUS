@@ -19,7 +19,7 @@ vendor-specific hardware control.
 
 Where a validated backend exists, Mouse Control also exposes DPI and
 polling/report-rate control. Native Logitech HID++ support is built in,
-OpenRazer is optional, and Automatic Discovery can safely gather evidence for
+exact-model native Razer support is built in, and Automatic Discovery can safely gather evidence for
 unknown hardware without guessing write commands.
 
 ## Current release: v0.9.3
@@ -117,7 +117,7 @@ is already proven for the selected mouse.
 - Configures polling/report rate only through validated writable capabilities.
 - Uses native Logitech HID++ discovery for supported capabilities.
 - Uses independently PROVEN exact-model learned operations where available.
-- Uses optional OpenRazer integration for applicable Razer hardware.
+- Uses native, readback-verified control for explicitly modeled Razer hardware.
 - Falls back to read-only generic HID diagnostics plus evdev/uinput remapping.
 - Preserves DPI notifications, reconnect recovery, late receiver insertion,
   battery/tray behavior, and user-service controls from the v0.9.0 runtime.
@@ -322,8 +322,8 @@ Mouse Control starts safe and becomes more capable only when it has real
 evidence for your exact mouse:
 
 1. It recognizes the physical mouse and its Linux connections.
-2. It checks for a built-in, validated driver such as Logitech HID++ or an
-   optional integration such as OpenRazer.
+2. It checks for a built-in, validated implementation such as Logitech HID++
+   or exact-model native Razer RPC.
 3. If a feature is already proven for that exact model, setup offers it.
 4. Otherwise, it stays read-only, can offer Guided Discovery, and leaves
    ordinary remapping fully available.
@@ -341,7 +341,7 @@ The detailed evidence-based record is in
 | --- | --- | --- |
 | Logitech G305 | Fully tested reference | Button remapping, DPI, DPI notifications, and 1000/500/250/125 Hz polling have been tested on real hardware. |
 | Other Logitech HID++ mice | Promising, model-by-model | Mouse Control discovers the needed details live, but G305 results are not assumed to apply to another model. |
-| OpenRazer-compatible mice | Optional support | Availability depends on OpenRazer and each mouse's supported features; broader real-hardware testing is still welcome. |
+| Modeled Razer Viper V2/V3 variants | Native exact-model support | DPI, polling, firmware and applicable battery state use native RPC with readback; broader real-hardware testing is still welcome. |
 | Any other mouse | Safe fallback | Button remapping and read-only diagnostics can work even when DPI and polling controls are not yet proven. |
 
 ## Device permissions
@@ -384,12 +384,12 @@ setting path separate from the notification sent when the physical DPI button
 is pressed. This prevents one kind of hardware message from being mistaken for
 another.
 
-## Optional OpenRazer integration
+## Native Razer protocol support
 
-OpenRazer is optional. If it is unavailable, or your Razer mouse lacks a
-supported feature, Mouse Control still keeps normal remapping available. Install
-OpenRazer through your Linux distribution, then run Mouse Control as your normal
-desktop user.
+Mouse Control does not require the OpenRazer daemon, kernel module, D-Bus API,
+or Python client. OpenRazer remains protocol provenance only. Exact modeled
+devices use Mouse Control's native 90-byte RPC implementation; unknown Razer
+devices remain read-only and keep normal remapping available.
 
 ## What Mouse Control intentionally does not do
 

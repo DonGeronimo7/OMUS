@@ -1,5 +1,28 @@
 # AI handoff log
 
+## 2026-09-17 — HID intelligence and native Razer consolidation
+
+- Baseline: branch `codex/tui-only-setup`, TUI cleanup commit `e327932`.
+- Removed the OpenRazer runtime backend/dependency and replaced its supported
+  Mouse-Control operations with an exact-model native Razer backend. DPI and
+  polling writes require an exact VID:PID, exactly one responding interface,
+  fixed protocol facts, and canonical readback. Firmware and applicable
+  battery/charging reads remain independent capabilities.
+- Consolidated descriptor-backed input/output/feature decoding with correct
+  Variable/Array, Delimiter, Buffered Bytes, unit/physical-range, collection,
+  report identity, and wire-position semantics. Expanded standard HID usages
+  and evdev mappings without interpreting vendor-defined payloads.
+- Added protocol-neutral repeated-frame field-role inference, bounded XOR/SUM/
+  selected CRC inference, and information-gain-ranked read-only experiment
+  planning. Existing contrastive learning supplies repeated guided actions and
+  negative controls; none of these structural results grants write authority.
+- Audited every production module, package entry point, retained research CLI,
+  hardware backend, and repertoire family in `docs/CODE_HEALTH_AUDIT.md`.
+- Validation: focused suites passed; full suite `637 passed` with one existing
+  GLib warning; `compileall`, `git diff --check`, and
+  `python3 -m build --no-isolation` passed. No physical Razer validation was
+  performed. No push, merge, tag, release, or installation was performed.
+
 ## 2026-09-17 — TUI-only setup routing
 
 - Removed the `_LEGACY_SETUP`/TTY fallback and the superseded line-oriented

@@ -1,12 +1,12 @@
-"""Native read-only Razer protocol teacher.
+"""Native Razer protocol grammar and exact-model transport.
 
 This module deliberately does not depend on OpenRazer, its daemon, D-Bus API,
-Python client, or mouse-control's optional OpenRazer runtime backend.  Public
+or Python client. Public
 OpenRazer/OpenMouse protocol research is used only as reference material for a
 small exact-PID table and the already-documented 90-byte Razer control grammar.
 
-The implementation exposes *read queries only*.  It has no setter API and the
-packet encoder rejects command IDs whose read-direction bit is not set.
+Writes are constructed only for exact product specifications declared below
+and remain subject to backend identity checks plus canonical readback.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ _IOC_READ = 2
 
 
 class RazerProtocolError(RuntimeError):
-    """A validated native Razer read query failed."""
+    """A validated native Razer transaction failed."""
 
     def __init__(
         self,
@@ -66,7 +66,7 @@ class RazerProtocolError(RuntimeError):
 
 @dataclass(frozen=True)
 class RazerCommand:
-    """One known read-direction Razer command."""
+    """One known Razer command with an explicit fixed payload shape."""
 
     command_class: int
     command_id: int
@@ -78,8 +78,6 @@ class RazerCommand:
             raise ValueError("command_class must fit in one byte")
         if not (0 <= self.command_id <= 0xFF):
             raise ValueError("command_id must fit in one byte")
-        if not (self.command_id & 0x80):
-            raise ValueError("native Razer teacher forbids write-direction commands")
         if not (0 <= self.data_size <= 80):
             raise ValueError("data_size must be between 0 and 80")
         if len(self.args) > self.data_size:
@@ -90,13 +88,15 @@ class RazerCommand:
 
 @dataclass(frozen=True)
 class RazerProductSpec:
-    """Exact product facts required to issue only known-safe reads."""
+    """Exact product facts required to issue known protocol operations."""
 
     model: str
     transaction_id: int
     dpi_storage: int
     high_rate_polling: bool
     has_battery: bool
+    maximum_dpi: int
+    dpi_step: int = 50
 
 
 @dataclass(frozen=True)
@@ -116,11 +116,11 @@ class NativeRazerState:
 # to authorize a control query because transaction IDs and polling grammars
 # vary by product ID and transport.
 VERIFIED_RAZER_PRODUCTS: dict[int, RazerProductSpec] = {
-    0x00A5: RazerProductSpec("Viper V2 Pro (Wired)", 0x1F, 0x01, False, False),
-    0x00A6: RazerProductSpec("Viper V2 Pro", 0x1F, 0x01, True, True),
-    0x00B8: RazerProductSpec("Viper V3 HyperSpeed", 0x1F, 0x01, False, True),
-    0x00C0: RazerProductSpec("Viper V3 Pro (Wired)", 0x1F, 0x01, False, False),
-    0x00C1: RazerProductSpec("Viper V3 Pro", 0x1F, 0x01, True, True),
+    0x00A5: RazerProductSpec("Viper V2 Pro (Wired)", 0x1F, 0x01, False, False, 30000),
+    0x00A6: RazerProductSpec("Viper V2 Pro", 0x1F, 0x01, True, True, 30000),
+    0x00B8: RazerProductSpec("Viper V3 HyperSpeed", 0x1F, 0x01, False, True, 30000),
+    0x00C0: RazerProductSpec("Viper V3 Pro (Wired)", 0x1F, 0x01, False, False, 35000),
+    0x00C1: RazerProductSpec("Viper V3 Pro", 0x1F, 0x01, True, True, 35000),
 }
 
 _FIRMWARE = RazerCommand(0x00, 0x81, 0x02)
@@ -134,6 +134,22 @@ def _dpi_command(storage: int) -> RazerCommand:
     return RazerCommand(0x04, 0x85, 0x07, (storage,))
 
 
+def _set_dpi_command(storage: int, x_dpi: int, y_dpi: int) -> RazerCommand:
+    return RazerCommand(
+        0x04, 0x05, 0x07,
+        (storage, x_dpi >> 8, x_dpi & 0xFF, y_dpi >> 8, y_dpi & 0xFF, 0, 0),
+    )
+
+
+def _set_polling_command(hz: int, *, extended: bool, argument: int = 1) -> RazerCommand:
+    ceiling = 8000 if extended else 1000
+    if hz <= 0 or ceiling % hz:
+        raise ValueError(f"unsupported native Razer polling rate {hz}")
+    divisor = ceiling // hz
+    return (RazerCommand(0x00, 0x40, 0x02, (argument, divisor)) if extended
+            else RazerCommand(0x00, 0x05, 0x01, (divisor,)))
+
+
 def razer_checksum(packet: bytes | bytearray) -> int:
     """Return Razer's XOR checksum over bytes 2..87."""
 
@@ -145,12 +161,8 @@ def razer_checksum(packet: bytes | bytearray) -> int:
     return checksum
 
 
-def encode_read_request(command: RazerCommand, transaction_id: int) -> bytes:
-    """Encode one safe read request.
-
-    ``RazerCommand`` rejects write-direction IDs at construction, giving this
-    module a structural guard against accidentally becoming a setter.
-    """
+def encode_request(command: RazerCommand, transaction_id: int) -> bytes:
+    """Encode one exact Razer command."""
 
     if not (0 <= transaction_id <= 0xFF):
         raise ValueError("transaction_id must fit in one byte")
@@ -204,7 +216,7 @@ def _hid_feature_ioctl(number: int, length: int) -> int:
 
 
 class HidrawRazerSession:
-    """Minimal Linux hidraw Feature-report transport for native Razer reads."""
+    """Minimal Linux hidraw Feature-report transport for native Razer RPC."""
 
     def __init__(
         self,
@@ -252,13 +264,13 @@ class HidrawRazerSession:
         return bytes(buffer[1:])
 
     def query(self, command: RazerCommand, transaction_id: int) -> bytes:
-        """Execute one proven getter and return validated argument bytes.
+        """Execute one exact-model command and return validated argument bytes.
 
         The request Feature SET is part of Razer's read transaction.  The
         request is sent once; only Feature GET response reads are retried.
         """
 
-        request = encode_read_request(command, transaction_id)
+        request = encode_request(command, transaction_id)
         self._set_feature(request)
 
         last_error: RazerProtocolError | None = None

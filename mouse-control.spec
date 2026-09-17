@@ -25,8 +25,8 @@ Requires:       python3-packaging
 Requires:       systemd-udev
 
 %description
-A command-line mouse button remapper using evdev and uinput, with optional
-hardware DPI configuration through native HID or OpenRazer. Includes an
+A command-line mouse button remapper using evdev and uinput, with validated
+hardware DPI configuration through native protocol drivers. Includes an
 interactive setup wizard and commands for managing a systemd user service.
 
 %prep

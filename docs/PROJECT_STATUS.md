@@ -1,5 +1,25 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — HID intelligence consolidation and native Razer runtime
+
+- The descriptor engine now preserves Delimiter alternate usage sets, handles
+  Array selectors/nulls/multi-byte values correctly, treats Buffered Bytes as
+  opaque blobs, and exposes units, physical values, wire positions, collection
+  paths, report direction, and stable member identity through one decoder.
+- Standard HID usage interpretation and evdev correlations were expanded while
+  vendor-defined usages remain opaque.
+- Exact modeled Razer Viper V2/V3 variants now use a native 90-byte RPC backend
+  for DPI, polling, firmware, battery, and charging, with DPI/polling readback.
+  OpenRazer remains provenance only; its runtime adapter/dependency was removed.
+- Protocol-neutral repeated-frame role inference, bounded checksum/CRC
+  inference, contrastive controls, and information-gain experiment selection
+  feed Automatic Discovery without granting write authority.
+- The complete production-module/repertoire disposition is recorded in
+  `docs/CODE_HEALTH_AUDIT.md`.
+- Automated validation: 637 tests passed with the existing GLib deprecation
+  warning; compileall, diff validation, and sdist/wheel build passed. Native
+  Razer physical hardware validation remains pending.
+
 Last updated: 2026-09-17
 
 ## TUI-only interactive setup
@@ -19,7 +39,7 @@ The accepted Automatic Discovery checkpoint is
 `2995cbed24f9cef30ce5e94bfc7c29555e438639`. It includes descriptor-backed
 semantic persistence and exact-member rebinding, teacher-free read-only DPI
 recognition, generation-aware RESYNC/LIVE handling, and independently PROVEN
-exact-model learned transactions. Native HID++, OpenRazer, remapping, polling,
+exact-model learned transactions. Native HID++, native Razer RPC, remapping, polling,
 notifications, reconnect, service behavior, configuration compatibility, and
 the current full-screen TUI remain separate established paths under the v0.8.2
 compatibility baseline.
@@ -236,9 +256,10 @@ BatteryState and refresh together.
 Extended Adjustable DPI (`0x2202`) is discoverable but independent-axis packet
 handling is likewise deferred.
 
-OpenRazer remains available behind the common backend contract. Unknown or
-ambiguous hardware falls back to Generic HID diagnostics and ordinary evdev
-remapping without guessed capabilities or writes.
+OpenRazer is protocol provenance only, not a runtime dependency or backend.
+Exact modeled Razer devices use Mouse Control's native RPC implementation;
+unknown or ambiguous hardware falls back to Generic HID diagnostics and
+ordinary evdev remapping without guessed capabilities or writes.
 
 Backends now return confirmed DPI state where live readback is available.
 Legacy setters without readback remain compatible, while `DpiCycler` records
