@@ -1,5 +1,22 @@
 # AI handoff log
 
+## 2026-09-17 — Trace evidence foundation
+
+- Added versioned canonical USB observation/setup/transaction models under an
+  observation-only `mouse_control.trace` package.
+- Added Linux binary-usbmon extended-header decoding and live per-bus capture,
+  with immediate current bus/address filtering derived from an unambiguous
+  physical device and stable fingerprint. No deprecated text parsing was added.
+- Added deterministic URB assembly covering missing halves, duplicate events,
+  URB reuse, metadata mismatch, out-of-order timestamps, and capture boundaries.
+- Added schema-v1 deterministic session manifests and streamed SHA-256 artifact
+  hashing. No PCAP import, semantic inference, replay, or write promotion is
+  part of this checkpoint.
+- Automated validation: 15 focused trace tests, the 94-test trace plus
+  Automatic Discovery regression suite, and the complete 626-test suite passed.
+  Compileall and whitespace checks passed. Live hardware capture remains
+  unverified.
+
 ## 2026-09-17 — Setup observed-state integration
 
 - Setup Review now separates measured physical DPI/polling evidence from

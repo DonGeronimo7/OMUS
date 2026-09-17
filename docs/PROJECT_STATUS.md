@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-17
 
+## 2026-09-17 trace evidence foundation
+
+Automatic Discovery now has an additive, observation-only USB trace foundation.
+It defines versioned protocol-neutral observations and transactions, decodes the
+Linux binary usbmon extended ABI, resolves each live capture from a stable
+physical-device fingerprint to the device's current USB bus/address, and pairs
+URB submit/completion events without assigning vendor semantics. Missing,
+reused, mismatched, and capture-boundary URBs remain explicit evidence instead
+of being silently discarded. Deterministic schema-v1 session manifests and
+streamed artifact hashing establish the first corpus/reproducibility boundary.
+
+This foundation does not import PCAP/PCAPNG, infer semantic fields, promote a
+protocol hypothesis, or expose any execution path. Captured writes remain raw
+evidence and grant no write authority. Live usbmon behavior is unit-tested
+against ABI fixtures but has not yet been physically validated on a USB bus.
+
 ## 2026-09-17 setup observed-state separation
 
 Setup now loads an exact-device calibrated read-only profile into a dedicated
