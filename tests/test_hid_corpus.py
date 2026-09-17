@@ -4,7 +4,7 @@ import json
 import pytest
 
 from mouse_control.hid_behavior import HidBehaviorClass, profile_reports
-from mouse_control.hid_corpus import (HidCaptureRecord, SCHEMA, descriptor_model, format_semantic_inventory,
+from mouse_control.hid_corpus import (HidCaptureRecord, SCHEMA, descriptor_model, format_capture_explanation, format_semantic_inventory,
                                       load_hid_capture, load_hid_corpus_device,
                                       write_hid_corpus_capture)
 from mouse_control.hid_semantics import HidSemanticClass, interpret_descriptor
@@ -15,6 +15,11 @@ MOUSE = bytes.fromhex(
     "95 05 75 01 81 02 95 01 75 03 81 01 05 01 09 30 09 31 09 38 "
     "15 81 25 7F 75 08 95 03 81 06 C0 C0")
 VENDOR = bytes.fromhex("06 00 FF 09 23 A1 01 15 00 25 04 75 03 95 01 81 02 C0")
+NUMBERED_MOUSE = bytes.fromhex(
+    "05 01 09 02 A1 01 85 02 09 01 A1 00 05 09 19 01 29 05 15 00 25 01 "
+    "95 05 75 01 81 02 95 01 75 03 81 01 95 01 75 08 81 01 05 01 09 30 09 31 15 81 25 7F "
+    "75 08 95 02 81 06 09 38 95 01 81 06 05 0C 0A 38 02 95 01 81 06 06 00 FF "
+    "09 01 15 00 25 FF 75 08 95 02 81 02 C0 C0")
 
 
 def metadata():
@@ -69,3 +74,27 @@ def test_one_way_sequence_counter_is_not_misclassified_as_cyclic_state():
     behavior = next(iter(profile_reports([decode_input_report(parse_report_descriptor(VENDOR), item.raw)
                                           for item in records]).values()))
     assert behavior.classification is HidBehaviorClass.COUNTER
+
+
+def test_explain_replays_numbered_movement_and_distinguishes_empty_captures(tmp_path):
+    meta = metadata()
+    meta["interfaces"] = [{"interface_id": "pointer", "descriptor_file": "pointer.bin",
+                           "descriptor_sha256": hashlib.sha256(NUMBERED_MOUSE).hexdigest()}]
+    descriptors = {"pointer": NUMBERED_MOUSE}
+    write_hid_corpus_capture(tmp_path, meta, descriptors, "descriptor-only", [])
+    write_hid_corpus_capture(tmp_path, meta, descriptors, "idle", [
+        HidCaptureRecord(1, "pointer", 2, bytes.fromhex("02 00 00 00 00 00 00 00 00"))])
+    write_hid_corpus_capture(tmp_path, meta, descriptors, "pointer-movement", [
+        HidCaptureRecord(1, "pointer", 2, bytes.fromhex("02 00 00 FF FF 00 00 00 00")),
+        HidCaptureRecord(2, "pointer", 2, bytes.fromhex("02 00 00 FE FF 01 00 00 00"))])
+    corpus = load_hid_corpus_device(tmp_path)
+    descriptor_only = format_capture_explanation(corpus, "descriptor-only")
+    idle = format_capture_explanation(corpus, "idle")
+    movement = format_capture_explanation(corpus, "pointer-movement")
+    assert "Observed Input reports: 0" in descriptor_only
+    assert "Report 2: 1" in idle and "active 0/" in idle
+    assert "Report 2: 2" in movement
+    assert "X, Y" in movement and "values=(-2, -1)" in movement
+    assert "Wheel" in movement and "AC Pan" in movement
+    assert "Vendor-field activity:" in movement
+    assert "Diagnostics: none" in movement

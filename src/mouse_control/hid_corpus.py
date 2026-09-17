@@ -13,7 +13,8 @@ from typing import Iterable, Mapping
 
 from .hid_descriptor import ParsedHidDescriptor, parse_report_descriptor
 from .hid_report import DecodedHidReport, decode_input_report
-from .hid_semantics import interpret_descriptor
+from .hid_behavior import profile_reports
+from .hid_semantics import HidSemanticClass, interpret_descriptor
 
 SCHEMA = "mouse-control-hid-corpus-schema: 1"
 
@@ -135,6 +136,59 @@ def format_semantic_inventory(descriptor: ParsedHidDescriptor) -> str:
     if descriptor.diagnostics:
         lines.append("Diagnostics:")
         lines.extend(f"  {item.severity.value}: {item.code}: {item.message}" for item in descriptor.diagnostics)
+    return "\n".join(lines)
+
+
+def format_capture_explanation(device: HidCorpusDevice, mode: str) -> str:
+    """Render decoded Input evidence for one labelled capture.
+
+    This is deliberately derived at display time from immutable raw records,
+    rather than serializing an interpretation beside them.
+    """
+    records = device.capture(mode)
+    decoded = device.decoded_capture(mode)
+    semantic_index = {}
+    for descriptor in device.descriptors.values():
+        for field in interpret_descriptor(descriptor):
+            semantic_index[field.field_id] = field.semantics
+    by_report: dict[int, int] = {}
+    values: dict[str, list[int]] = {}
+    diagnostics = []
+    for report in decoded:
+        by_report[report.report_id] = by_report.get(report.report_id, 0) + 1
+        diagnostics.extend(report.diagnostics)
+        for value in report.values:
+            if value.logical_value is not None:
+                values.setdefault(value.field_id, []).append(value.logical_value)
+    lines = [f"Capture: {mode}", f"Observed Input reports: {len(records)}"]
+    if by_report:
+        lines.append("Report counts: " + ", ".join(
+            f"Report {report_id}: {count}" for report_id, count in sorted(by_report.items())))
+    else:
+        lines.append("Report counts: none")
+    standard, vendor = [], []
+    profiles = profile_reports(decoded)
+    for field_id in sorted(values):
+        semantics = semantic_index.get(field_id, ())
+        names = ", ".join(item.name for item in semantics) or "Undeclared field"
+        observed = values[field_id]
+        behavior = profiles[field_id]
+        activity = sum(value != 0 for value in observed)
+        text = (f"{names} [{field_id}]: active {activity}/{len(observed)}; "
+                f"values={tuple(sorted(set(observed)))}; behavior={behavior.classification.value}")
+        if any(item.semantic_class is HidSemanticClass.VENDOR_DEFINED for item in semantics):
+            vendor.append(text)
+        else:
+            standard.append(text)
+    lines.append("Decoded standard-field activity:")
+    lines.extend(f"  {item}" for item in standard) if standard else lines.append("  none")
+    lines.append("Vendor-field activity:")
+    lines.extend(f"  {item}" for item in vendor) if vendor else lines.append("  none")
+    if diagnostics:
+        lines.append("Diagnostics:")
+        lines.extend(f"  {item.severity.value}: {item.code}: {item.message}" for item in diagnostics)
+    else:
+        lines.append("Diagnostics: none")
     return "\n".join(lines)
 
 

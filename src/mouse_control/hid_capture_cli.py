@@ -7,7 +7,7 @@ import time
 
 from .discovery import get_mouse_devices, select_mouse_device
 from .generic_hid import capture_input_reports, discover_hid_devices
-from .hid_corpus import (HidCaptureRecord, SCHEMA, descriptor_model, format_semantic_inventory,
+from .hid_corpus import (HidCaptureRecord, SCHEMA, descriptor_model, format_capture_explanation, format_semantic_inventory,
                          write_hid_corpus_capture)
 from .hid_descriptor import parse_report_descriptor
 
@@ -75,4 +75,7 @@ def explain_hid_corpus(root: Path) -> int:
     for identifier, descriptor in device.descriptors.items():
         print(f"\nInterface {identifier}")
         print(format_semantic_inventory(descriptor))
+    for capture in sorted((root / "captures").glob("*.jsonl")):
+        print()
+        print(format_capture_explanation(device, capture.stem))
     return 0
