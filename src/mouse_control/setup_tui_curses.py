@@ -9,6 +9,7 @@ from evdev import InputDevice, ecodes
 
 from . import __version__
 from .device_topology import TopologyError
+from .discovery_lab import DiscoveryTool, discovery_tool_specs, run_discovery_tool
 from .guided_discovery import GuidedDiscoveryCancelled, GuidedStep, run_guided_discovery
 from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
@@ -63,7 +64,6 @@ class DpiEditSession:
         return True
 
     def test_live(self, requested: int) -> bool:
-        """Write and verify a candidate without changing the staged config."""
         if not self._validate(requested):
             return False
         try:
@@ -87,7 +87,6 @@ class DpiEditSession:
         return True
 
     def set_to_current(self) -> int | None:
-        """Read the mouse's current verified DPI into the candidate field."""
         current = self._read_current()
         if current is None:
             self.controller.status = "Could not read the mouse's current DPI."
@@ -100,7 +99,6 @@ class DpiEditSession:
         return current
 
     def accept(self, requested: int | None = None) -> bool:
-        """Explicitly commit a verified candidate to the setup stage."""
         target = self.candidate if requested is None else int(requested)
         if self.tested_value != target and not self.test_live(target):
             return False
@@ -113,7 +111,6 @@ class DpiEditSession:
         return True
 
     def cancel(self) -> None:
-        """Discard the edit and restore the hardware DPI active on entry."""
         if self.original_hardware is None:
             self.controller.status = "DPI edit cancelled; staged configuration was unchanged."
             return
@@ -167,7 +164,6 @@ class CursesSetupApp:
             self._accent = curses.color_pair(3) | curses.A_BOLD
             self._warn = curses.color_pair(4)
         except curses.error:
-            # Monochrome/reverse-video defaults remain fully usable.
             pass
 
     def _line_attr(self, text: str, *, selected: bool = False, dim: bool = False) -> int:
@@ -198,33 +194,13 @@ class CursesSetupApp:
 
         if height < 20 or width < 80:
             self._put(stdscr, 1, 2, f"Mouse Control — Setup v{__version__}", max(0, width - 4), curses.A_BOLD)
-            self._put(
-                stdscr,
-                3,
-                2,
-                "Terminal is too small. Resize to at least 80×20.",
-                max(0, width - 4),
-            )
-            self._put(
-                stdscr,
-                max(0, height - 2),
-                2,
-                "q Cancel   ? Help",
-                max(0, width - 4),
-                self._highlight,
-            )
+            self._put(stdscr, 3, 2, "Terminal is too small. Resize to at least 80×20.", max(0, width - 4))
+            self._put(stdscr, max(0, height - 2), 2, "q Cancel   ? Help", max(0, width - 4), self._highlight)
             stdscr.refresh()
             return
 
         sidebar = max(22, min(28, width // 4))
-        self._put(
-            stdscr,
-            0,
-            2,
-            f" Mouse Control — Setup v{__version__} ",
-            width - 4,
-            curses.A_BOLD,
-        )
+        self._put(stdscr, 0, 2, f" Mouse Control — Setup v{__version__} ", width - 4, curses.A_BOLD)
         try:
             stdscr.vline(1, sidebar, curses.ACS_VLINE, height - 4)
             stdscr.hline(height - 3, 0, curses.ACS_HLINE, width)
@@ -233,14 +209,7 @@ class CursesSetupApp:
 
         for index, section in enumerate(SECTIONS):
             label = f" {index + 1}. {section.value} "
-            self._put(
-                stdscr,
-                2 + index,
-                1,
-                label,
-                sidebar - 2,
-                self._highlight if section is self.controller.section else 0,
-            )
+            self._put(stdscr, 2 + index, 1, label, sidebar - 2, self._highlight if section is self.controller.section else 0)
 
         x = sidebar + 2
         content_width = width - x - 2
@@ -250,14 +219,7 @@ class CursesSetupApp:
         if self.controller.section is SetupSection.DEVICE:
             self._put(stdscr, y, x, "Select a device", content_width, curses.A_BOLD)
             y += 1
-            self._put(
-                stdscr,
-                y,
-                x,
-                "Choose the mouse you want to configure.",
-                content_width,
-                self._muted,
-            )
+            self._put(stdscr, y, x, "Choose the mouse you want to configure.", content_width, self._muted)
             y += 2
             for index, device in enumerate(self.controller.devices):
                 if y >= height - 5:
@@ -266,14 +228,7 @@ class CursesSetupApp:
                 bound = index == self.controller.selected_index
                 prefix = "●" if bound else "○"
                 name = f" {prefix}  {device.name}"
-                self._put(
-                    stdscr,
-                    y,
-                    x,
-                    name,
-                    content_width,
-                    self._line_attr(name, selected=selected),
-                )
+                self._put(stdscr, y, x, name, content_width, self._line_attr(name, selected=selected))
                 y += 1
                 identity = self._device_identity(device)
                 if identity:
@@ -283,18 +238,8 @@ class CursesSetupApp:
             for row in self.controller.detail_rows():
                 if y >= height - 4:
                     break
-                selected = (
-                    row.cursor_index is not None
-                    and row.cursor_index == self.controller.row_cursor
-                )
-                self._put(
-                    stdscr,
-                    y,
-                    x,
-                    row.text,
-                    content_width,
-                    self._line_attr(row.text, selected=selected, dim=row.dim),
-                )
+                selected = row.cursor_index is not None and row.cursor_index == self.controller.row_cursor
+                self._put(stdscr, y, x, row.text, content_width, self._line_attr(row.text, selected=selected, dim=row.dim))
                 y += 1
 
         status = self.controller.status or self.controller.notice
@@ -347,6 +292,8 @@ class CursesSetupApp:
                 "↑ / ↓  navigate the current panel",
                 "← / →  switch setup sections",
                 "Enter  select, edit, or continue",
+                "Hardware / Discovery contains the complete evidence ladder.",
+                "LAB entries collect evidence; PROVE entries may write only through guarded engines.",
                 "b / Esc  go back",
                 "q  cancel setup (confirmation required)",
                 "No configuration is saved until Review → Save and Finish.",
@@ -415,15 +362,68 @@ class CursesSetupApp:
                 pass
             self.stdscr.refresh()
 
+    def _run_discovery_tool(self, tool: DiscoveryTool) -> None:
+        spec = next(spec for spec in discovery_tool_specs() if spec.tool is tool)
+        if spec.writes_hardware:
+            verb = "promotion" if spec.promotion else "evidence capture"
+            confirmed = self._confirm(
+                spec.label,
+                [
+                    spec.description,
+                    "",
+                    f"This {verb} can change live hardware state.",
+                    "The underlying engine still requires exact identity, verification and rollback.",
+                    "No result becomes writable unless that engine persists PROVEN authority.",
+                ],
+                yes="Enter Run guarded lab",
+                no="b Cancel",
+            )
+            if not confirmed:
+                self.controller.status = "Discovery lab cancelled; no authority changed."
+                return
+        else:
+            confirmed = self._confirm(
+                spec.label,
+                [spec.description, "", "This measurement is read-only."],
+                yes="Enter Run lab",
+                no="b Cancel",
+            )
+            if not confirmed:
+                self.controller.status = "Discovery lab cancelled."
+                return
+
+        def execute() -> int:
+            print("\nReturning to Mouse Control setup when this lab finishes.\n")
+            return run_discovery_tool(
+                tool,
+                devices=self.controller.devices,
+                selected=self.controller.selected,
+            )
+
+        try:
+            self.controller.backend.close()
+        except Exception:
+            pass
+
+        try:
+            status = int(self._suspend_curses(execute))
+        except (OSError, PermissionError, ValueError, HardwareError) as exc:
+            self.controller.refresh_discovery_backend(status=f"Discovery lab failed: {exc}")
+            return
+
+        if status == 0:
+            message = f"✓ {spec.label} completed; capabilities refreshed."
+        elif status == 130:
+            message = f"{spec.label} cancelled; capabilities refreshed."
+        else:
+            message = f"{spec.label} did not produce new PROVEN authority (exit {status}); capabilities refreshed."
+        self.controller.refresh_discovery_backend(status=message)
+
     def _read_text(self, title: str, *, hint: str = "") -> str | None:
         value = ""
         while True:
             lines = ([hint] if hint else []) + [f"Action: {value or ' '}" ]
-            self._modal(
-                title,
-                lines,
-                prompt="Type action   Enter Accept   Esc Cancel",
-            )
+            self._modal(title, lines, prompt="Type action   Enter Accept   Esc Cancel")
             key = self.stdscr.getch()
             if key == curses.KEY_RESIZE:
                 continue
@@ -473,10 +473,7 @@ class CursesSetupApp:
                 if action == "__chord__":
                     return self._suspend_curses(capture_keyboard_chord)
                 if action == "__manual__":
-                    raw = self._read_text(
-                        "Manual Linux action",
-                        hint="Examples: key:KEY_F13  chord:KEY_LEFTCTRL+KEY_C  mouse:BTN_SIDE",
-                    )
+                    raw = self._read_text("Manual Linux action", hint="Examples: key:KEY_F13  chord:KEY_LEFTCTRL+KEY_C  mouse:BTN_SIDE")
                     if raw is None:
                         return None
                     try:
@@ -554,13 +551,7 @@ class CursesSetupApp:
         if height < 16 or width < 56:
             stdscr.erase()
             self._put(stdscr, 1, 2, "DPI editor paused", max(0, width - 4), curses.A_BOLD)
-            self._put(
-                stdscr,
-                3,
-                2,
-                "Resize the terminal to at least 56×16 to continue.",
-                max(0, width - 4),
-            )
+            self._put(stdscr, 3, 2, "Resize the terminal to at least 56×16 to continue.", max(0, width - 4))
             stdscr.refresh()
             return
 
@@ -579,45 +570,18 @@ class CursesSetupApp:
             pass
 
         self._put(win, 1, 2, f"DPI Configuration — Stage {session.index + 1}", box_w - 4, self._accent)
-        self._put(
-            win,
-            3,
-            2,
-            f"Accepted stage value: {self.controller.choices.stages[session.index]} DPI",
-            box_w - 4,
-        )
+        self._put(win, 3, 2, f"Accepted stage value: {self.controller.choices.stages[session.index]} DPI", box_w - 4)
         self._put(win, 4, 2, f"Candidate DPI:       {value or ' '}", box_w - 4, curses.A_BOLD)
         if session.tested_value is not None:
-            self._put(
-                win,
-                5,
-                2,
-                f"Live test:           {session.tested_value} DPI",
-                box_w - 4,
-                self._ok,
-            )
+            self._put(win, 5, 2, f"Live test:           {session.tested_value} DPI", box_w - 4, self._ok)
         else:
             self._put(win, 5, 2, "Live test:           not tested", box_w - 4, self._muted)
 
         actions = ("Test live", "Accept value", "Set to current", "Cancel")
         for index, label in enumerate(actions):
             prefix = "▶ " if index == action_cursor else "  "
-            self._put(
-                win,
-                7 + index,
-                2,
-                prefix + label,
-                box_w - 4,
-                self._highlight if index == action_cursor else 0,
-            )
-        self._put(
-            win,
-            box_h - 2,
-            2,
-            "Type DPI   ↑↓ Action   Enter Run   Esc Cancel",
-            box_w - 4,
-            self._muted,
-        )
+            self._put(win, 7 + index, 2, prefix + label, box_w - 4, self._highlight if index == action_cursor else 0)
+        self._put(win, box_h - 2, 2, "Type DPI   ↑↓ Action   Enter Run   Esc Cancel", box_w - 4, self._muted)
         win.refresh()
 
     def _dpi_editor(self, index: int) -> None:
@@ -738,6 +702,8 @@ class CursesSetupApp:
                     self.controller.status = str(exc)
             elif action.kind is ActionKind.GUIDED_DISCOVERY:
                 self._run_guided()
+            elif action.kind is ActionKind.RUN_DISCOVERY_TOOL:
+                self._run_discovery_tool(DiscoveryTool(action.payload))
             elif action.kind is ActionKind.SAVE:
                 if self._confirm(
                     "Save configuration?",

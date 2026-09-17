@@ -69,6 +69,16 @@ def test_installed_entrypoint_routes_interactive_setup_to_tui(monkeypatch):
     legacy.assert_not_called()
 
 
+def test_interactive_launcher_opens_tui_directly_without_legacy_home(monkeypatch):
+    monkeypatch.setattr(app.sys, "stdin", Tty())
+    monkeypatch.setattr(app.sys, "stdout", Tty())
+    with patch.object(app, "run_tui_setup_wizard", return_value=31) as tui, \
+         patch.object(cli, "main", return_value=99) as legacy_home:
+        assert app.main([]) == 31
+    tui.assert_called_once_with()
+    legacy_home.assert_not_called()
+
+
 def test_installed_entrypoint_preserves_non_tty_legacy_compatibility(monkeypatch):
     monkeypatch.setattr(app.sys, "stdin", NotTty())
     monkeypatch.setattr(app.sys, "stdout", NotTty())
@@ -111,12 +121,13 @@ def test_tui_setup_success_reuses_existing_commit_and_service_flow(tmp_path):
          patch.object(cli, "restart_service") as restart, \
          patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
          patch.object(cli, "_load_setup_config", return_value=existing), \
-         patch.object(setup_entry, "run_setup_tui", return_value=result), \
+         patch.object(setup_entry, "run_complete_setup_tui", return_value=result) as complete, \
          patch.object(cli, "_apply_hardware") as apply, \
          patch.object(cli, "merge_setup_config", return_value="config text") as merge, \
          patch.object(cli, "save_config", return_value=target) as save, \
          patch.object(cli, "install_service") as install:
         assert setup_entry.run_tui_setup_wizard() == 0
+    complete.assert_called_once()
     stop.assert_called_once_with()
     apply.assert_called_once_with(
         backend, MOUSE, choices.stages, 800, 500, setup=True
@@ -136,7 +147,7 @@ def test_tui_setup_cancel_restores_dpi_config_and_running_service():
          patch.object(cli, "restart_service") as restart, \
          patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
          patch.object(cli, "_load_setup_config", return_value={}), \
-         patch.object(setup_entry, "run_setup_tui", return_value=result), \
+         patch.object(setup_entry, "run_complete_setup_tui", return_value=result), \
          patch.object(setup_entry, "restore_dpi") as restore, \
          patch.object(cli, "save_config") as save:
         assert setup_entry.run_tui_setup_wizard() == 0
@@ -147,7 +158,10 @@ def test_tui_setup_cancel_restores_dpi_config_and_running_service():
 
 def test_tui_wrapper_restores_temporary_dpi_when_curses_aborts(monkeypatch):
     backend = FakeBackend()
-    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.wrapper", lambda _call: (_ for _ in ()).throw(KeyboardInterrupt()))
+    monkeypatch.setattr(
+        "mouse_control.setup_tui_curses.curses.wrapper",
+        lambda _call: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
     try:
         run_setup_tui(
             [MOUSE], {}, choices_factory=_choices, backend_factory=lambda _device: backend

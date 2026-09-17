@@ -27,9 +27,7 @@ def _capture(node, seconds: float) -> list[bytes]:
     try:
         while time.monotonic() < deadline:
             remaining = max(0.0, deadline - time.monotonic())
-            readable, _, _ = select.select(
-                [fd], [], [], min(0.25, remaining)
-            )
+            readable, _, _ = select.select([fd], [], [], min(0.25, remaining))
             if not readable:
                 continue
             try:
@@ -45,9 +43,7 @@ def _capture(node, seconds: float) -> list[bytes]:
 
 
 def _infer_alternating_pair(
-    packets: list[bytes],
-    *,
-    minimum_presses: int,
+    packets: list[bytes], *, minimum_presses: int
 ) -> tuple[bytes, bytes, int]:
     transitions: list[bytes] = []
     for packet in packets:
@@ -77,6 +73,17 @@ def _infer_alternating_pair(
     return press, release, complete
 
 
+def _pick_mouse(index: int | None):
+    mice = get_mouse_devices()
+    if not mice:
+        raise SystemExit("No mouse devices found")
+    if index is None:
+        return select_mouse_device(mice)
+    if index < 1 or index > len(mice):
+        raise SystemExit(f"--device must be between 1 and {len(mice)}")
+    return mice[index - 1]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -84,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
             "No HID output or feature writes are sent."
         )
     )
+    parser.add_argument("--device", type=int, metavar="N")
     parser.add_argument("--seconds", type=float, default=10.0)
     parser.add_argument("--presses", type=int, default=8)
     parser.add_argument(
@@ -97,10 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.seconds <= 0 or args.presses < 5:
         parser.error("--seconds must be positive and --presses must be at least 5")
 
-    mice = get_mouse_devices()
-    if not mice:
-        raise SystemExit("No mouse devices found")
-    mouse = select_mouse_device(mice)
+    mouse = _pick_mouse(args.device)
     if mouse is None:
         return 0
     physical = build_device_graph(mouse)

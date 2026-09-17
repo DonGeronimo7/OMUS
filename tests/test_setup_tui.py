@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from mouse_control.discovery import MouseDevice
+from mouse_control.discovery_lab import DiscoveryTool, discovery_tool_specs
 from mouse_control.guided_discovery import GuidedDiscoveryOutcome, GuidedDpiLearningOutcome
 from mouse_control.setup_flow import SetupChoices
 from mouse_control.setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
@@ -154,11 +155,12 @@ def test_existing_mappings_and_preferences_are_preserved_until_edited():
     assert app.choices.mappings["BTN_EXTRA"] == "disable"
 
 
-def test_known_protocol_and_proven_learned_devices_skip_unnecessary_learning():
+def test_known_protocol_and_proven_learned_devices_skip_unnecessary_guided_observation():
     known = {MOUSE1.path: FakeBackend(protocol="Logitech HID++ 2"), MOUSE2.path: FakeBackend()}
     app, _ = controller(backends=known)
     assert app.guided_discovery_available is False
     assert any("Logitech HID++ 2" in line for line in app.hardware_lines())
+    assert any(action[0] == "tool" for action in app.hardware_actions())
 
     learned = {
         MOUSE1.path: FakeBackend(protocol=None, learned=True),
@@ -167,9 +169,10 @@ def test_known_protocol_and_proven_learned_devices_skip_unnecessary_learning():
     app, _ = controller(backends=learned)
     assert app.guided_discovery_available is False
     assert "✓ Learned exact-model support" in app.hardware_lines()
+    assert any(action[0] == "tool" for action in app.hardware_actions())
 
 
-def test_unknown_device_offers_guided_discovery_and_can_skip():
+def test_unknown_device_offers_guided_discovery_complete_labs_and_continue():
     unknown = {
         MOUSE1.path: FakeBackend(dpi=False, polling=False, protocol=None),
         MOUSE2.path: FakeBackend(),
@@ -178,9 +181,21 @@ def test_unknown_device_offers_guided_discovery_and_can_skip():
     app.section_index = SECTIONS.index(SetupSection.HARDWARE)
     assert app.guided_discovery_available is True
     assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
-    app.row_cursor = 1
+
+    actions = app.hardware_actions()
+    tool_rows = [item for item in actions if item[0] == "tool"]
+    assert len(tool_rows) == len(discovery_tool_specs())
+    sensor_index = next(
+        index for index, item in enumerate(actions)
+        if item[2] is DiscoveryTool.SENSOR_CALIBRATION
+    )
+    app.row_cursor = sensor_index
+    action = app.handle_key("ENTER")
+    assert action.kind is ActionKind.RUN_DISCOVERY_TOOL
+    assert action.payload is DiscoveryTool.SENSOR_CALIBRATION
+
+    app.row_cursor = len(actions) - 1
     assert app.handle_key("ENTER").kind is ActionKind.NONE
-    assert app.discovery_skipped is True
     assert app.section is SetupSection.BUTTONS
     assert "BTN_LEFT" in app.choices.mappings
 
