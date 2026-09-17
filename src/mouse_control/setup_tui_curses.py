@@ -534,18 +534,42 @@ class CursesSetupApp:
             elif key in (10, 13, curses.KEY_ENTER):
                 action = options[cursor][1]
                 if action == "__key__":
-                    name = self._suspend_curses(
-                        lambda: capture_keyboard_key(
-                            exclude_paths=(self.controller.selected.path,)
-                        )
+                    self._modal(
+                        "Record keyboard key",
+                        [
+                            "Press the keyboard key you want to assign.",
+                            "Ctrl+C cancels capture.",
+                            "Mouse Control temporarily reserves keyboard input while recording.",
+                        ],
+                        prompt="Waiting for key…",
                     )
-                    return f"key:{name}" if name else None
+                    name = capture_keyboard_key(
+                        exclude_paths=(self.controller.selected.path,),
+                        manage_terminal=False,
+                        reporter=None,
+                    )
+                    if name is None:
+                        self.controller.status = "Keyboard key capture cancelled or unavailable."
+                        return None
+                    return f"key:{name}"
                 if action == "__chord__":
-                    return self._suspend_curses(
-                        lambda: capture_keyboard_chord(
-                            exclude_paths=(self.controller.selected.path,)
-                        )
+                    self._modal(
+                        "Record keyboard chord",
+                        [
+                            "Press and hold the shortcut, then release all keys.",
+                            "Esc cancels capture.",
+                            "Mouse Control temporarily reserves keyboard input while recording.",
+                        ],
+                        prompt="Waiting for chord…",
                     )
+                    chord = capture_keyboard_chord(
+                        exclude_paths=(self.controller.selected.path,),
+                        manage_terminal=False,
+                        reporter=None,
+                    )
+                    if chord is None:
+                        self.controller.status = "Keyboard chord capture cancelled or unavailable."
+                    return chord
                 if action == "__manual__":
                     raw = self._read_text(
                         "Manual Linux action",
