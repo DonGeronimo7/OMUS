@@ -1,14 +1,15 @@
 """Reusable read-only guided learning used by setup and discovery CLI.
 
-This module intentionally owns no write or promotion path.  It orchestrates the
+This module intentionally owns no write or promotion path. It orchestrates the
 existing :class:`ReadOnlyLearningSession` controls/action samples and returns
-what was observed.  Writable hardware support remains the responsibility of the
+what was observed. Writable hardware support remains the responsibility of the
 existing exact-model PROVEN operation stores and transaction machinery.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Any, Callable
 
 from .contrastive_inference import refine_teacher_free
@@ -18,12 +19,17 @@ from .calibrated_discovery import (
     capture_calibrated_motion,
     infer_calibrated_raw_mappings,
 )
-from .calibrated_profiles import calibrated_profile_data, save_calibrated_profile
+from .calibrated_profiles import (
+    calibrated_profile_data,
+    find_calibrated_profile,
+    save_calibrated_profile,
+)
 from .sensor_calibration import measure_sensor_state_auto, summarize_calibrations
 from .discovery_engine import DiscoveryEngine
 from .learning_session import ReadOnlyLearningSession
 from .protocol_grammar import SemanticBehavior
 from .teacher_registry import read_teacher_labels
+from .transition_sources import infer_calibrated_transition_sources
 
 
 class GuidedDiscoveryCancelled(RuntimeError):
@@ -70,6 +76,8 @@ class DeepDpiLearningOutcome:
     raw_mappings: tuple[Any, ...]
     wrap_confirmed: bool
     action_identified: bool
+    transition_sources: tuple[Any, ...] = ()
+    reused_profile: bool = False
 
 
 @dataclass(frozen=True)
@@ -129,7 +137,7 @@ def _sample_summary(sample: Any, *, prefix: str = "Captured") -> str:
 def _action_identified(learned: Any) -> bool:
     """Return whether repeated action-specific evidence supports the DPI action.
 
-    This is deliberately an observation-only statement.  It does not create or
+    This is deliberately an observation-only statement. It does not create or
     promote a learned operation and therefore cannot authorize a hardware write.
     """
 
@@ -267,6 +275,64 @@ def _same_physical_stage(left: CalibratedDpiState, right: CalibratedDpiState) ->
     return abs(float(left.measured_cpi) - float(right.measured_cpi)) / high <= 0.12
 
 
+def _distance_label(distance_mm: float) -> str:
+    """Show the calibration distance in metric and familiar imperial units."""
+
+    return f"{distance_mm:g} mm ({distance_mm / 25.4:g} in)"
+
+
+def _stable_node_identity(node: Any) -> dict[str, object]:
+    """Return path-independent interface facts safe for calibrated profiles."""
+
+    return {
+        "bus": node.bus,
+        "vendor_id": node.vendor_id,
+        "product_id": node.product_id,
+        "interface_number": node.interface_number,
+        "descriptor_sha256": node.descriptor_sha256,
+        "name": node.name or "",
+        "uniq": node.uniq or "",
+    }
+
+
+def _feature_report_metadata(session: ReadOnlyLearningSession) -> dict[object, dict[str, object]]:
+    metadata: dict[object, dict[str, object]] = {}
+    for node, descriptor in session.descriptors.items():
+        identity = _stable_node_identity(node)
+        for definition in descriptor.feature_reports:
+            length = definition.byte_length if definition.report_id else definition.byte_length + 1
+            key = session._feature_key(node, definition.report_id)
+            metadata[key] = {
+                **identity,
+                "report_id": int(definition.report_id),
+                "report_length": max(1, int(length)),
+            }
+    return metadata
+
+
+def _profile_measured_cycle(profile: Any) -> tuple[CalibratedDpiState, ...]:
+    cycle = profile.get("dpi_cycle", {}) if isinstance(profile, dict) else {}
+    states = cycle.get("states", ()) if isinstance(cycle, dict) else ()
+    result: list[CalibratedDpiState] = []
+    for state in states if isinstance(states, list) else ():
+        if not isinstance(state, dict):
+            continue
+        try:
+            result.append(
+                CalibratedDpiState(
+                    configured_dpi=int(state["configured_dpi"]),
+                    measured_cpi=float(state["measured_cpi"]),
+                    polling_hz=(
+                        None if state.get("polling_hz") is None else int(state["polling_hz"])
+                    ),
+                    confidence=str(state["confidence"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            return ()
+    return tuple(result)
+
+
 def run_deep_dpi_stage_learning(
     selected: Any,
     result: Any,
@@ -275,7 +341,7 @@ def run_deep_dpi_stage_learning(
     prompt: PromptCallback,
     progress: ProgressCallback | None = None,
     distance_mm: float = 254.0,
-    calibration_passes: int = 3,
+    calibration_passes: int = 5,
     calibration_seconds: float = 8.0,
     transition_seconds: float = 1.5,
     max_stages: int = 8,
@@ -283,12 +349,9 @@ def run_deep_dpi_stage_learning(
 ) -> DeepDpiLearningOutcome:
     """Learn a complete physical DPI cycle without a vendor teacher or writes.
 
-    Each state is physically calibrated from evdev motion while correlated hidraw
-    streams are observed. DPI-button transitions are captured separately. The
-    cycle ends only after at least two distinct states and a physical wrap back to
-    the initial state. A calibrated read-only profile is saved only when a
-    persistent action-specific raw state field is found and cycle semantics are
-    validated.
+    Physical stage calibration and runtime-source inference are independent.
+    The expensive ruler/wrap experiment is an exact-device first-run operation:
+    once a validated read-only profile exists, later setup runs reuse it.
     """
     if distance_mm <= 0 or calibration_passes <= 0 or calibration_seconds <= 0:
         raise ValueError("calibration distance, passes, and capture window must be positive")
@@ -296,10 +359,30 @@ def run_deep_dpi_stage_learning(
         raise ValueError("transition window must be positive and max_stages must be at least two")
     if result.device.ambiguous:
         raise PermissionError("physical identity is ambiguous; calibrated learning cannot be persisted safely")
+
+    report = progress or (lambda _message: None)
+    existing = find_calibrated_profile(result.device)
+    if existing is not None:
+        profile_path, profile = existing
+        cycle = profile.get("dpi_cycle", {})
+        transition_sources = tuple(profile.get("transition_sources", ()))
+        if not transition_sources and profile.get("raw_mappings"):
+            transition_sources = tuple(profile["raw_mappings"])
+        report("✓ Reusing existing exact-device DPI calibration; ruler/wrap learning is not repeated")
+        return DeepDpiLearningOutcome(
+            result=result,
+            profile_path=profile_path,
+            measured_cycle=_profile_measured_cycle(profile),
+            raw_mappings=(),
+            wrap_confirmed=bool(cycle.get("wrap_confirmed")) if isinstance(cycle, dict) else True,
+            action_identified=True,
+            transition_sources=transition_sources,
+            reused_profile=True,
+        )
+
     if not result.device.hidraw_nodes or not engine.descriptors:
         raise PermissionError("no readable correlated HID descriptor path is available for stage learning")
 
-    report = progress or (lambda _message: None)
     session = session_factory(result.device, engine.descriptors)
     motion_controls: list[Any] = []
 
@@ -311,8 +394,9 @@ def run_deep_dpi_stage_learning(
                 calibration_passes,
                 f"Calibrate DPI stage {stage_number}",
                 (
-                    f"Place the mouse at a ruler start mark. After starting the sample, move exactly "
-                    f"{distance_mm:g} mm in one straight direction. Pass {pass_index}/{calibration_passes}."
+                    "Place the mouse at a ruler start mark. After starting the sample, move exactly "
+                    f"{_distance_label(distance_mm)} in one straight direction. "
+                    f"Pass {pass_index}/{calibration_passes}."
                 ),
             )
             if not prompt(step):
@@ -345,7 +429,7 @@ def run_deep_dpi_stage_learning(
             confidence=summary.confidence,
         )
 
-    report("• Calibrating the current physical DPI stage…")
+    report("• First-time DPI calibration: learning the current physical stage…")
     initial = calibrate(1)
     measured_cycle: list[CalibratedDpiState] = [initial]
     transition_samples: list[Any] = []
@@ -373,7 +457,8 @@ def run_deep_dpi_stage_learning(
         measured_cycle.append(state)
         if len(measured_cycle) >= 3 and _same_physical_stage(state, initial):
             wrap_confirmed = True
-            report("✓ Physical DPI cycle wrapped back to the initial stage")
+            report("✓ Physical DPI cycle learned and wraparound confirmed")
+            report("✓ DPI stage behavior physically calibrated")
             break
 
     learned = session.analyze(
@@ -399,30 +484,54 @@ def run_deep_dpi_stage_learning(
     cycle = calibrated_cycle_hypothesis(resulting_states) if wrap_confirmed else None
     action_identified = _action_identified(learned)
     profile_path = None
+    transition_sources: tuple[Any, ...] = ()
+
+    configured_cycle = (
+        tuple(state.configured_dpi for state in measured_cycle[:-1])
+        if wrap_confirmed
+        else ()
+    )
+    if wrap_confirmed and configured_cycle:
+        evdev_identities = {
+            os.fspath(node.path): _stable_node_identity(node)
+            for node in result.device.evdev_nodes
+        }
+        transition_sources = infer_calibrated_transition_sources(
+            transition_samples,
+            resulting_states,
+            cycle_order=configured_cycle,
+            raw_mappings=mappings,
+            contrastive_candidates=refinement.candidates,
+            guided_report_shapes=refinement.report_shapes,
+            control_samples=motion_controls,
+            evdev_source_identities=evdev_identities,
+            feature_report_metadata=_feature_report_metadata(session),
+        )
 
     if (
         wrap_confirmed
-        and mappings
+        and transition_sources
         and cycle is not None
         and cycle.confidence == "validated"
     ):
-        # configured_cycle excludes the final wrap-confirmation state.
-        configured_cycle = tuple(state.configured_dpi for state in measured_cycle[:-1])
         profile = calibrated_profile_data(
             device=result.device,
             configured_cycle=configured_cycle,
             measured_cycle=tuple(measured_cycle),
             mappings=mappings,
             action_report_keys=action_specific_keys,
+            transition_sources=transition_sources,
         )
         profile_path = save_calibrated_profile(profile)
+        report("✓ Runtime DPI transition source learned")
         report("✓ Saved exact-device calibrated read-only DPI event profile")
     elif not wrap_confirmed:
         report("? Full DPI-cycle wrap was not observed; no runtime profile was promoted")
-    elif not mappings:
-        report("? DPI stages changed physically, but no unambiguous persistent raw state field was found")
-    else:
+    elif cycle is None or cycle.confidence != "validated":
         report("? DPI-cycle evidence did not reach validated confidence; no runtime profile was promoted")
+    else:
+        report("• No absolute HID stage register was found")
+        report("? Physical DPI cycle is learned, but no stable runtime transition source has been identified yet")
 
     return DeepDpiLearningOutcome(
         result=result,
@@ -431,6 +540,7 @@ def run_deep_dpi_stage_learning(
         raw_mappings=tuple(mappings),
         wrap_confirmed=wrap_confirmed,
         action_identified=action_identified,
+        transition_sources=tuple(transition_sources),
     )
 
 
@@ -459,7 +569,7 @@ def run_guided_discovery(
 ) -> GuidedDiscoveryOutcome:
     """Run passive Automatic Discovery, then offer the safe DPI learner if useful.
 
-    No generic polling writer exists here.  Existing PROVEN exact-model polling
+    No generic polling writer exists here. Existing PROVEN exact-model polling
     evidence is surfaced by DiscoveryEngine; otherwise polling remains unchanged.
     """
 
