@@ -25,6 +25,8 @@ from .hid_descriptor import (
     parse_report_descriptor,
     vendor_defined_reports,
 )
+from .hid_report import DecodedHidReport, decode_input_report
+from .hid_semantics import InterpretedHidField, interpret_descriptor
 from .hid_probe import ReadOnlyHidProbe
 from .learned_operations import (
     LearnedOperationError,
@@ -82,6 +84,14 @@ class DiscoveryEngine:
     @property
     def descriptors(self) -> dict[DeviceNode, ParsedHidDescriptor]:
         return dict(self._descriptors)
+
+    def semantic_fields(self, node: DeviceNode) -> tuple[InterpretedHidField, ...]:
+        """Expose spec/descriptor-derived meaning independently of protocols."""
+        return interpret_descriptor(self._descriptors[node])
+
+    def decode_input(self, node: DeviceNode, raw_report: bytes) -> DecodedHidReport:
+        """Decode one passive Input report; this path has no write primitive."""
+        return decode_input_report(self._descriptors[node], raw_report)
 
     @property
     def feature_snapshots(self) -> dict[DeviceNode, dict[int, bytes]]:
@@ -196,6 +206,10 @@ class DiscoveryEngine:
                     details={
                         "interface_number": node.interface_number,
                         "descriptor_sha256": node.descriptor_sha256,
+                        "semantic_fields": len(interpret_descriptor(descriptor)),
+                        "diagnostics": tuple(
+                            (item.severity.value, item.code) for item in descriptor.diagnostics
+                        ),
                     },
                 )
             )

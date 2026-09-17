@@ -1,5 +1,24 @@
 # AI handoff log
 
+## 2026-09-17 — HID Semantic Engine v2
+
+- Expanded the descriptor parser into a diagnostic schema model preserving
+  collection paths, physical/unit metadata, local usage/designator/string
+  declarations, complete Main flags, and stable descriptor/field identities.
+- Added bounded bit-level Input decoding for numbered/unnumbered reports,
+  signed non-byte-aligned values, Variable fields, and Array selectors.
+- Added centralized Usage interpretation, deterministic standard mouse
+  semantics, explicit expected-versus-observed evdev relationships, decoded
+  field correlation, vendor-field behavior profiles, and derived trace HID
+  enrichment. Raw-byte correlation remains as a compatibility fallback.
+- Safety: all new paths are observational and contain no HID write primitive;
+  vendor fields remain structured unknowns and cannot grant write authority.
+- Automated validation: the final complete suite passed 640 tests with one
+  existing GLib deprecation warning; compileall and whitespace checks passed.
+  Physical G305
+  and SIGMACHIP semantic validation remains pending because no sanitized
+  descriptor/report corpus is present in the repository.
+
 ## 2026-09-17 — Trace evidence foundation
 
 - Added versioned canonical USB observation/setup/transaction models under an

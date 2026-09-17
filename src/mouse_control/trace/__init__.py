@@ -16,6 +16,7 @@ from .models import (
     UsbTransferType,
 )
 from .transaction_assembler import UsbTransactionAssembler
+from .hid_enrichment import HidTraceEnrichment
 
 __all__ = [
     "CaptureSource",
@@ -27,4 +28,5 @@ __all__ = [
     "UsbTransaction",
     "UsbTransactionAssembler",
     "UsbTransferType",
+    "HidTraceEnrichment",
 ]

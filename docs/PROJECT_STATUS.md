@@ -2,6 +2,32 @@
 
 Last updated: 2026-09-17
 
+## 2026-09-17 HID Semantic Engine v2
+
+Automatic Discovery now parses HID report descriptors as semantic schemas. It
+preserves collection hierarchy, complete Main-item flags, physical ranges,
+units, local usage/designator/string declarations, stable descriptor and field
+identities, and non-fatal validity diagnostics. A bounded bit-level decoder
+handles numbered and unnumbered Input reports, signed non-byte-aligned values,
+Variable members, and Array selectors. Standard buttons, axes, wheels,
+keyboard/consumer controls, power/battery fields, and vendor-defined fields are
+kept distinct; vendor fields remain structured unknowns.
+
+Descriptor-backed decoded fields are available to action correlation through
+stable field identities, while the existing raw-byte algorithms remain the
+fallback for descriptorless or undecodable traffic. Deterministic field
+behavior profiles classify static, momentary, enum, cyclic, counter,
+continuous, and persistent observations without granting semantics or write
+authority. Expected Linux event relationships remain separate from observed
+evdev confirmation. Trace HID enrichment is a derived record linked to, and
+never substituted for, immutable raw evidence.
+
+This layer is entirely read-only. It adds no replay, HID write, vendor
+transaction inference, DPI/polling write promotion, or desired-state mutation.
+Synthetic golden descriptors are automated-test evidence only; G305 and
+SIGMACHIP descriptor/report behavior has not been physically validated in this
+milestone.
+
 ## 2026-09-17 trace evidence foundation
 
 Automatic Discovery now has an additive, observation-only USB trace foundation.
