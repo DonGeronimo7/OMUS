@@ -1,0 +1,60 @@
+name: Apply no-write setup policy
+
+on:
+  push:
+    branches: [feat/automatic-hardware-discovery]
+    paths:
+      - tools/apply_no_write_setup_policy.py
+      - .github/workflows/apply-no-write-setup-policy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/automatic-hardware-discovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Apply final setup policy
+        run: python tools/apply_no_write_setup_policy.py
+      - name: Install test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest
+      - name: Targeted discovery/setup gate
+        run: |
+          PYTHONPATH=src pytest -q \
+            tests/test_setup_architecture.py \
+            tests/test_setup_state_machine.py \
+            tests/test_setup_tui.py \
+            tests/test_setup_flow.py \
+            tests/test_setup_persistence.py \
+            tests/test_setup_service.py \
+            tests/test_discovery_core.py \
+            tests/test_discovery_backend.py \
+            tests/test_calibrated_discovery.py \
+            tests/test_polling_measurement.py \
+            tests/test_learned_polling.py \
+            tests/test_learned_runtime_integration.py \
+            tests/test_native_hid.py
+      - name: Full regression gate
+        run: PYTHONPATH=src pytest -q
+      - name: Compile gate
+        run: python -m compileall -q src tests
+      - name: Whitespace gate
+        run: git diff --check
+      - name: Commit validated implementation
+        run: |
+          rm tools/apply_no_write_setup_policy.py .github/workflows/apply-no-write-setup-policy.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Finalize capability-driven discovery setup flow'
+          git push origin HEAD:feat/automatic-hardware-discovery
