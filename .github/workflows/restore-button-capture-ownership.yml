@@ -37,7 +37,6 @@ jobs:
             tests/test_setup_flow.py \
             tests/test_setup_persistence.py \
             tests/test_setup_service.py \
-            tests/test_remapper.py \
             tests/test_keyboard_capture.py
       - name: Full regression gate
         run: PYTHONPATH=src pytest -q
