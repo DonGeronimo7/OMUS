@@ -98,7 +98,7 @@ def test_button_capture_refuses_ambiguous_identity(monkeypatch):
         app._resolved_button_path()
 
 
-def test_selected_mouse_is_excluded_from_keyboard_capture(tmp_path):
+def test_integrated_keyboard_capture_excludes_selected_mouse(monkeypatch, tmp_path):
     mouse_path = tmp_path / "event-mouse"
     keyboard_path = tmp_path / "event-kbd"
     mouse_path.touch()
@@ -114,11 +114,16 @@ def test_selected_mouse_is_excluded_from_keyboard_capture(tmp_path):
 
     mouse = FakeInput(mouse_path)
     keyboard = FakeInput(keyboard_path)
+    selected = MouseDevice("SIGMACHIP USB Mouse", str(mouse_path), vendor=0x1C4F, product=0x0048)
+    app = object.__new__(IntegratedCursesSetupApp)
+    app.controller = SimpleNamespace(selected=selected)
 
-    kept = CompleteCursesSetupApp._exclude_selected_mouse_from_keyboards(
-        [mouse, keyboard], str(mouse_path)
+    monkeypatch.setattr(
+        "mouse_control.setup_tui_integrated._open_keyboards",
+        lambda: [mouse, keyboard],
     )
 
+    kept = app._open_keyboard_candidates()
     assert kept == [keyboard]
     assert mouse.closed is True
     assert keyboard.closed is False
