@@ -259,6 +259,18 @@ class SetupController:
         except Exception:
             pass
 
+    def refresh_discovery_backend(self, *, status: str | None = None) -> None:
+        """Rebuild the selected device backend after temporary input ownership."""
+        try:
+            if self.backend is not None:
+                self.backend.close()
+        except Exception:
+            pass
+        self.backend = self._backend_factory(self.selected)
+        self._discover_into_choices()
+        if status is not None:
+            self.status = status
+
     @property
     def protocol_adapter_name(self) -> str | None:
         if self.discovery_result is not None and getattr(self.discovery_result, "protocol", None):

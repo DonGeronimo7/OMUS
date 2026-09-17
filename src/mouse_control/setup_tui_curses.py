@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import curses
+import errno
 from typing import Any, Callable
 
 from evdev import InputDevice, ecodes
@@ -557,19 +558,44 @@ class CursesSetupApp:
                     return None
                 return action
 
+    @staticmethod
+    def _input_error_message(exc: OSError, *, phase: str) -> str:
+        if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY}:
+            return (
+                f"Input device busy during {phase}. Mouse Control kept the current "
+                "mappings unchanged."
+            )
+        return f"Input capture failed during {phase}: {exc}"
+
     def _button_editor(self) -> None:
+        """Give button capture sole Mouse Control ownership of the evdev node."""
         assert self.stdscr is not None
         device = None
-        try:
-            device = InputDevice(self.controller.selected.path)
-            device.grab()
-        except OSError as exc:
-            if device is not None:
-                device.close()
-            raise ButtonCaptureError(f"Could not reserve the mouse for button capture: {exc}") from exc
-
         nodelay_enabled = False
+
+        # Discovery/HID backends can retain readers while setup is open. Button
+        # remapping is a core invariant and requires an exclusive EVIOCGRAB, so
+        # release those resources before opening the selected event node.
         try:
+            self.controller.backend.close()
+        except Exception:
+            pass
+
+        try:
+            try:
+                device = InputDevice(self.controller.selected.path)
+            except OSError as exc:
+                raise ButtonCaptureError(
+                    self._input_error_message(exc, phase="opening selected mouse")
+                ) from exc
+
+            try:
+                device.grab()
+            except OSError as exc:
+                raise ButtonCaptureError(
+                    self._input_error_message(exc, phase="exclusive mouse grab")
+                ) from exc
+
             self.stdscr.nodelay(True)
             nodelay_enabled = True
             while True:
@@ -591,7 +617,9 @@ class CursesSetupApp:
                 except BlockingIOError:
                     events = ()
                 except OSError as exc:
-                    raise ButtonCaptureError(f"Mouse disconnected during button capture: {exc}") from exc
+                    raise ButtonCaptureError(
+                        self._input_error_message(exc, phase="reading mouse events")
+                    ) from exc
                 for event in events:
                     if event.type != ecodes.EV_KEY or event.value != 1:
                         continue
@@ -606,11 +634,23 @@ class CursesSetupApp:
         finally:
             if nodelay_enabled:
                 self.stdscr.nodelay(False)
+            if device is not None:
+                try:
+                    device.ungrab()
+                except OSError:
+                    pass
+                try:
+                    device.close()
+                except OSError:
+                    pass
             try:
-                device.ungrab()
-            except OSError:
-                pass
-            device.close()
+                self.controller.refresh_discovery_backend(
+                    status="Button capture finished; hardware capabilities refreshed."
+                )
+            except Exception as exc:
+                self.controller.status = (
+                    f"Button capture ended; capability refresh failed: {exc}"
+                )
 
     def _draw_dpi_editor(self, session: DpiEditSession, value: str, action_cursor: int) -> None:
         assert self.stdscr is not None
