@@ -24,15 +24,16 @@ def keyboard_key_name(code: int) -> str | None:
                  and name != "KEY_RESERVED" and getattr(ecodes, name, None) == code), None)
 
 
-def _open_keyboards() -> list[InputDevice]:
+def _open_keyboards(*, exclude_paths: tuple[str, ...] = ()) -> list[InputDevice]:
     devices = []
     seen = set()
+    excluded = {os.path.realpath(item) for item in exclude_paths}
     paths = sorted(_iter_candidate_paths(),
                    key=lambda path: not path.endswith("-event-kbd"))
     try:
         for path in paths:
             realpath = os.path.realpath(path)
-            if realpath in seen:
+            if realpath in excluded or realpath in seen:
                 continue
             device = None
             try:
@@ -147,7 +148,7 @@ def _print_grab_failure(*, chord: bool = False) -> None:
         print("Enter the Linux KEY_* value manually with option 5 instead.")
 
 
-def capture_keyboard_key() -> str | None:
+def capture_keyboard_key(*, exclude_paths: tuple[str, ...] = ()) -> str | None:
     """Capture a fresh key press, or return None on cancellation/unavailability.
 
     Ctrl is resolved on release so Ctrl+C can cancel even without a terminal.
@@ -157,7 +158,7 @@ def capture_keyboard_key() -> str | None:
     all_devices: list[InputDevice] = []
     try:
         with _capture_terminal():
-            all_devices = _open_keyboards()
+            all_devices = _open_keyboards(exclude_paths=exclude_paths)
             devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
                 print("No readable keyboard devices found. Check input permissions or use manual entry.")
@@ -210,14 +211,14 @@ def capture_keyboard_key() -> str | None:
     return None
 
 
-def capture_keyboard_chord() -> str | None:
+def capture_keyboard_chord(*, exclude_paths: tuple[str, ...] = ()) -> str | None:
     """Capture keys held together, in press order, until all are released."""
     devices: list[InputDevice] = []
     all_devices: list[InputDevice] = []
     try:
         # Escape cancels; disabling terminal signals permits Ctrl+C chords.
         with _capture_terminal(keep_signals=False):
-            all_devices = _open_keyboards()
+            all_devices = _open_keyboards(exclude_paths=exclude_paths)
             devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
                 print("No readable keyboard devices found. Use manual chord entry.")

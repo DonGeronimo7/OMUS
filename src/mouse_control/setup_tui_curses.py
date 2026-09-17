@@ -534,10 +534,18 @@ class CursesSetupApp:
             elif key in (10, 13, curses.KEY_ENTER):
                 action = options[cursor][1]
                 if action == "__key__":
-                    name = self._suspend_curses(capture_keyboard_key)
+                    name = self._suspend_curses(
+                        lambda: capture_keyboard_key(
+                            exclude_paths=(self.controller.selected.path,)
+                        )
+                    )
                     return f"key:{name}" if name else None
                 if action == "__chord__":
-                    return self._suspend_curses(capture_keyboard_chord)
+                    return self._suspend_curses(
+                        lambda: capture_keyboard_chord(
+                            exclude_paths=(self.controller.selected.path,)
+                        )
+                    )
                 if action == "__manual__":
                     raw = self._read_text(
                         "Manual Linux action",
