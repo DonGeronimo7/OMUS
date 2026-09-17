@@ -11,8 +11,10 @@ import sys
 import threading
 
 from .discovery import get_mouse_devices, select_mouse_device
+from .cli import _resolve_runtime_device
+from .hardware import HardwareSupervisor
 from .hardware.discovery_backend import DiscoveryBackend
-from .notifications import FreedesktopNotifier
+from .notifications import DpiMonitorSupervisor, FreedesktopNotifier
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -54,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # DiscoveryBackend defaults to no protocol factories here: this is the
     # teacher-free acceptance path for persisted calibrated/learned evidence.
-    backend = DiscoveryBackend()
+    backend = DiscoveryBackend(allow_writes=args.set_dpi is not None)
     backend.supports_device(device)
 
     if args.set_dpi is not None:
@@ -102,16 +104,44 @@ def main(argv: list[str] | None = None) -> int:
     print("Learned DPI values: " + ", ".join(str(value) for value in values))
     print("Press the physical DPI button. Ctrl+C exits.")
 
-    notifier = FreedesktopNotifier()
+    desktop_notifier = FreedesktopNotifier()
     shutdown = threading.Event()
 
-    def on_state(state):
-        dpi = state.display_value
-        print(f"learned DPI event -> {dpi} DPI")
-        notifier.notify_dpi(dpi)
+    class AcceptanceNotifier:
+        def start(self):
+            desktop_notifier.start()
+
+        def notify_dpi(self, dpi):
+            print(f"learned DPI event -> {dpi} DPI")
+            desktop_notifier.notify_dpi(dpi)
+
+        def close(self):
+            desktop_notifier.close()
+
+    def backend_factory(selected):
+        replacement = DiscoveryBackend(allow_writes=False)
+        replacement.supports_device(selected)
+        return replacement
+
+    hardware = HardwareSupervisor(
+        backend,
+        device,
+        backend_factory,
+        device_resolver=_resolve_runtime_device,
+        discovery_pending=True,
+    )
+    monitor = DpiMonitorSupervisor(
+        hardware,
+        device,
+        lambda _device: hardware,
+        values,
+        0,
+        shutdown,
+        notifier=AcceptanceNotifier(),
+    )
 
     try:
-        backend.watch_dpi_events(device, on_state, shutdown)
+        monitor._run()
     except KeyboardInterrupt:
         shutdown.set()
         print("\nDiscovery runtime monitor stopped.")
@@ -119,8 +149,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Discovery runtime monitor failed: {exc}", file=sys.stderr)
         return 1
     finally:
-        notifier.close()
-        backend.close()
+        monitor.stop()
+        hardware.close()
     return 0
 
 

@@ -1,5 +1,76 @@
 # AI handoff log
 
+## 2026-09-17 — Discovery DPI watcher reconnect
+
+- Physical evidence supplied by the operator: the teacher-free schema-v2
+  descriptor/member path emitted `800 → 1500 → 2000 → 2500 → 3000` through the
+  existing runtime/notification path with vendor/native handling bypassed and
+  unknown HID writes forbidden.
+- Root cause of the remaining failure: the acceptance CLI owned one
+  `DiscoveryBackend` directly, so EIO ended its hidraw watcher without the
+  existing supervisor lifecycle being able to rediscover and replace it.
+- Correction: the acceptance monitor now uses `HardwareSupervisor` and
+  `DpiMonitorSupervisor` with only `DiscoveryBackend(allow_writes=False)`
+  replacements. Failed watchers force a fresh generation even if a device
+  returns at the same node; live node paths remain runtime-only. Replacement
+  binding reruns physical/profile identity checks and reparses the current
+  descriptor before accepting the persisted member.
+- Physical reconnect result: EIO/ENODEV recovery, stale-handle closure,
+  rediscovery/member rebind, post-reconnect stability, and a physical
+  `3000 → 800` wrap are validated. About five reconnect popups isolated a
+  generation-baseline defect: only the first replacement state was classified
+  as resync, so later initialization states escaped as live changes.
+- Reconnect semantics: a replacement generation now remains in `RESYNC` until
+  its initial authoritative semantic stream reaches the watcher's normal idle
+  boundary. All valid states in that phase are stored silently and the final
+  state becomes the new baseline. `LIVE` then deduplicates the first same-state
+  packet and emits the first changed state once. This uses neither a packet
+  count nor an added sleep. Generation-gated callbacks continue to discard
+  events from retired watchers.
+- Safety: no HID++, vendor adapter, learned writer, desired-state mutation, or
+  generic write path is entered. Ambiguous physical matches and malformed or
+  changed descriptor members remain unbound with no raw fallback.
+- Automated validation: focused reconnect/discovery regression suite passed 86
+  tests; full suite passed 658 tests with one existing GLib
+  deprecation warning. Compileall and diff whitespace checks passed.
+- Physical validation: the five-stage path and reconnect transport recovery are
+  physically validated from operator reports. Zero-popup generation-aware
+  resync remains unverified and is the next bounded acceptance step.
+
+## 2026-09-17 — G305 member-level corpus replay
+
+- Root cause: the G305 Report-17 descriptor declares an opaque 19-byte vendor
+  Array (`Input 0x00`), so the Variable-only member patch kept the parent field
+  identity and behavior profiling combined all 570 positional observations.
+- Correction: multi-count Variable members and unresolved positional vendor Array members
+  now have stable `/member-N` observation identities plus explicit parent
+  provenance. Standard selector Arrays retain their descriptor semantics and
+  parent identity. Relative fields classify only as `relative_activity`.
+- Real corpus replay: `g305-dpi-validate` yields static members 0/1/2 with
+  values `1/7/16`, only member 3 cycles over `0..4`, and members 4–18 remain
+  static zero. Explicit same-device negative controls are clean.
+- Physical validation: the existing read-only exact-device G305 profile has
+  high-confidence measured CPI states near `823/1543/2048/2567/3067`, confirmed
+  wrap, and an exact state-bearing Report-17 mapping at raw offset 4. The
+  current live G305 resolves unambiguously to the profile model/instance and
+  exact interface-2 descriptor; offset 4 is payload member 3. This promotes the
+  member-3 `DPI_STAGE_INDEX` semantic candidate to `VALIDATED` while retaining
+  the raw mapping itself at `CORRELATED`.
+- Safety: raw captures and descriptors are unchanged. No CPI mapping, HID
+  write, runtime promotion, desired-state mutation, or write authority was
+  added. Physical CPI promotion remains blocked on a later explicit gate.
+- Automated validation: focused HID/runtime regression suite passed 100 tests;
+  full suite passed 648 tests with one existing GLib deprecation warning.
+- Runtime checkpoint: the exact-device G305 profile was upgraded to schema v2
+  with a validated descriptor-backed `hid_state` source for member 3. Runtime
+  reparses and verifies the live descriptor before decoding that member; an
+  invalid member is refused without falling back to the correlated raw mapping.
+  The acceptance monitor has an explicit write-disabled mode and continues to
+  use existing `DpiState`/notification machinery. Live identity rebinding to
+  interface 2 succeeded, but no operator DPI press or unplug/replug occurred
+  during the monitor window, so physical notification/reconnect acceptance is
+  still pending.
+
 ## 2026-09-17 — HID Semantic Engine v2
 
 - Expanded the descriptor parser into a diagnostic schema model preserving

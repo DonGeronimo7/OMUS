@@ -7,10 +7,12 @@ from .hid_usage import HidUsage
 @dataclass(frozen=True)
 class DecodedHidValue:
     field_id: str
+    parent_field_id: str
     usage: HidUsage|None
     raw_value: int
     logical_value: int|None
     array_index: int|None
+    member_index: int|None
     relative: bool
     changed: bool|None = None
 
@@ -53,16 +55,30 @@ def decode_input_report(descriptor:ParsedHidDescriptor, raw_report:bytes, *, pre
             if start+field.report_size>len(payload)*8: continue
             raw_value=extract_bits(payload,start,field.report_size)
             logical=_signed(raw_value,field.report_size) if (field.logical_minimum or 0)<0 else raw_value
-            identity=field.stable_id(descriptor.fingerprint)
+            parent_identity=field.stable_id(descriptor.fingerprint)
             if field.is_variable:
+                positional=field.has_positional_members
+                identity=(field.member_stable_id(descriptor.fingerprint, member)
+                          if positional else parent_identity)
                 use=field.usages[min(member,len(field.usages)-1)] if field.usages else None
                 usage=HidUsage(*use) if use else None; array_index=None
+                member_index=member if positional else None
             else:
+                # HID selector Arrays normally retain one parent identity: an
+                # array position is not a semantic member (for example, keys
+                # can move between 6KRO slots).  Opaque multi-count vendor
+                # Arrays have no selector range to decode, so expose a stable
+                # positional observation identity without changing their
+                # descriptor-declared Array semantics.
+                positional=field.has_positional_members
+                identity=(field.member_stable_id(descriptor.fingerprint, member)
+                          if positional else parent_identity)
                 usage=None; array_index=member
+                member_index=member if positional else None
                 if raw_value and field.usage_minimum and field.usage_maximum and field.usage_minimum[0]==field.usage_maximum[0]:
                     candidate=field.usage_minimum[1]+raw_value-(field.logical_minimum or 0)
                     if field.usage_minimum[1]<=candidate<=field.usage_maximum[1]: usage=HidUsage(field.usage_minimum[0],candidate)
                 if field.main_flags.null_state and (logical < (field.logical_minimum or logical) or logical > (field.logical_maximum or logical)): usage=None
             changed=None if previous is None else prior.get((identity,array_index))!=logical
-            values.append(DecodedHidValue(identity,usage,raw_value,logical,array_index,field.is_relative,changed))
+            values.append(DecodedHidValue(identity,parent_identity,usage,raw_value,logical,array_index,member_index,field.is_relative,changed))
     return DecodedHidReport(report_id,"input",raw,tuple(values),tuple(diagnostics))

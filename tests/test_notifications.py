@@ -4,10 +4,7 @@ from pathlib import Path
 import asyncio
 import sys
 import threading
-import time
 from unittest.mock import Mock, call
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
@@ -395,7 +392,7 @@ def test_event_monitor_recovers_when_native_arrives_after_generic_fallback():
     notifier.notify_dpi.assert_called_once_with(1500)
 
 
-def test_supervisor_rebind_allows_same_first_confirmed_value_after_disconnect():
+def test_supervisor_rebind_suppresses_unchanged_absolute_resync():
     first = event_backend()
     second = event_backend()
     notifier = Mock()
@@ -417,7 +414,7 @@ def test_supervisor_rebind_allows_same_first_confirmed_value_after_disconnect():
                                       800, shutdown, notifier, retry_interval=3.0)
     supervisor._run()
 
-    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [800, 800]
+    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [800]
 
 
 def test_late_event_backend_notifies_its_first_configured_value():
@@ -496,6 +493,56 @@ def test_read_only_observed_transition_notifies_without_writable_cycle():
     cycler.cycle.assert_not_called()
     backend.set_dpi.assert_not_called()
     notifier.notify_dpi.assert_called_once_with(1500)
+
+
+def test_reconnect_resync_updates_dedup_state_without_notification():
+    notifier = Mock()
+    supervisor = DpiMonitorSupervisor(
+        event_backend(), MOUSE, Mock(), [800, 1500], 800,
+        threading.Event(), notifier,
+    )
+    monitor = DpiEventMonitor(
+        supervisor.backend, MOUSE, [800, 1500], 800, notifier=supervisor)
+
+    monitor.handle_state(DpiState(800, confirmed=True, reconnect_resync=True))
+    monitor.handle_state(DpiState(800, confirmed=True))
+    monitor.handle_state(DpiState(1500, confirmed=True))
+    monitor.handle_state(DpiState(1500, confirmed=True))
+
+    notifier.notify_dpi.assert_called_once_with(1500)
+
+
+def test_repeated_disconnect_cycles_run_only_one_watcher_at_a_time():
+    active = 0
+    maximum_active = 0
+    shutdown = ScriptedShutdown()
+    backends = [event_backend() for _ in range(3)]
+
+    def watcher(index):
+        def run(_device, _callback, stop, ready):
+            nonlocal active, maximum_active
+            active += 1
+            maximum_active = max(maximum_active, active)
+            ready()
+            active -= 1
+            if index == 2:
+                stop.set()
+                return
+            raise OSError("device removed")
+        return run
+
+    for index, backend in enumerate(backends):
+        backend.watch_dpi_events.side_effect = watcher(index)
+    replacements = iter(backends[1:])
+    supervisor = DpiMonitorSupervisor(
+        backends[0], MOUSE, lambda _device: next(replacements), [800], 800,
+        shutdown, Mock(), retry_interval=0,
+    )
+
+    supervisor._run()
+
+    assert maximum_active == 1
+    assert [backend.watch_dpi_events.call_count for backend in backends] == [1, 1, 1]
 
 
 def test_supervisor_repeated_unavailable_has_bounded_wait_and_one_warning(caplog):

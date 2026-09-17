@@ -15,7 +15,8 @@ Known vendor/protocol adapters remain optional internal teachers/adapters.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from enum import Enum, auto
 import json
 import logging
 import os
@@ -30,6 +31,8 @@ from ..calibrated_profiles import (
     get_calibrated_profile_directory,
     validate_calibrated_profile,
 )
+from ..hid_descriptor import ParsedHidDescriptor, parse_report_descriptor
+from ..hid_report import decode_input_report
 from ..device_topology import build_device_graph
 from ..learned_actions import (
     LearnedActionStore,
@@ -41,7 +44,6 @@ from ..learned_hid_session import (
 )
 from ..learned_hid_transport import (
     LearnedHidAdapter,
-    LearnedHidTransportError,
     learned_dpi_read_spec,
     learned_dpi_transaction_spec,
 )
@@ -98,6 +100,13 @@ class _LearnedDpiBinding:
     release_value: int | None = None
     press_pattern: bytes | None = None
     release_pattern: bytes | None = None
+    descriptor: ParsedHidDescriptor | None = None
+    field_id: str | None = None
+
+
+class _ObserverGenerationPhase(Enum):
+    LIVE = auto()
+    RESYNC = auto()
 
 
 class DiscoveryBackend(HardwareBackend):
@@ -114,6 +123,7 @@ class DiscoveryBackend(HardwareBackend):
         protocol_factories: Iterable[Callable[[], HardwareBackend]] = (),
         log_protocol_failures: bool = True,
         learned_session_factory=LearnedHidSession,
+        allow_writes: bool = True,
     ) -> None:
         self.profile_directory = profile_directory or get_calibrated_profile_directory()
         self._learned_operation_store = learned_operation_store or LearnedOperationStore()
@@ -135,12 +145,15 @@ class DiscoveryBackend(HardwareBackend):
         self._learned_action_node: DeviceNode | None = None
         self._learned_adapter: LearnedHidAdapter | None = None
         self._learned_session_factory = learned_session_factory
+        self._allow_writes = bool(allow_writes)
         self._learned_sessions: dict[Path, LearnedHidSession] = {}
         self._learned_session_lock = threading.RLock()
         self._last_dpi: int | None = None
         self._last_polling_rate: int | None = None
         self._read_only_tracker: ReadOnlyDpiCycleTracker | None = None
         self._evdev_event_queue: queue.Queue[DpiState] | None = None
+        self._observer_generation_phase = _ObserverGenerationPhase.LIVE
+        self._observer_resync_observed = False
 
     @property
     def name(self) -> str:
@@ -301,6 +314,7 @@ class DiscoveryBackend(HardwareBackend):
                 nodes = [node for node in physical.hidraw_nodes if self._node_matches(node, report)]
                 if len(nodes) != 1:
                     continue
+                node = nodes[0]
                 try:
                     report_length = int(report["report_length"])
                     report_id = int(report["report_id"])
@@ -317,10 +331,42 @@ class DiscoveryBackend(HardwareBackend):
                     continue
                 if report_length <= 0 or offset < 0 or offset >= report_length:
                     continue
+                descriptor = None
+                field_id = source.get("field_id")
+                if field_id is not None:
+                    try:
+                        parent_field_id = str(source["parent_field_id"])
+                        member_index = int(source["member_index"])
+                        if (
+                            source.get("confidence") != "validated"
+                            or source.get("semantic_evidence") != "validated"
+                            or node.sysfs_path is None
+                        ):
+                            continue
+                        raw_descriptor = (node.sysfs_path / "report_descriptor").read_bytes()
+                        descriptor = parse_report_descriptor(raw_descriptor)
+                    except (KeyError, OSError, TypeError, ValueError):
+                        continue
+                    if descriptor.fingerprint != report.get("descriptor_sha256"):
+                        continue
+                    fields = [
+                        field for field in descriptor.fields
+                        if field.report_type == "input"
+                        and field.report_id == report_id
+                        and field.stable_id(descriptor.fingerprint) == parent_field_id
+                        and field.has_positional_members
+                        and 0 <= member_index < field.report_count
+                        and field.member_stable_id(descriptor.fingerprint, member_index) == field_id
+                        and field.report_size == 8
+                        and (field.wire_bit_offset + member_index * field.report_size) // 8 == offset
+                    ]
+                    if len(fields) != 1:
+                        continue
                 candidates.append(_LearnedDpiBinding(
-                    physical, nodes[0], report_length, report_id, offset, lookup,
+                    physical, node, report_length, report_id, offset, lookup,
                     kind=str(kind), cycle_order=cycle_order,
                     press_pattern=press_pattern, release_pattern=release_pattern,
+                    descriptor=descriptor, field_id=(str(field_id) if field_id is not None else None),
                 ))
             elif kind in {"evdev_absolute_stage", "evdev_cycle_trigger"}:
                 identity = source.get("interface")
@@ -488,6 +534,8 @@ class DiscoveryBackend(HardwareBackend):
         self._last_polling_rate = None
         self._read_only_tracker = None
         self._evdev_event_queue = None
+        self._observer_generation_phase = _ObserverGenerationPhase.LIVE
+        self._observer_resync_observed = False
 
         if self._physical is not None and not self._physical.ambiguous:
             matches = [
@@ -498,17 +546,15 @@ class DiscoveryBackend(HardwareBackend):
             if len(matches) == 1:
                 profile = matches[0]
                 self._binding = self._transition_binding_from_profile(profile, self._physical)
-                if self._binding is None:
+                if self._binding is None and profile.get("schema_version") == 1:
                     self._binding = self._binding_from_profile(profile, self._physical)
                 if self._binding is not None and self._binding.cycle_order:
                     self._read_only_tracker = ReadOnlyDpiCycleTracker(
                         self._binding.cycle_order
                     )
 
-            learned = self._learned_operation_store.find_for_physical(
-                self._physical,
-                proven_only=True,
-            )
+            learned = (self._learned_operation_store.find_for_physical(
+                self._physical, proven_only=True) if self._allow_writes else None)
             if learned is not None:
                 _path, operation = learned
                 try:
@@ -519,10 +565,8 @@ class DiscoveryBackend(HardwareBackend):
                     self._learned_operation = operation
                     self._learned_write_node = node
 
-            learned_polling = self._learned_polling_store.find_for_physical(
-                self._physical,
-                proven_only=True,
-            )
+            learned_polling = (self._learned_polling_store.find_for_physical(
+                self._physical, proven_only=True) if self._allow_writes else None)
             if learned_polling is not None:
                 _path, polling_operation = learned_polling
                 try:
@@ -536,10 +580,9 @@ class DiscoveryBackend(HardwareBackend):
                     self._learned_polling_operation = polling_operation
                     self._learned_polling_node = polling_node
 
-            learned_action = self._learned_action_store.find_for_physical(
-                self._physical,
-                behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
-            )
+            learned_action = (self._learned_action_store.find_for_physical(
+                self._physical, behavior=SemanticBehavior.DPI_CYCLE_TRIGGER)
+                if self._allow_writes else None)
             if learned_action is not None and self._learned_operation is not None:
                 _path, action_trigger = learned_action
                 try:
@@ -802,6 +845,8 @@ class DiscoveryBackend(HardwareBackend):
         return sorted(values)
 
     def set_dpi(self, device: MouseDevice, dpi: int) -> DpiState | None:
+        if not self._allow_writes:
+            raise HardwareError("Automatic Discovery: this backend is read-only")
         if (
             self._protocol_backend is not None
             and self._protocol_backend.get_capabilities(device).dpi.writable
@@ -952,7 +997,18 @@ class DiscoveryBackend(HardwareBackend):
             return None
         if binding.report_id and (not data or data[0] != binding.report_id):
             return None
-        raw = data[binding.offset]
+        if binding.descriptor is not None and binding.field_id is not None:
+            try:
+                decoded = decode_input_report(binding.descriptor, data)
+            except ValueError:
+                return None
+            matches = [value for value in decoded.values
+                       if value.field_id == binding.field_id]
+            if len(matches) != 1 or matches[0].logical_value is None:
+                return None
+            raw = matches[0].logical_value
+        else:
+            raw = data[binding.offset]
         return binding.raw_to_dpi.get(raw)
 
     def _decode_calibrated_hid(self, data: bytes) -> DpiState | None:
@@ -964,12 +1020,21 @@ class DiscoveryBackend(HardwareBackend):
             dpi = self._decode_report(data)
             if dpi is None:
                 return None
+            if self._observer_generation_phase is _ObserverGenerationPhase.RESYNC:
+                self._observer_resync_observed = True
             if tracker is not None:
-                return tracker.observe_absolute(dpi)
+                state = tracker.observe_absolute(dpi)
+                if (state is not None and
+                        self._observer_generation_phase is _ObserverGenerationPhase.RESYNC):
+                    return replace(state, reconnect_resync=True)
+                return state
             if dpi == self._last_dpi:
                 return None
             self._last_dpi = dpi
-            return DpiState(dpi, dpi, active_stage=None, confirmed=True)
+            state = DpiState(dpi, dpi, active_stage=None, confirmed=True)
+            if self._observer_generation_phase is _ObserverGenerationPhase.RESYNC:
+                return replace(state, reconnect_resync=True)
+            return state
         if binding.kind != "hid_cycle_trigger" or tracker is None:
             return None
         if binding.press_pattern is not None and data == binding.press_pattern:
@@ -1007,6 +1072,23 @@ class DiscoveryBackend(HardwareBackend):
         if self._read_only_tracker is not None:
             self._read_only_tracker.invalidate_trigger_sync()
 
+    def prepare_observer_rebind(self) -> None:
+        """Begin a new observer generation without comparing stale baselines."""
+
+        self.invalidate_observer_continuity()
+        if self._binding is not None and self._binding.kind == "hid_state":
+            self._observer_generation_phase = _ObserverGenerationPhase.RESYNC
+            self._observer_resync_observed = False
+
+    def _finish_observer_resync_if_idle(self) -> None:
+        """Promote RESYNC to LIVE after its authoritative stream becomes idle."""
+
+        if (
+            self._observer_generation_phase is _ObserverGenerationPhase.RESYNC
+            and self._observer_resync_observed
+        ):
+            self._observer_generation_phase = _ObserverGenerationPhase.LIVE
+
     def _watch_session_events(
         self,
         *,
@@ -1016,6 +1098,7 @@ class DiscoveryBackend(HardwareBackend):
         shutdown_event: threading.Event,
         ready_callback: Callable[[], None] | None,
         label: str,
+        finish_resync_on_idle: bool = False,
     ) -> None:
         """Dispatch learned HID events off the single reader thread.
 
@@ -1051,6 +1134,8 @@ class DiscoveryBackend(HardwareBackend):
                 try:
                     state = pending.get(timeout=0.05)
                 except queue.Empty:
+                    if finish_resync_on_idle:
+                        self._finish_observer_resync_if_idle()
                     continue
                 callback(state)
         finally:
@@ -1139,6 +1224,7 @@ class DiscoveryBackend(HardwareBackend):
             shutdown_event=shutdown_event,
             ready_callback=ready_callback,
             label="learned DPI event",
+            finish_resync_on_idle=True,
         )
 
     def _watch_learned_dpi_events(
@@ -1174,6 +1260,7 @@ class DiscoveryBackend(HardwareBackend):
                 except OSError as exc:
                     raise HardwareError(f"Automatic Discovery: hidraw watcher failed: {exc}") from exc
                 if not readable:
+                    self._finish_observer_resync_if_idle()
                     continue
                 try:
                     data = os.read(fd, max(4096, binding.report_length))

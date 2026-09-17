@@ -11,7 +11,6 @@ from .models import (
     UsbDirection,
     UsbObservation,
     UsbTransaction,
-    UsbTransferType,
 )
 
 

@@ -14,6 +14,8 @@ from typing import Iterable, Mapping
 from .hid_descriptor import ParsedHidDescriptor, parse_report_descriptor
 from .hid_report import DecodedHidReport, decode_input_report
 from .hid_behavior import profile_reports
+from .hid_semantic_candidates import (PhysicalDpiValidation,
+                                      infer_action_conditioned_candidates)
 from .hid_semantics import HidSemanticClass, interpret_descriptor
 
 SCHEMA = "mouse-control-hid-corpus-schema: 1"
@@ -168,15 +170,34 @@ def format_capture_explanation(device: HidCorpusDevice, mode: str) -> str:
         lines.append("Report counts: none")
     standard, vendor = [], []
     profiles = profile_reports(decoded)
-    for field_id in sorted(values):
-        semantics = semantic_index.get(field_id, ())
-        names = ", ".join(item.name for item in semantics) or "Undeclared field"
+    def member_sort_key(field_id: str) -> tuple[str, int]:
+        if "/member-" not in field_id:
+            return field_id, -1
+        parent_id, member = field_id.rsplit("/member-", 1)
+        return parent_id, int(member)
+
+    for field_id in sorted(values, key=member_sort_key):
+        parent_id = field_id.split("/member-", 1)[0]
+        semantics = semantic_index.get(parent_id, ())
+        member_index = (int(field_id.rsplit("/member-", 1)[1])
+                        if "/member-" in field_id else None)
+        selected_semantics = (semantics[min(member_index, len(semantics) - 1):
+                                        min(member_index, len(semantics) - 1) + 1]
+                              if member_index is not None and semantics else semantics)
+        is_vendor = any(item.semantic_class is HidSemanticClass.VENDOR_DEFINED
+                        for item in selected_semantics)
+        names = (f"Vendor member {member_index}" if is_vendor and member_index is not None
+                 else ", ".join(item.name for item in selected_semantics) or "Undeclared field")
         observed = values[field_id]
         behavior = profiles[field_id]
         activity = sum(value != 0 for value in observed)
         text = (f"{names} [{field_id}]: active {activity}/{len(observed)}; "
                 f"values={tuple(sorted(set(observed)))}; behavior={behavior.classification.value}")
-        if any(item.semantic_class is HidSemanticClass.VENDOR_DEFINED for item in semantics):
+        if behavior.classification.value == "cyclic_state":
+            sequence = [value for left, value in zip([None, *observed[:-1]], observed)
+                        if left != value]
+            text += "; sequence=" + "→".join(str(value) for value in sequence)
+        if is_vendor:
             vendor.append(text)
         else:
             standard.append(text)
@@ -190,6 +211,171 @@ def format_capture_explanation(device: HidCorpusDevice, mode: str) -> str:
     else:
         lines.append("Diagnostics: none")
     return "\n".join(lines)
+
+
+def format_action_conditioned_candidates(
+    positive_device: HidCorpusDevice,
+    positive_mode: str,
+    negative_controls: Mapping[str, tuple[DecodedHidReport, ...]],
+    physical_validations: Mapping[str, PhysicalDpiValidation] | None = None,
+) -> str:
+    """Render read-only semantic candidates from labelled corpus evidence."""
+    label = positive_device.metadata.get("experiment_label", positive_mode)
+    if not isinstance(label, str):
+        raise ValueError("corpus experiment_label must be a string")
+    candidates = infer_action_conditioned_candidates(
+        {label: positive_device.decoded_capture(positive_mode)}, negative_controls,
+        physical_validations=physical_validations)
+    lines = ["Semantic candidates:"]
+    if not candidates:
+        lines.append("  none")
+        return "\n".join(lines)
+    for candidate in candidates:
+        lines.extend((
+            f"  {candidate.behavior.value.upper()}",
+            f"    source: {candidate.source_field}",
+            f"    evidence: {candidate.evidence_level.value.upper()}",
+            f"    values: {candidate.observed_values}",
+            "    sequence: " + "→".join(
+                str(value) for transition in candidate.transition_sequence
+                for value in transition[:1]) +
+                (f"→{candidate.transition_sequence[-1][1]}"
+                 if candidate.transition_sequence else ""),
+            "    negative controls: " +
+                (", ".join(f"{name}=clean" for name in candidate.negative_controls)
+                 if candidate.negative_controls else "none supplied"),
+        ))
+        if candidate.evidence_level.value == "validated":
+            lines.extend((
+                f"    configured labels: {dict(candidate.configured_dpi_mapping)}",
+                f"    measured CPI: {dict(candidate.measured_cpi_mapping)}",
+                "    write authority: false",
+            ))
+    return "\n".join(lines)
+
+
+def physical_dpi_validations(
+    device: HidCorpusDevice,
+    profile: Mapping[str, object],
+) -> Mapping[str, PhysicalDpiValidation]:
+    """Join exact report members to independent physical CPI evidence.
+
+    The calibrated profile's raw mapping remains correlated and read-only.  A
+    complete high-confidence physical cycle with wrap can validate only the
+    semantic meaning of the exact matching observation member.
+    """
+    from .calibrated_profiles import validate_calibrated_profile
+
+    validate_calibrated_profile(profile)
+    identity = profile.get("identity")
+    capture_identity = device.metadata.get("device")
+    if not isinstance(identity, Mapping) or not isinstance(capture_identity, Mapping):
+        raise ValueError("calibrated profile and corpus require device identity")
+    expected_identity = (
+        capture_identity.get("bus_type"), capture_identity.get("vendor_id"),
+        capture_identity.get("product_id"),
+    )
+    actual_identity = (
+        identity.get("bus"), identity.get("vendor_id"), identity.get("product_id"),
+    )
+    if actual_identity != expected_identity:
+        raise ValueError("calibrated profile does not match corpus device identity")
+
+    cycle = profile.get("dpi_cycle")
+    if not isinstance(cycle, Mapping):
+        raise ValueError("calibrated profile requires physical DPI-cycle evidence")
+    order = cycle.get("configured_order")
+    states = cycle.get("states")
+    if (cycle.get("semantic_evidence") != "physically-calibrated" or
+            cycle.get("wrap_confirmed") is not True or
+            not isinstance(order, list) or not isinstance(states, list) or
+            len(order) < 2 or len(states) != len(order) + 1 or
+            len(set(order)) != len(order) or
+            any(not isinstance(value, int) or isinstance(value, bool) or value <= 0
+                for value in order)):
+        raise ValueError("calibrated profile does not prove a complete physical DPI cycle")
+    configured_states = []
+    for state in states:
+        if not isinstance(state, Mapping):
+            raise ValueError("calibrated profile has a malformed physical state")
+        configured = state.get("configured_dpi")
+        measured = state.get("measured_cpi")
+        if (state.get("confidence") != "high" or not isinstance(configured, int) or
+                configured <= 0 or
+                not isinstance(measured, (int, float)) or
+                abs(float(measured) - configured) / configured > 0.15):
+            raise ValueError("calibrated profile lacks high-confidence physical CPI agreement")
+        configured_states.append(configured)
+    if configured_states[:-1] != order or configured_states[-1] != order[0]:
+        raise ValueError("calibrated profile physical states do not prove cycle wrap")
+
+    result: dict[str, PhysicalDpiValidation] = {}
+    mappings = profile.get("raw_mappings")
+    assert isinstance(mappings, list)  # checked by validate_calibrated_profile
+    action_reports = profile.get("action_reports")
+    if not isinstance(action_reports, list):
+        raise ValueError("calibrated profile requires action-specific report evidence")
+    for mapping in mappings:
+        if not isinstance(mapping, Mapping):
+            continue
+        report = mapping.get("report")
+        configured_raw = mapping.get("raw_to_configured_dpi")
+        measured_raw = mapping.get("raw_to_measured_cpi")
+        offset = mapping.get("offset")
+        if (mapping.get("write_authorized") is not False or
+                mapping.get("confidence") != "correlated" or
+                not isinstance(report, Mapping) or not isinstance(offset, int) or
+                not isinstance(configured_raw, Mapping) or
+                not isinstance(measured_raw, Mapping) or
+                not isinstance(mapping.get("observations"), int) or
+                mapping["observations"] < len(order)):
+            continue
+        report_identity = (
+            report.get("bus"), report.get("vendor_id"), report.get("product_id"),
+        )
+        if (report_identity != expected_identity or report.get("report_type") != "input" or
+                not isinstance(report.get("interface_number"), int) or
+                not any(isinstance(item, Mapping) and item.get("role") == "state-bearing" and
+                        item.get("identity") == report for item in action_reports)):
+            continue
+        descriptor_hash = report.get("descriptor_sha256")
+        descriptors = [item for item in device.descriptors.values()
+                       if item.fingerprint == descriptor_hash]
+        if len(descriptors) != 1:
+            continue
+        descriptor = descriptors[0]
+        report_id = report.get("report_id")
+        definitions = [item for item in descriptor.input_reports
+                       if item.report_id == report_id and
+                       item.byte_length == report.get("report_length")]
+        if len(definitions) != 1:
+            continue
+        fields = [item for item in descriptor.fields
+                  if item.report_type == "input" and item.report_id == report_id and
+                  item.has_positional_members and item.report_size == 8 and
+                  item.wire_bit_offset // 8 <= offset <
+                  (item.wire_bit_offset + item.bit_length) // 8]
+        if len(fields) != 1:
+            continue
+        member = offset - fields[0].wire_bit_offset // 8
+        source_field = fields[0].member_stable_id(descriptor.fingerprint, member)
+        try:
+            configured_mapping = {int(raw): int(dpi) for raw, dpi in configured_raw.items()}
+            measured_mapping = {int(raw): int(cpi) for raw, cpi in measured_raw.items()}
+        except (TypeError, ValueError):
+            continue
+        if (set(configured_mapping.values()) != set(order) or
+                set(configured_mapping) != set(measured_mapping)):
+            continue
+        validation = PhysicalDpiValidation(
+            source_field, configured_mapping, measured_mapping,
+            fields[0].stable_id(descriptor.fingerprint), member,
+            dict(report), offset, int(mapping["observations"]))
+        previous = result.get(source_field)
+        if previous is not None and previous != validation:
+            raise ValueError("calibrated profile has ambiguous physical mappings for one member")
+        result[source_field] = validation
+    return result
 
 
 def descriptor_model(descriptor: ParsedHidDescriptor) -> dict[str, object]:

@@ -2,6 +2,56 @@
 
 Last updated: 2026-09-17
 
+## 2026-09-17 G305 member-level corpus replay
+
+The read-only HID corpus replay path now profiles stable members independently
+instead of combining every value from a multi-count field. Multi-count Variable
+members use stable `HID-F.../member-N` identities. Opaque multi-count vendor Arrays without
+a selector range receive the same positional observation identities while
+retaining their descriptor-declared Array flags and parent field provenance;
+ordinary HID selector Arrays remain parent-scoped.
+
+The real sanitized `g305-dpi-validate` Report-17 corpus replays with static
+header members `1`, `7`, and `16`, a single cyclic member 3 over stages `0..4`,
+and static zero members thereafter. Explicit same-device idle, movement,
+button, wheel, and side-button controls are clean. The existing exact-device
+physical profile independently records high-confidence CPI states near
+`823/1543/2048/2567/3067`, confirmed wrap, and the exact state-bearing Report-17
+identity at raw offset 4, which resolves to member 3. The read-only semantic
+candidate is therefore `DPI_STAGE_INDEX` at `VALIDATED`; its raw mapping remains
+`CORRELATED`. Relative controls are activity, never persistent or cyclic state.
+No HID write, runtime binding, desired-state mutation, or write authority was
+added by semantic validation.
+
+The exact-device G305 profile now persists that validated member as a schema-v2
+read-only `hid_state` transition source. Runtime rebinding matches the model,
+instance, interface number, descriptor hash, report shape, parent field, and
+member index, then reparses the live sysfs descriptor and decodes the named
+member rather than trusting a raw byte offset. The older raw mapping remains
+`CORRELATED`; configured DPI labels and measured CPI remain separate. A
+write-disabled acceptance backend bypasses HID++ and all learned writers while
+using the existing `DpiState` and notification path. Automated sequence,
+duplicate suppression, notification, identity refusal, and reconnect tests
+pass. The live teacher-free path is physically validated across all five
+persisted stages (`800/1500/2000/2500/3000`) through the existing notification
+path.
+
+Disconnect-class hidraw failures now return control to the existing generation-
+checked runtime supervisor. The stale descriptor watcher closes before a fresh
+write-disabled Discovery backend resolves the current device, reparses the live
+descriptor, and rebinds the exact persisted member identity. Each replacement
+generation stays in `RESYNC` while its initial authoritative semantic stream is
+active; every state in that stream is accepted silently and the final state
+becomes the new generation's baseline. Only after the stream reaches its normal
+idle boundary does the watcher enter `LIVE`, where the first same-state packet
+is deduplicated and the first changed state produces one notification.
+Ambiguous and malformed replacements are refused, and retired generations
+cannot deliver events. EIO, ENODEV, node renumbering, descriptor reparse,
+multi-state resync, repeated reconnect, and stale-watcher behavior are
+unit-tested. Physical EIO/rebind recovery and the `3000 → 800` wrap are
+validated; the generation-aware zero-popup resync change still requires
+physical retest.
+
 ## 2026-09-17 HID Semantic Engine v2
 
 Automatic Discovery now parses HID report descriptors as semantic schemas. It

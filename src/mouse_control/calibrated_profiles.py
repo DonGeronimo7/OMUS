@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+from copy import deepcopy
 from tempfile import NamedTemporaryFile
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -87,6 +88,19 @@ def _transition_source_to_json(source: CalibratedTransitionSource) -> dict[str, 
         item["raw_to_configured_dpi"] = {
             str(int(raw)): int(dpi) for raw, dpi in source.raw_to_dpi.items()
         }
+    if source.measured_cpi_mapping:
+        item["raw_to_measured_cpi"] = {
+            str(int(raw)): int(cpi)
+            for raw, cpi in source.measured_cpi_mapping.items()
+        }
+    if source.field_id is not None:
+        item["field_id"] = source.field_id
+    if source.parent_field_id is not None:
+        item["parent_field_id"] = source.parent_field_id
+    if source.member_index is not None:
+        item["member_index"] = int(source.member_index)
+    if source.semantic_evidence is not None:
+        item["semantic_evidence"] = source.semantic_evidence
     if source.event_type is not None:
         item["event_type"] = int(source.event_type)
     if source.code is not None:
@@ -298,6 +312,20 @@ def validate_calibrated_profile(profile: Mapping[str, Any]) -> None:
                 source.get("report"), Mapping
             ):
                 raise CalibratedProfileError("HID calibrated source requires a report identity")
+            if source.get("field_id") is not None:
+                if (
+                    kind != "hid_state"
+                    or source.get("confidence") != "validated"
+                    or source.get("semantic_evidence") != "validated"
+                    or not isinstance(source.get("field_id"), str)
+                    or not isinstance(source.get("parent_field_id"), str)
+                    or not isinstance(source.get("member_index"), int)
+                    or not isinstance(source.get("offset"), int)
+                    or not isinstance(source.get("raw_to_measured_cpi"), Mapping)
+                ):
+                    raise CalibratedProfileError(
+                        "descriptor-backed HID state requires validated member evidence"
+                    )
             if kind in {"feature_state", "evdev_absolute_stage", "evdev_cycle_trigger"} and not isinstance(
                 source.get("interface"), Mapping
             ):
@@ -306,6 +334,70 @@ def validate_calibrated_profile(profile: Mapping[str, Any]) -> None:
     serialized = json.dumps(profile, sort_keys=True)
     if "/dev/hidraw" in serialized or "/dev/input/event" in serialized:
         raise CalibratedProfileError("volatile Linux device paths may not be persisted")
+
+
+def promote_descriptor_member_binding(
+    profile: Mapping[str, Any],
+    validation: Any,
+) -> dict[str, Any]:
+    """Persist one physically validated descriptor member as a read-only source."""
+
+    validate_calibrated_profile(profile)
+    if (
+        not isinstance(validation.source_field, str)
+        or not isinstance(validation.parent_field, str)
+        or not isinstance(validation.member_index, int)
+        or not isinstance(validation.offset, int)
+        or not isinstance(validation.report_identity, Mapping)
+        or validation.observations <= 0
+    ):
+        raise CalibratedProfileError("validated descriptor member evidence is incomplete")
+    matching = [
+        mapping for mapping in profile.get("raw_mappings", ())
+        if isinstance(mapping, Mapping)
+        and mapping.get("report") == validation.report_identity
+        and mapping.get("offset") == validation.offset
+        and mapping.get("confidence") == "correlated"
+        and mapping.get("write_authorized") is False
+    ]
+    if len(matching) != 1:
+        raise CalibratedProfileError("validated member must match one correlated raw mapping")
+
+    promoted = deepcopy(dict(profile))
+    cycle = promoted.get("dpi_cycle")
+    if not isinstance(cycle, dict):
+        raise CalibratedProfileError("validated member requires a physical DPI cycle")
+    cycle["confidence"] = "validated"
+    promoted["schema_version"] = CALIBRATED_PROFILE_SCHEMA_VERSION
+    source = {
+        "kind": "hid_state",
+        "cycle_order": list(cycle["configured_order"]),
+        "observations": int(validation.observations),
+        "confidence": "validated",
+        "report": dict(validation.report_identity),
+        "offset": int(validation.offset),
+        "raw_to_configured_dpi": {
+            str(int(raw)): int(dpi)
+            for raw, dpi in validation.configured_dpi_mapping.items()
+        },
+        "raw_to_measured_cpi": {
+            str(int(raw)): int(cpi)
+            for raw, cpi in validation.measured_cpi_mapping.items()
+        },
+        "field_id": validation.source_field,
+        "parent_field_id": validation.parent_field,
+        "member_index": int(validation.member_index),
+        "semantic_behavior": "dpi_stage_index",
+        "semantic_evidence": "validated",
+        "write_authorized": False,
+    }
+    existing = promoted.get("transition_sources")
+    if existing not in (None, [], [source]):
+        raise CalibratedProfileError("refusing to replace existing calibrated transition sources")
+    promoted["transition_sources"] = [source]
+    promoted["write_authorized"] = False
+    validate_calibrated_profile(promoted)
+    return promoted
 
 
 def _filename(profile: Mapping[str, Any]) -> str:

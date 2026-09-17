@@ -126,6 +126,22 @@ class HidFieldDefinition:
                          self.field_index, self.bit_offset, self.report_size,
                          self.report_count, self.usages, self.collection_path))
         return "HID-F" + hashlib.sha256(material.encode()).hexdigest()[:20].upper()
+    def member_stable_id(self, fingerprint: str, member_index: int) -> str:
+        """Stable observation identity for one positional field member.
+
+        Variable fields always have positional members.  An opaque
+        vendor-defined Array with no selector range is also exposed
+        positionally for observation, while retaining its descriptor-declared
+        Array flags and parent field identity.
+        """
+        if not self.has_positional_members or not 0 <= member_index < self.report_count:
+            raise ValueError("member index is outside a positional HID field")
+        return f"{self.stable_id(fingerprint)}/member-{member_index}"
+    @property
+    def has_positional_members(self) -> bool:
+        return ((self.is_variable and self.report_count > 1) or
+                (self.vendor_defined and self.report_count > 1 and
+                 self.usage_minimum is None and self.usage_maximum is None))
     def overlaps_wire_byte(self, byte_offset: int) -> bool:
         return (byte_offset >= 0 and self.bit_length > 0 and
                 self.wire_bit_offset < (byte_offset+1)*8 and

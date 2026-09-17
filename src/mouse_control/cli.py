@@ -10,7 +10,7 @@ import subprocess
 import sys
 import threading
 
-from .config import (DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_config, get_config_path,
+from .config import (DEFAULT_DPI, DEFAULT_DPI_STAGES, get_config_path,
                      load_config, merge_setup_config, save_config)
 from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
 from .hardware import (DesiredHardwareState, HardwareBackend, HardwareError,
@@ -64,6 +64,12 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--seconds", type=float, default=10.0)
     explain = research_sub.add_parser("hid-explain", help="render descriptor-derived semantic inventory from a corpus")
     explain.add_argument("corpus", type=Path)
+    explain.add_argument("--negative-control", action="append", type=Path, default=[],
+                         help="same-device labelled corpus to use as a clean negative control")
+    explain.add_argument("--calibrated-profile", type=Path,
+                         help="read-only physical CPI profile used to validate an exact member")
+    explain.add_argument("--persist-validated-binding", action="store_true",
+                         help="persist one clean physically validated descriptor member")
     doctor = sub.add_parser("doctor", help="read-only environment and hardware diagnostics")
     doctor.add_argument("--report", action="store_true", help="format a privacy-safe compatibility report")
     doctor.add_argument("--fix", action="store_true", help="offer safe dependency-installation guidance")
@@ -795,7 +801,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.research_command == "hid-capture":
             return capture_hid_corpus(args.destination, args.mode, args.seconds)
         if args.research_command == "hid-explain":
-            return explain_hid_corpus(args.corpus)
+            return explain_hid_corpus(
+                args.corpus, tuple(args.negative_control), args.calibrated_profile,
+                args.persist_validated_binding)
 
     if args.command == "doctor":
         if args.fix:

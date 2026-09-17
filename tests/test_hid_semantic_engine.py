@@ -45,6 +45,8 @@ def test_array_selectors_decode_as_active_usages_and_keep_empty_entries():
     decoded=decode_input_report(parse_report_descriptor(ARRAY),b"\x04\x05\x00\x00\x00\x00")
     assert [v.usage.usage if v.usage else None for v in decoded.values]==[4,5,None,None,None,None]
     assert [v.array_index for v in decoded.values]==list(range(6))
+    assert len({v.field_id for v in decoded.values}) == 1
+    assert {v.member_index for v in decoded.values} == {None}
 
 def test_descriptor_preserves_physical_unit_designator_string_and_flags():
     raw=bytes.fromhex("05 01 09 02 A1 01 09 30 15 00 25 64 35 00 45 0A 55 0F 65 11 39 02 79 03 75 08 95 01 81 FE C0")

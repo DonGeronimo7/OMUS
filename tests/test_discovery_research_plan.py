@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from mouse_control.discovery_models import DiscoveredCapability, DiscoveryEvidence, DiscoveryResult, EvidenceLevel
 from mouse_control.discovery_research import ResearchStatus, build_discovery_research_plan
 from mouse_control.learned_operations import LearnedOperationState
-from mouse_control.protocol_grammar import SemanticBehavior, TransportKind, WriteScope
+from mouse_control.protocol_grammar import TransportKind, WriteScope
 
 
 def _result(*, protocol=None, capabilities=None):

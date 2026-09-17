@@ -49,6 +49,11 @@ class CalibratedTransitionSource:
     release_value: int | None = None
     press_pattern: bytes | None = None
     release_pattern: bytes | None = None
+    field_id: str | None = None
+    parent_field_id: str | None = None
+    member_index: int | None = None
+    measured_cpi_mapping: Mapping[int, int] = field(default_factory=dict)
+    semantic_evidence: str | None = None
 
     @property
     def absolute(self) -> bool:

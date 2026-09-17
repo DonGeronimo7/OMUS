@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass,field
 from enum import Enum
 from collections import Counter
-from .hid_report import DecodedHidReport
 
 class HidBehaviorClass(str,Enum):
     STATIC="static"; MOMENTARY="momentary"; PERSISTENT_STATE="persistent_state"; ENUM_STATE="enum_state"
     CYCLIC_STATE="cyclic_state"; COUNTER="counter"; CONTINUOUS="continuous"; MOTION_CORRELATED="motion_correlated"
-    ACTION_CORRELATED="action_correlated"; UNKNOWN="unknown"
+    ACTION_CORRELATED="action_correlated"; RELATIVE_ACTIVITY="relative_activity"; UNKNOWN="unknown"
 
 @dataclass
 class HidFieldBehavior:
     field_id:str; observations:int=0; counts:Counter=field(default_factory=Counter); transitions:Counter=field(default_factory=Counter)
     minimum_seen:int|None=None; maximum_seen:int|None=None; changes:int=0
+    relative: bool=False
     _previous:int|None=None
     def observe(self,value:int)->None:
         self.observations+=1; self.counts[value]+=1
@@ -27,6 +27,8 @@ class HidFieldBehavior:
     def change_rate(self): return self.changes/max(1,self.observations-1)
     @property
     def classification(self):
+        # Relative HID controls are deltas/events, never persistent state.
+        if self.relative: return HidBehaviorClass.RELATIVE_ACTIVITY
         values=self.unique_values
         if len(values)<=1: return HidBehaviorClass.STATIC
         ordered=list(self.transitions)
@@ -50,5 +52,7 @@ def profile_reports(reports):
     result={}
     for report in reports:
         for value in report.values:
-            if value.logical_value is not None: result.setdefault(value.field_id,HidFieldBehavior(value.field_id)).observe(value.logical_value)
+            if value.logical_value is not None:
+                behavior=result.setdefault(value.field_id,HidFieldBehavior(value.field_id, relative=value.relative))
+                behavior.observe(value.logical_value)
     return result

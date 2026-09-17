@@ -1,12 +1,8 @@
 """Optional DPI monitoring and Freedesktop desktop notifications."""
 from __future__ import annotations
 import asyncio, logging, queue, threading
-from collections.abc import Callable
 from enum import Enum, auto
 from typing import Protocol
-from .discovery import MouseDevice
-from .hardware import HardwareBackend
-from .hardware.capabilities import DpiState
 
 LOG = logging.getLogger(__name__)
 
@@ -126,6 +122,12 @@ class DpiEventMonitor:
             self.dpi_cycler.cycle()
             return
         if not state.confirmed or state.x_dpi <= 0: LOG.warning("Ignoring unconfirmed hardware DPI state"); return
+        if state.reconnect_resync:
+            observe_resync = getattr(self.notifier, "observe_resync", None)
+            if callable(observe_resync):
+                observe_resync(state.display_value)
+            LOG.info("Hardware DPI resynchronized at %s", state.display_value)
+            return
         if self.dpi_cycler is not None and state.active_stage is not None:
             # A physical press advances the onboard slot. Repeated reports for
             # that slot, including our live-write echo, are one transition.
@@ -173,14 +175,23 @@ class DpiMonitorSupervisor:
             except Exception as exc: LOG.warning("Desktop DPI notification failed: %s", exc); return False
             self._last_notified_dpi = dpi
         return True
+    def observe_resync(self, dpi):
+        """Remember confirmed reconnect state without presenting a transition."""
+        with self._state_lock:
+            self._last_notified_dpi = dpi
     def _watcher_ready(self):
-        with self._state_lock: self._last_notified_dpi = None; self._watcher_bound = True; self._state = MonitorState.READY
+        # Preserve the last confirmed value across watcher rebinds. An
+        # absolute source may resynchronize after reconnect, but an unchanged
+        # resync is not a physical transition and must not create a duplicate
+        # desktop notification.
+        with self._state_lock: self._watcher_bound = True; self._state = MonitorState.READY
         LOG.info("DPI event watcher ready; DPI monitor ready")
     def _run(self):
         backend, unavailable = self.backend, False
         while not self.shutdown_event.is_set():
             generation = getattr(backend, "generation", None)
             unsupported = False
+            force_rebind = False
             try:
                 if start := getattr(self.notifier, "start", None): start()
                 with self._state_lock: self._watcher_bound = False; self._state = MonitorState.BINDING
@@ -190,6 +201,7 @@ class DpiMonitorSupervisor:
                     unavailable = True
                     unsupported = not getattr(backend, "discovery_pending", True)
                 else:
+                    force_rebind = True
                     monitor._run(self._watcher_ready)
                     if not self.shutdown_event.is_set():
                         with self._state_lock: self._state = MonitorState.DISCONNECTED
@@ -206,7 +218,7 @@ class DpiMonitorSupervisor:
             try:
                 rebind = getattr(type(backend), "rebind", None)
                 if callable(rebind):
-                    rebind(backend, generation)
+                    rebind(backend, generation, force=force_rebind)
                 else:
                     if close := getattr(backend, "close", None): close()
                     backend = self.backend_factory(self.device)

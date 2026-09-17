@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
 
 from .device_profiles import DeviceProfileStore
-from .device_topology import TopologyError, build_device_graph
+from .device_topology import build_device_graph
 from .discovery import MouseDevice
 from .discovery_models import (
     DeviceNode,

@@ -111,6 +111,9 @@ class HardwareSupervisor(HardwareBackend):
                 binding.release_value,
                 binding.press_pattern,
                 binding.release_pattern,
+                binding.field_id,
+                (binding.descriptor.fingerprint
+                 if binding.descriptor is not None else None),
             )
         learned_writers = (
             (
@@ -219,7 +222,7 @@ class HardwareSupervisor(HardwareBackend):
             if not self._closed:
                 self.desired = replace(self.desired, active_dpi=value)
 
-    def rebind(self, expected_generation: int | None = None) -> bool:
+    def rebind(self, expected_generation: int | None = None, *, force: bool = False) -> bool:
         with self._lock:
             if self._closed:
                 return False
@@ -232,6 +235,9 @@ class HardwareSupervisor(HardwareBackend):
                 resolved_device = self._device_resolver(self.device)
                 replacement = self._backend_factory(resolved_device)
                 self._reconcile_backend(replacement, resolved_device)
+                prepare_rebind = getattr(replacement, "prepare_observer_rebind", None)
+                if callable(prepare_rebind):
+                    prepare_rebind()
             except Exception:
                 if replacement is not None:
                     close = getattr(replacement, "close", None)
@@ -241,7 +247,7 @@ class HardwareSupervisor(HardwareBackend):
 
             old_signature = self._discovery_binding_signature(old)
             new_signature = self._discovery_binding_signature(replacement)
-            if (old_signature is not None and new_signature is not None and
+            if (not force and old_signature is not None and new_signature is not None and
                     old_signature == new_signature):
                 close = getattr(replacement, "close", None)
                 if close:
@@ -312,7 +318,20 @@ class HardwareSupervisor(HardwareBackend):
                 raise HardwareError("hardware supervisor is closed")
             backend = self._backend
             device = self.device
-        backend.watch_dpi_events(device, callback, shutdown_event, ready_callback)
+            generation = self._generation
+
+        def current_generation_callback(state) -> None:
+            with self._lock:
+                current = (
+                    not self._closed
+                    and self._generation == generation
+                    and self._backend is backend
+                )
+            if current:
+                callback(state)
+
+        backend.watch_dpi_events(
+            device, current_generation_callback, shutdown_event, ready_callback)
 
     def close(self) -> None:
         with self._lock:

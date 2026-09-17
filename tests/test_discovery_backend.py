@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import errno
 import json
+from dataclasses import replace
 from pathlib import Path
 import threading
 from unittest.mock import Mock, patch
@@ -9,8 +11,11 @@ import pytest
 
 from mouse_control.discovery import MouseDevice
 from mouse_control.discovery_models import DeviceNode, PhysicalDevice
+from mouse_control.hardware import HardwareSupervisor
 from mouse_control.hardware.base import HardwareError
 from mouse_control.hardware.discovery_backend import DiscoveryBackend
+from mouse_control.hid_descriptor import parse_report_descriptor
+from mouse_control.notifications import DpiEventMonitor, DpiMonitorSupervisor
 from mouse_control.remapper import MouseRemapper
 from evdev import ecodes
 
@@ -112,7 +117,7 @@ def _schema_v2_profile(source: dict) -> dict:
 
 def _backend_with_profile(tmp_path: Path, profile: dict, physical: PhysicalDevice) -> DiscoveryBackend:
     profile_dir = tmp_path / "profiles"
-    profile_dir.mkdir()
+    profile_dir.mkdir(parents=True)
     (profile_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
     return DiscoveryBackend(profile_directory=profile_dir, topology_builder=lambda _device: physical)
 
@@ -217,6 +222,288 @@ def test_schema_v2_hid_state_binds_by_stable_interface_and_refuses_ambiguity(tmp
     assert ambiguous.supports_device(device)
     assert ambiguous._binding is None
     assert not ambiguous.supports_dpi_events(device)
+
+
+def test_validated_descriptor_member_decodes_absolute_state_and_blocks_raw_fallback(tmp_path):
+    descriptor_bytes = bytes.fromhex(
+        "06 00 FF 09 02 A1 01 85 11 75 08 95 13 15 00 26 FF 00 "
+        "09 02 81 00 09 02 91 00 C0")
+    descriptor = parse_report_descriptor(descriptor_bytes)
+    field = descriptor.fields[0]
+    sysfs = tmp_path / "hidraw-device"
+    sysfs.mkdir()
+    (sysfs / "report_descriptor").write_bytes(descriptor_bytes)
+    physical = _physical()
+    physical.hidraw_nodes = [replace(
+        physical.hidraw_nodes[0], sysfs_path=sysfs,
+        descriptor_sha256=descriptor.fingerprint)]
+    report = {
+        "report_type": "input", "bus": 3, "vendor_id": 0x046D,
+        "product_id": 0x4074, "interface_number": 2,
+        "descriptor_sha256": descriptor.fingerprint, "report_length": 20,
+        "report_id": 17,
+    }
+    source = {
+        "kind": "hid_state", "cycle_order": [800, 1500, 2000, 2500, 3000],
+        "observations": 5, "confidence": "validated", "report": report,
+        "offset": 4,
+        "raw_to_configured_dpi": {str(i): dpi for i, dpi in enumerate((800, 1500, 2000, 2500, 3000))},
+        "raw_to_measured_cpi": {str(i): cpi for i, cpi in enumerate((823, 1543, 2048, 2567, 3067))},
+        "field_id": field.member_stable_id(descriptor.fingerprint, 3),
+        "parent_field_id": field.stable_id(descriptor.fingerprint),
+        "member_index": 3, "semantic_evidence": "validated",
+    }
+    profile = _schema_v2_profile(source)
+    profile["raw_mappings"][0]["report"] = report
+    backend = _backend_with_profile(tmp_path / "valid", profile, physical)
+    device = MouseDevice("G305", "/dev/input/test", vendor=0x046D, product=0x4074, bustype=3)
+    assert backend.supports_device(device)
+    assert backend._binding is not None and backend._binding.descriptor is not None
+    assert not backend.supports_dpi(device)
+
+    def packet(raw):
+        return bytes([0x11, 1, 7, 16, raw] + [0] * 15)
+
+    states = [backend._decode_calibrated_hid(packet(raw)) for raw in (0, 0, 1, 2, 3, 4, 0)]
+    assert [state.display_value if state else None for state in states] == [800, None, 1500, 2000, 2500, 3000, 800]
+    notifier = Mock()
+    monitor = DpiEventMonitor(
+        backend, device, [800, 1500, 2000, 2500, 3000], 800, notifier)
+    for state in states:
+        if state is not None:
+            monitor.handle_state(state)
+    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [
+        800, 1500, 2000, 2500, 3000, 800,
+    ]
+    with pytest.raises(HardwareError):
+        backend.set_dpi(device, 1500)
+
+    invalid = json.loads(json.dumps(profile))
+    invalid["transition_sources"][0]["field_id"] = "HID-FINVALID/member-3"
+    refused = _backend_with_profile(tmp_path / "invalid", invalid, physical)
+    assert refused.supports_device(device)
+    assert refused._binding is None
+    assert not refused.supports_dpi_events(device)
+
+
+@pytest.mark.parametrize("disconnect_errno", [errno.EIO, errno.ENODEV])
+@pytest.mark.parametrize("resync_raw_values", [(0, 1, 0), (4, 4)])
+def test_descriptor_backed_monitor_rebinds_after_disconnect_without_duplicate_notification(
+        tmp_path, disconnect_errno, resync_raw_values):
+    descriptor_bytes = bytes.fromhex(
+        "06 00 FF 09 02 A1 01 85 11 75 08 95 13 15 00 26 FF 00 "
+        "09 02 81 00 09 02 91 00 C0")
+    descriptor = parse_report_descriptor(descriptor_bytes)
+    field = descriptor.fields[0]
+    old_sysfs = tmp_path / "old-interface"
+    new_sysfs = tmp_path / "replacement-interface"
+    old_sysfs.mkdir()
+    new_sysfs.mkdir()
+    (old_sysfs / "report_descriptor").write_bytes(descriptor_bytes)
+    (new_sysfs / "report_descriptor").write_bytes(descriptor_bytes)
+
+    old_physical = _physical()
+    old_physical.hidraw_nodes = [replace(
+        old_physical.hidraw_nodes[0], path=Path("/dev/hidraw3"),
+        sysfs_path=old_sysfs, descriptor_sha256=descriptor.fingerprint)]
+    new_physical = _physical()
+    new_physical.hidraw_nodes = [replace(
+        new_physical.hidraw_nodes[0], path=Path("/dev/hidraw9"),
+        sysfs_path=new_sysfs, descriptor_sha256=descriptor.fingerprint)]
+
+    report = {
+        "report_type": "input", "bus": 3, "vendor_id": 0x046D,
+        "product_id": 0x4074, "interface_number": 2,
+        "descriptor_sha256": descriptor.fingerprint, "report_length": 20,
+        "report_id": 17,
+    }
+    source = {
+        "kind": "hid_state", "cycle_order": [800, 1500, 2000, 2500, 3000],
+        "observations": 5, "confidence": "validated", "report": report,
+        "offset": 4,
+        "raw_to_configured_dpi": {str(i): dpi for i, dpi in enumerate(
+            (800, 1500, 2000, 2500, 3000))},
+        "raw_to_measured_cpi": {str(i): cpi for i, cpi in enumerate(
+            (823, 1543, 2048, 2567, 3067))},
+        "field_id": field.member_stable_id(descriptor.fingerprint, 3),
+        "parent_field_id": field.stable_id(descriptor.fingerprint),
+        "member_index": 3, "semantic_evidence": "validated",
+    }
+    profile = _schema_v2_profile(source)
+    profile["raw_mappings"][0]["report"] = report
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    (profile_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
+    device = MouseDevice("G305", "/dev/input/event3", vendor=0x046D,
+                         product=0x4074, bustype=3)
+    learned_dpi_store = Mock()
+    learned_polling_store = Mock()
+    learned_action_store = Mock()
+
+    def make_backend(physical):
+        result = DiscoveryBackend(
+            profile_directory=profile_dir,
+            topology_builder=lambda _device: physical,
+            learned_operation_store=learned_dpi_store,
+            learned_polling_store=learned_polling_store,
+            learned_action_store=learned_action_store,
+            allow_writes=False,
+        )
+        assert result.supports_device(device)
+        assert result._binding is not None
+        return result
+
+    initial = make_backend(old_physical)
+    lifecycle = []
+
+    def replace_backend(_device):
+        lifecycle.append("rediscover")
+        return make_backend(new_physical)
+
+    hardware = HardwareSupervisor(
+        initial, device, replace_backend, device_resolver=lambda _device: device)
+    shutdown = threading.Event()
+    notifier = Mock()
+
+    def notify(_dpi):
+        if notifier.notify_dpi.call_count == 2:
+            shutdown.set()
+
+    notifier.notify_dpi.side_effect = notify
+    monitor = DpiMonitorSupervisor(
+        hardware, device, lambda _device: hardware,
+        [800, 1500, 2000, 2500, 3000], 0, shutdown,
+        notifier=notifier, retry_interval=0,
+    )
+
+    def packet(raw):
+        return bytes([0x11, 1, 7, 16, raw] + [0] * 15)
+
+    final_resync_raw = resync_raw_values[-1]
+    first_live_raw = 1 if final_resync_raw == 0 else 0
+    reads = {
+        10: iter((packet(4), OSError(disconnect_errno, "device lost"))),
+        11: iter(tuple(packet(raw) for raw in resync_raw_values) +
+                 (packet(final_resync_raw), packet(first_live_raw))),
+    }
+    replacement_selects = 0
+
+    def read(fd, _length):
+        value = next(reads[fd])
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+    def close(fd):
+        lifecycle.append(f"close:{fd}")
+
+    def select_ready(fds, _w, _x, _timeout):
+        nonlocal replacement_selects
+        if fds == [11]:
+            if replacement_selects == len(resync_raw_values):
+                replacement_selects += 1
+                return [], [], []
+            replacement_selects += 1
+        return fds, [], []
+
+    with patch("mouse_control.hardware.discovery_backend.os.open",
+               side_effect=[10, 11]) as opened, \
+         patch("mouse_control.hardware.discovery_backend.os.close", side_effect=close), \
+         patch("mouse_control.hardware.discovery_backend.select.select",
+               side_effect=select_ready), \
+         patch("mouse_control.hardware.discovery_backend.os.read", side_effect=read):
+        monitor._run()
+
+    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [
+        3000, 1500 if first_live_raw == 1 else 800,
+    ]
+    assert [entry.args[0] for entry in opened.call_args_list] == [
+        "/dev/hidraw3", "/dev/hidraw9",
+    ]
+    assert lifecycle.index("close:10") < lifecycle.index("rediscover")
+    assert hardware.generation == 1
+    replacement = hardware.current_backend
+    assert replacement._binding is not None
+    assert replacement._binding.node.path == Path("/dev/hidraw9")
+    assert replacement._binding.descriptor is not None
+    assert replacement._binding.field_id == source["field_id"]
+    assert replacement._allow_writes is False
+    assert not replacement.supports_dpi(device)
+    learned_dpi_store.find_for_physical.assert_not_called()
+    learned_polling_store.find_for_physical.assert_not_called()
+    learned_action_store.find_for_physical.assert_not_called()
+    assert lifecycle.count("close:10") == 1
+    assert lifecycle.count("close:11") == 1
+
+
+@pytest.mark.parametrize("replacement_kind", ["ambiguous", "malformed-descriptor"])
+def test_descriptor_backed_rebind_refuses_unsafe_replacement(
+        tmp_path, replacement_kind):
+    descriptor_bytes = bytes.fromhex(
+        "06 00 FF 09 02 A1 01 85 11 75 08 95 13 15 00 26 FF 00 "
+        "09 02 81 00 09 02 91 00 C0")
+    descriptor = parse_report_descriptor(descriptor_bytes)
+    field = descriptor.fields[0]
+    original_sysfs = tmp_path / "original"
+    replacement_sysfs = tmp_path / "replacement"
+    original_sysfs.mkdir()
+    replacement_sysfs.mkdir()
+    (original_sysfs / "report_descriptor").write_bytes(descriptor_bytes)
+    (replacement_sysfs / "report_descriptor").write_bytes(
+        b"\x85" if replacement_kind == "malformed-descriptor" else descriptor_bytes)
+    original = _physical()
+    original.hidraw_nodes = [replace(
+        original.hidraw_nodes[0], path=Path("/dev/hidraw3"),
+        sysfs_path=original_sysfs, descriptor_sha256=descriptor.fingerprint)]
+    replacement = _physical()
+    replacement.hidraw_nodes = [replace(
+        replacement.hidraw_nodes[0], path=Path("/dev/hidraw9"),
+        sysfs_path=replacement_sysfs, descriptor_sha256=descriptor.fingerprint)]
+    if replacement_kind == "ambiguous":
+        replacement = replace(replacement, ambiguous=True)
+
+    report = {
+        "report_type": "input", "bus": 3, "vendor_id": 0x046D,
+        "product_id": 0x4074, "interface_number": 2,
+        "descriptor_sha256": descriptor.fingerprint, "report_length": 20,
+        "report_id": 17,
+    }
+    source = {
+        "kind": "hid_state", "cycle_order": [800, 1500],
+        "observations": 2, "confidence": "validated", "report": report,
+        "offset": 4, "raw_to_configured_dpi": {"0": 800, "1": 1500},
+        "raw_to_measured_cpi": {"0": 823, "1": 1543},
+        "field_id": field.member_stable_id(descriptor.fingerprint, 3),
+        "parent_field_id": field.stable_id(descriptor.fingerprint),
+        "member_index": 3, "semantic_evidence": "validated",
+    }
+    profile = _schema_v2_profile(source)
+    profile["raw_mappings"][0]["report"] = report
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    (profile_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
+    device = MouseDevice("G305", "/dev/input/event3", vendor=0x046D,
+                         product=0x4074, bustype=3)
+
+    def backend_for(physical):
+        result = DiscoveryBackend(
+            profile_directory=profile_dir,
+            topology_builder=lambda _device: physical,
+            allow_writes=False,
+        )
+        result.supports_device(device)
+        return result
+
+    initial = backend_for(original)
+    assert initial._binding is not None
+    supervisor = HardwareSupervisor(
+        initial, device, lambda _device: backend_for(replacement))
+
+    assert supervisor.rebind(0, force=True)
+    rebound = supervisor.current_backend
+    assert rebound._binding is None
+    assert not rebound.supports_dpi_events(device)
+    assert not rebound.supports_dpi(device)
 
 
 def test_schema_v2_hid_trigger_tracks_read_only_without_set_dpi(tmp_path):

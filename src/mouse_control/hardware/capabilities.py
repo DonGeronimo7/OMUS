@@ -70,6 +70,7 @@ class DpiState:
     active_profile: int | None = None
     confirmed: bool = False
     cycle_trigger: bool = False
+    reconnect_resync: bool = False
 
     @property
     def display_value(self) -> int | tuple[int, int]:
