@@ -27,24 +27,17 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
     """Complete user-facing setup: one TUI, full discovery ladder, stable capture."""
 
     @staticmethod
-    def _input_error_message(exc: OSError) -> str:
+    def _input_error_message(exc: OSError, *, phase: str) -> str:
         if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY}:
             return (
-                "The input device is temporarily busy. Mouse Control kept the current "
-                "mappings unchanged; release the competing grab and try button capture again."
+                f"Input device busy during {phase}. Mouse Control kept the current "
+                "mappings unchanged."
             )
-        return f"Input capture failed: {exc}"
+        return f"Input capture failed during {phase}: {exc}"
 
     @staticmethod
     def _exclude_selected_mouse_from_keyboards(devices, mouse_path: str):
-        """Never let keyboard capture re-grab the mouse already owned by setup.
-
-        Some composite/gaming mice expose KEY_* codes on their mouse event node.
-        The generic keyboard scanner can therefore classify that same node as a
-        keyboard. During button mapping the mouse is already EVIOCGRAB'd, so a
-        second grab of the same real device returns EAGAIN/EBUSY. Keep exactly
-        one owner for the selected mouse and close the duplicate keyboard fd.
-        """
+        """Never let keyboard capture re-grab the mouse already owned by setup."""
         selected_realpath = os.path.realpath(mouse_path)
         kept = []
         for device in devices:
@@ -76,9 +69,6 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
             ),
             0,
         )
-        # Keep the selected action visible with context above and below.  The
-        # first/last rows naturally reveal that more content exists as the
-        # cursor advances; no action can become unreachable at 80x20.
         start = max(0, selected - max(2, capacity // 3))
         start = min(start, max(0, len(rows) - capacity))
         return rows[start : start + capacity]
@@ -162,24 +152,39 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
             integrated_tui._open_keyboards = original_open_keyboards
 
     def _button_editor(self) -> None:
+        """Give the button editor sole Mouse Control ownership of the evdev node."""
         assert self.stdscr is not None
         device = None
+        nodelay_enabled = False
         self._button_capture_path = None
+
+        # Discovery backends may retain readers/sessions for live evidence. They
+        # are useful everywhere else, but button mapping requires one exclusive
+        # evdev owner. Relinquish all backend resources before opening/grabbing
+        # the selected event node, then rebuild capabilities after capture.
+        try:
+            self.controller.backend.close()
+        except Exception:
+            pass
+
         try:
             path = self._resolved_button_path()
             self._button_capture_path = path
-            device = InputDevice(path)
-            device.grab()
-        except OSError as exc:
-            if device is not None:
-                try:
-                    device.close()
-                except OSError:
-                    pass
-            raise ButtonCaptureError(self._input_error_message(exc)) from exc
 
-        nodelay_enabled = False
-        try:
+            try:
+                device = InputDevice(path)
+            except OSError as exc:
+                raise ButtonCaptureError(
+                    self._input_error_message(exc, phase="opening selected mouse")
+                ) from exc
+
+            try:
+                device.grab()
+            except OSError as exc:
+                raise ButtonCaptureError(
+                    self._input_error_message(exc, phase="exclusive mouse grab")
+                ) from exc
+
             self.stdscr.nodelay(True)
             nodelay_enabled = True
             while True:
@@ -202,7 +207,9 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                 except BlockingIOError:
                     events = ()
                 except OSError as exc:
-                    raise ButtonCaptureError(self._input_error_message(exc)) from exc
+                    raise ButtonCaptureError(
+                        self._input_error_message(exc, phase="reading mouse events")
+                    ) from exc
                 for event in events:
                     if event.type != ecodes.EV_KEY or event.value != 1:
                         continue
@@ -211,11 +218,9 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                     try:
                         action = self._choose_button_action(button)
                     except OSError as exc:
-                        # Keyboard/key-chord capture can transiently lose an
-                        # input fd or encounter an existing exclusive grab.
-                        # Treat that as a recoverable editor failure rather than
-                        # aborting the entire setup transaction.
-                        self.controller.status = self._input_error_message(exc)
+                        self.controller.status = self._input_error_message(
+                            exc, phase="keyboard capture"
+                        )
                         action = None
                     finally:
                         self.stdscr.nodelay(True)
@@ -223,10 +228,6 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                         self.controller.apply_button_mapping(button, action)
                     break
                 curses.napms(20)
-        except OSError as exc:
-            # No transient evdev I/O failure is allowed to escape the button
-            # editor and tear down setup. Existing staged mappings are intact.
-            raise ButtonCaptureError(self._input_error_message(exc)) from exc
         finally:
             if nodelay_enabled:
                 self.stdscr.nodelay(False)
@@ -240,6 +241,12 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                 except OSError:
                     pass
             self._button_capture_path = None
+            try:
+                self.controller.refresh_discovery_backend(
+                    status="Button capture finished; hardware capabilities refreshed."
+                )
+            except Exception as exc:
+                self.controller.status = f"Button capture ended; capability refresh failed: {exc}"
 
 
 def run_complete_setup_tui(
