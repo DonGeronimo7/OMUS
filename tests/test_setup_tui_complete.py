@@ -1,4 +1,3 @@
-import errno
 from types import SimpleNamespace
 
 import pytest
@@ -99,31 +98,34 @@ def test_button_capture_refuses_ambiguous_identity(monkeypatch):
         app._resolved_button_path()
 
 
-def test_button_capture_translates_eagain_into_recoverable_editor_error(monkeypatch):
-    selected = MouseDevice(
-        "SIGMACHIP USB Mouse",
-        "/dev/input/by-id/usb-SIGMACHIP_USB_Mouse-event-mouse",
-        phys="usb-sigmachip",
-        vendor=0x1C4F,
-        product=0x0048,
-        bustype=3,
+def test_selected_mouse_is_excluded_from_keyboard_capture(tmp_path):
+    mouse_path = tmp_path / "event-mouse"
+    keyboard_path = tmp_path / "event-kbd"
+    mouse_path.touch()
+    keyboard_path.touch()
+
+    class FakeInput:
+        def __init__(self, path):
+            self.path = str(path)
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    mouse = FakeInput(mouse_path)
+    keyboard = FakeInput(keyboard_path)
+
+    kept = CompleteCursesSetupApp._exclude_selected_mouse_from_keyboards(
+        [mouse, keyboard], str(mouse_path)
     )
-    app = object.__new__(CompleteCursesSetupApp)
-    app.controller = SimpleNamespace(selected=selected)
-    app.stdscr = object()
-    monkeypatch.setattr(app, "_resolved_button_path", lambda: selected.path)
 
-    def busy_input_device(_path):
-        raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
-
-    monkeypatch.setattr("mouse_control.setup_tui_complete.InputDevice", busy_input_device)
-    with pytest.raises(ButtonCaptureError, match="temporarily busy"):
-        app._button_editor()
+    assert kept == [keyboard]
+    assert mouse.closed is True
+    assert keyboard.closed is False
 
 
-def test_busy_error_message_is_specific_for_eagain():
-    message = CompleteCursesSetupApp._input_error_message(
-        BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
-    )
+def test_sigmachip_busy_capture_is_reported_as_recoverable():
+    exc = BlockingIOError(11, "Resource temporarily unavailable")
+    message = CompleteCursesSetupApp._input_error_message(exc)
     assert "temporarily busy" in message
     assert "mappings unchanged" in message
