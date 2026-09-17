@@ -1,3 +1,4 @@
+import errno
 from types import SimpleNamespace
 
 import pytest
@@ -96,3 +97,33 @@ def test_button_capture_refuses_ambiguous_identity(monkeypatch):
     )
     with pytest.raises(ButtonCaptureError, match="ambiguous"):
         app._resolved_button_path()
+
+
+def test_button_capture_translates_eagain_into_recoverable_editor_error(monkeypatch):
+    selected = MouseDevice(
+        "SIGMACHIP USB Mouse",
+        "/dev/input/by-id/usb-SIGMACHIP_USB_Mouse-event-mouse",
+        phys="usb-sigmachip",
+        vendor=0x1C4F,
+        product=0x0048,
+        bustype=3,
+    )
+    app = object.__new__(CompleteCursesSetupApp)
+    app.controller = SimpleNamespace(selected=selected)
+    app.stdscr = object()
+    monkeypatch.setattr(app, "_resolved_button_path", lambda: selected.path)
+
+    def busy_input_device(_path):
+        raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+
+    monkeypatch.setattr("mouse_control.setup_tui_complete.InputDevice", busy_input_device)
+    with pytest.raises(ButtonCaptureError, match="temporarily busy"):
+        app._button_editor()
+
+
+def test_busy_error_message_is_specific_for_eagain():
+    message = CompleteCursesSetupApp._input_error_message(
+        BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+    )
+    assert "temporarily busy" in message
+    assert "mappings unchanged" in message
