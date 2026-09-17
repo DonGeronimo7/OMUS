@@ -276,9 +276,9 @@ def _same_physical_stage(left: CalibratedDpiState, right: CalibratedDpiState) ->
 
 
 def _distance_label(distance_mm: float) -> str:
-    """Show the calibration distance in metric and familiar imperial units."""
+    """Show the calibration distance in familiar imperial and precise metric units."""
 
-    return f"{distance_mm:g} mm ({distance_mm / 25.4:g} in)"
+    return f"{distance_mm / 25.4:g} inches ({distance_mm:g} mm)"
 
 
 def _stable_node_identity(node: Any) -> dict[str, object]:
@@ -508,12 +508,7 @@ def run_deep_dpi_stage_learning(
             feature_report_metadata=_feature_report_metadata(session),
         )
 
-    if (
-        wrap_confirmed
-        and transition_sources
-        and cycle is not None
-        and cycle.confidence == "validated"
-    ):
+    if wrap_confirmed and cycle is not None and cycle.confidence == "validated":
         profile = calibrated_profile_data(
             device=result.device,
             configured_cycle=configured_cycle,
@@ -523,8 +518,12 @@ def run_deep_dpi_stage_learning(
             transition_sources=transition_sources,
         )
         profile_path = save_calibrated_profile(profile)
-        report("✓ Runtime DPI transition source learned")
-        report("✓ Saved exact-device calibrated read-only DPI event profile")
+        report("✓ Physical DPI cycle learned")
+        if transition_sources:
+            report("✓ Runtime DPI source learned")
+            report("✓ Saved exact-device calibrated read-only DPI event profile")
+        else:
+            report("• Physical calibration saved; runtime source still unresolved")
     elif not wrap_confirmed:
         report("? Full DPI-cycle wrap was not observed; no runtime profile was promoted")
     elif cycle is None or cycle.confidence != "validated":
