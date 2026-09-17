@@ -13,6 +13,7 @@ import builtins
 from contextlib import redirect_stderr, redirect_stdout
 import curses
 from io import TextIOBase
+import os
 from select import select
 from typing import Any, Callable
 from unittest.mock import patch
@@ -254,9 +255,6 @@ class IntegratedCursesSetupApp(CursesSetupApp):
         except KeyboardInterrupt:
             status = 130
         except BaseException as exc:
-            # No discovery experiment should be able to tear down the product UI.
-            # KeyboardInterrupt/SystemExit are handled above; everything else is
-            # surfaced as an in-TUI diagnostic and the backend is rebound below.
             self._append_lab_line(f"FAILED: {type(exc).__name__}: {exc}")
             status = 1
         finally:
@@ -287,10 +285,29 @@ class IntegratedCursesSetupApp(CursesSetupApp):
         )
         self.controller.refresh_discovery_backend(status=message)
 
+    def _open_keyboard_candidates(self):
+        """Open keyboard-like devices, excluding the mouse already owned by button capture."""
+        all_devices = _open_keyboards()
+        selected_path = os.path.realpath(self.controller.selected.path)
+        candidates = []
+        for device in all_devices:
+            try:
+                same_device = os.path.realpath(device.path) == selected_path
+            except OSError:
+                same_device = False
+            if same_device:
+                try:
+                    device.close()
+                except OSError:
+                    pass
+                continue
+            candidates.append(device)
+        return candidates
+
     def _capture_key_tui(self) -> str | None:
         all_devices = []
         try:
-            all_devices = _open_keyboards()
+            all_devices = self._open_keyboard_candidates()
             devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
                 self.controller.status = "No readable keyboard devices are available."
@@ -343,7 +360,7 @@ class IntegratedCursesSetupApp(CursesSetupApp):
     def _capture_chord_tui(self) -> str | None:
         all_devices = []
         try:
-            all_devices = _open_keyboards()
+            all_devices = self._open_keyboard_candidates()
             devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
                 self.controller.status = "No readable keyboard devices are available."
