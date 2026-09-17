@@ -1,3 +1,11 @@
+mouse-control (0.9.3-1) unstable; urgency=medium
+
+  * Release descriptor-backed Automatic Hardware Discovery acceptance.
+  * Preserve native HID++, remapping, polling, notifications, and v0.8.2 compatibility.
+  * Keep unknown-device discovery read-only and learned writes PROVEN-only.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Thu, 17 Sep 2026 12:00:00 +0000
+
 mouse-control (0.9.1-1) unstable; urgency=medium
 
   * Add the keyboard-driven setup TUI and integrated guided discovery.

@@ -17,9 +17,13 @@ def hardware():
     backend.name = 'Test HID'
     backend.get_device_name.return_value = MOUSE.name
     backend.supports_dpi.return_value = True
-    backend.get_dpi.return_value = 800
+    dpi_state = {'value': 800}
+    backend.get_dpi.side_effect = lambda device: dpi_state['value']
     backend.get_dpi_values.return_value = list(range(200, 12001, 50))
-    backend.set_dpi.side_effect = lambda device, value: value
+    def set_dpi(device, value):
+        dpi_state['value'] = value
+        return value
+    backend.set_dpi.side_effect = set_dpi
     backend.supports_polling_rate.return_value = False
     backend.supports_polling_rate_writes.return_value = False
     backend.supports_dpi_stages.return_value = False
@@ -57,7 +61,7 @@ def test_finish_persists_reviewed_stages_and_runtime_loads_exact_list(tmp_path, 
     ]
     result, output = run_wizard(path, backend, answers, capsys)
     assert result == 0
-    assert 'DPI stages: 800 → 1450 → 2000 → 2400 → 3200' in output
+    assert 'Configured software stages: 800 → 1450 → 2000 → 2400 → 3200' in output
     saved = config.load_config(path)
     assert saved['dpi']['stages'] == FINAL
     assert saved['dpi']['active'] == 800

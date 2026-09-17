@@ -172,6 +172,22 @@ def test_engine_unknown_device_creates_no_writable_capability(tmp_path):
     assert result.capabilities == {}
 
 
+def test_engine_exposes_descriptor_semantics_and_passive_decoder(tmp_path):
+    hid = node('/dev/hidraw8', 'hidraw')
+    physical = PhysicalDevice('Unknown', 0x1234, 0x5678, 3, None, [], [hid], 'm', None)
+    mouse = MouseDevice('Unknown', '/dev/input/event1', '', 0x1234, 0x5678, 3)
+    descriptor = bytes.fromhex('05 09 09 01 15 00 25 01 75 01 95 01 81 02')
+    probe = SimpleNamespace(read_descriptor=lambda: descriptor, close=lambda: None)
+    engine = DiscoveryEngine(topology_builder=lambda _mouse: physical, detectors=(),
+        probe_factory=lambda _node: probe, profile_store=DeviceProfileStore(tmp_path), save_profiles=False)
+    result = engine.discover(mouse)
+    semantics = engine.semantic_fields(hid)
+    decoded = engine.decode_input(hid, b'\x01')
+    assert semantics[0].semantics[0].name == 'Mouse Button 1'
+    assert decoded.values[0].logical_value == 1
+    assert not result.writable
+
+
 def test_engine_exposes_saved_profile_path(tmp_path):
     physical = PhysicalDevice('Unknown', 0x1234, 0x5678, 3, None, [], [], 'model-hash', None)
     mouse = MouseDevice('Unknown', '/dev/input/event1', '', 0x1234, 0x5678, 3)

@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import curses
+import errno
 from typing import Any, Callable
 
 from evdev import InputDevice, ecodes
 
 from . import __version__
 from .device_topology import TopologyError
-from .guided_discovery import GuidedDiscoveryCancelled, GuidedStep, run_guided_discovery
+from .guided_discovery import (
+    GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_deep_dpi_stage_learning,
+)
+from .polling_observation import measure_current_polling
 from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
+from .research_probe import ResearchProbeError, run_reversible_research_probes
 from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
 from .wizard import ButtonCaptureError, get_button_name
 
@@ -50,15 +55,17 @@ class DpiEditSession:
         if not choices.dpi_writable:
             self.controller.status = "Live DPI tuning is unavailable for this mouse."
             return False
-        values = choices.dpi_values
-        if not values:
-            self.controller.status = "The mouse did not report safe DPI values for live tuning."
+        if not (choices.dpi_values or choices.dpi_ranges):
+            self.controller.status = "The mouse did not report a safe DPI set or range for live tuning."
             return False
-        if requested not in values:
-            self.controller.status = (
-                f"{requested} DPI is unsupported; choose a hardware-reported value "
-                f"between {values[0]} and {values[-1]}."
-            )
+        if not choices.accepts_dpi(requested):
+            if choices.dpi_minimum is not None and choices.dpi_maximum is not None:
+                self.controller.status = (
+                    f"{requested} DPI is outside {choices.dpi_minimum}–{choices.dpi_maximum} "
+                    "or does not match the native increment."
+                )
+            else:
+                self.controller.status = f"{requested} DPI is not a hardware-reported value."
             return False
         return True
 
@@ -68,8 +75,9 @@ class DpiEditSession:
             return False
         try:
             result = self.controller.backend.set_dpi(self.controller.selected, requested)
-            confirmed = _dpi_number(result)
-            if confirmed is None:
+            if bool(getattr(result, "confirmed", False)):
+                confirmed = _dpi_number(result)
+            else:
                 confirmed = self._read_current()
             if confirmed != requested:
                 self.controller.status = (
@@ -371,35 +379,183 @@ class CursesSetupApp:
         self.controller.status = message
         self._draw()
 
-    def _run_guided(self) -> None:
+    def _run_automatic(self) -> None:
+        self.controller.discovery_progress.clear()
+
+        def progress(message: str) -> None:
+            self.controller.record_discovery_progress(message)
+            self._draw()
+
         try:
-            outcome = run_guided_discovery(
+            outcome = run_automatic_discovery(
                 self.controller.selected,
+                progress=progress,
+            )
+        except PermissionError as exc:
+            self.controller.apply_discovery_error(
+                f"Permission failure while reading hardware: {exc}. Check hidraw/input permissions and retry."
+            )
+            return
+        except TopologyError as exc:
+            self.controller.apply_discovery_error(
+                f"Physical-device binding could not be established: {exc}."
+            )
+            return
+        except (TimeoutError, OSError, HardwareError) as exc:
+            self.controller.apply_discovery_error(
+                f"Hardware discovery was interrupted or the mouse disconnected: {exc}."
+            )
+            return
+        except Exception as exc:
+            self.controller.apply_discovery_error(f"Discovery stage failed: {exc}")
+            return
+        self.controller.apply_automatic_discovery(outcome)
+        plan = getattr(outcome, "research_plan", None)
+        if plan is not None and getattr(plan, "reversible_probe_available", False):
+            if self._confirm(
+                "Run reversible write-possibility research?",
+                [
+                    "Mouse Control found an exact-model DEMONSTRATED transaction grammar.",
+                    "Only previously demonstrated semantic values will be tested.",
+                    "Raw readback and independent physical behavior must agree.",
+                    "The original value will be restored through the same generic path.",
+                    "Success validates possibility only; runtime write authority stays disabled.",
+                ],
+                yes="Enter Begin reversible probe",
+                no="b Not now",
+            ):
+                self._run_research_probe()
+        elif plan is not None and getattr(plan, "deeper_learning_recommended", False):
+            if self._confirm(
+                "Continue to deeper protocol learning?",
+                [
+                    "Automatic Discovery could not construct an executable generic write grammar.",
+                    "Mouse Control can now learn the complete physical DPI-stage cycle read-only.",
+                    "This uses ruler-based CPI calibration plus simultaneous HID observation.",
+                    "No unknown DPI or polling configuration write will be sent.",
+                ],
+                yes="Enter Begin deeper learning",
+                no="b Not now",
+            ):
+                self._run_guided()
+
+    def _run_research_probe(self) -> None:
+        if self.controller.discovery_result is None or self.controller.research_plan is None:
+            self.controller.status = "Run Automatic Discovery before reversible write research."
+            return
+
+        def prompt(title: str, lines: tuple[str, ...]) -> bool:
+            return self._confirm(
+                title,
+                list(lines),
+                yes="Enter Begin",
+                no="b Cancel probe",
+            )
+
+        def progress(message: str) -> None:
+            self.controller.status = message
+            self._draw()
+
+        try:
+            outcome = run_reversible_research_probes(
+                self.controller.selected,
+                self.controller.discovery_result.device,
+                self.controller.research_plan,
+                prompt=prompt,
+                progress=progress,
+            )
+        except (ResearchProbeError, PermissionError, OSError, HardwareError) as exc:
+            self.controller.status = f"Reversible write research stopped safely: {exc}"
+            self._confirm(
+                "Write-possibility probe stopped",
+                [
+                    str(exc),
+                    "No runtime write authority was granted.",
+                    "Any completed generic transition requested its rollback before exit.",
+                ],
+                yes="Enter Continue",
+                no="Esc Continue",
+            )
+            return
+        self.controller.apply_research_probe_outcome(outcome)
+        lines = []
+        for item in (outcome.dpi, outcome.polling):
+            if item is None:
+                continue
+            label = "DPI" if item.semantic == "dpi" else "Polling"
+            if item.possible:
+                lines.append(
+                    f"✓ {label}: generic reversible write possibility validated "
+                    f"({item.original_value} → {item.target_value} → {item.original_value})"
+                )
+            elif item.attempted:
+                lines.append(f"? {label}: probe did not validate a writable path")
+            else:
+                lines.append(f"• {label}: {item.detail}")
+        lines.append("Runtime authority remains unchanged until explicit promotion reaches PROVEN.")
+        self._confirm("Reversible research result", lines, yes="Enter Continue", no="Esc Continue")
+
+    def _run_polling_measurement(self) -> None:
+        if not self._confirm(
+            "Measure current polling rate",
+            [
+                "This is read-only and does not change mouse firmware or report rate.",
+                "Move the mouse rapidly and continuously for about 3 seconds.",
+            ],
+            yes="Enter Begin measurement",
+            no="b Cancel",
+        ):
+            return
+        self.controller.status = "• Measuring current report-rate behavior from evdev timestamps…"
+        self._draw()
+        try:
+            measurement = measure_current_polling(
+                self.controller.selected.path,
+                seconds=3.0,
+                exclusive=True,
+            )
+        except PermissionError as exc:
+            self.controller.status = f"Polling measurement needs input access: {exc}"
+            return
+        except OSError as exc:
+            self.controller.status = f"Polling measurement interrupted: {exc}"
+            return
+        self.controller.apply_polling_measurement(measurement)
+
+    def _run_guided(self) -> None:
+        if self.controller.discovery_result is None or self.controller.discovery_engine is None:
+            self.controller.status = "Run Automatic Discovery before deeper protocol learning."
+            return
+        try:
+            outcome = run_deep_dpi_stage_learning(
+                self.controller.selected,
+                self.controller.discovery_result,
+                self.controller.discovery_engine,
                 prompt=self._guided_prompt,
                 progress=self._guided_progress,
             )
         except GuidedDiscoveryCancelled:
-            self.controller.status = "Guided discovery cancelled; no hardware authority changed."
+            self.controller.status = "Deeper protocol learning cancelled; no hardware authority changed."
             return
-        except (TopologyError, PermissionError, OSError, HardwareError) as exc:
-            self.controller.status = f"Guided discovery unavailable: {exc}"
+        except (TopologyError, PermissionError, OSError, HardwareError, ValueError) as exc:
+            self.controller.status = f"Deeper protocol learning unavailable: {exc}"
             return
-        self.controller.apply_guided_outcome(outcome)
+        self.controller.apply_deep_learning_outcome(outcome)
         lines = []
-        if outcome.dpi_action_identified:
-            lines.append("✓ DPI button behavior identified")
-        elif outcome.learning is not None:
-            lines.append("? DPI behavior was not conclusive")
-        if self.controller.choices.dpi_writable:
-            lines.append("✓ DPI control safely proven for this exact mouse")
+        if outcome.wrap_confirmed:
+            lines.append("✓ Complete physical DPI cycle and wraparound observed")
         else:
-            lines.append("? DPI write command not yet proven")
-        if self.controller.choices.polling_writable:
-            lines.append("✓ Polling-rate control safely proven")
+            lines.append("? Complete physical DPI cycle was not confirmed")
+        if outcome.action_identified:
+            lines.append("✓ DPI-button action isolated from ordinary motion")
+        if outcome.raw_mappings:
+            lines.append("✓ Persistent raw DPI-stage state correlated with physical CPI")
+        if outcome.profile_path is not None:
+            lines.append("✓ Exact-device read-only stage profile saved for runtime notifications")
         else:
-            lines.append("? Polling-rate control could not yet be safely proven")
-            lines.append("Current polling rate will remain unchanged.")
-        self._confirm("Discovery result", lines, yes="Enter Continue", no="Esc Continue")
+            lines.append("? No runtime stage profile was promoted")
+        lines.append("Write authority remains unchanged by deeper read-side learning.")
+        self._confirm("Deeper discovery result", lines, yes="Enter Continue", no="Esc Continue")
 
     def _suspend_curses(self, function: Callable[[], Any]) -> Any:
         assert self.stdscr is not None
@@ -468,10 +624,42 @@ class CursesSetupApp:
             elif key in (10, 13, curses.KEY_ENTER):
                 action = options[cursor][1]
                 if action == "__key__":
-                    name = self._suspend_curses(capture_keyboard_key)
-                    return f"key:{name}" if name else None
+                    self._modal(
+                        "Record keyboard key",
+                        [
+                            "Press the keyboard key you want to assign.",
+                            "Ctrl+C cancels capture.",
+                            "Mouse Control temporarily reserves keyboard input while recording.",
+                        ],
+                        prompt="Waiting for key…",
+                    )
+                    name = capture_keyboard_key(
+                        exclude_paths=(self.controller.selected.path,),
+                        manage_terminal=False,
+                        reporter=None,
+                    )
+                    if name is None:
+                        self.controller.status = "Keyboard key capture cancelled or unavailable."
+                        return None
+                    return f"key:{name}"
                 if action == "__chord__":
-                    return self._suspend_curses(capture_keyboard_chord)
+                    self._modal(
+                        "Record keyboard chord",
+                        [
+                            "Press and hold the shortcut, then release all keys.",
+                            "Esc cancels capture.",
+                            "Mouse Control temporarily reserves keyboard input while recording.",
+                        ],
+                        prompt="Waiting for chord…",
+                    )
+                    chord = capture_keyboard_chord(
+                        exclude_paths=(self.controller.selected.path,),
+                        manage_terminal=False,
+                        reporter=None,
+                    )
+                    if chord is None:
+                        self.controller.status = "Keyboard chord capture cancelled or unavailable."
+                    return chord
                 if action == "__manual__":
                     raw = self._read_text(
                         "Manual Linux action",
@@ -492,19 +680,44 @@ class CursesSetupApp:
                     return None
                 return action
 
+    @staticmethod
+    def _input_error_message(exc: OSError, *, phase: str) -> str:
+        if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY}:
+            return (
+                f"Input device busy during {phase}. Mouse Control kept the current "
+                "mappings unchanged."
+            )
+        return f"Input capture failed during {phase}: {exc}"
+
     def _button_editor(self) -> None:
+        """Give button capture sole Mouse Control ownership of the evdev node."""
         assert self.stdscr is not None
         device = None
-        try:
-            device = InputDevice(self.controller.selected.path)
-            device.grab()
-        except OSError as exc:
-            if device is not None:
-                device.close()
-            raise ButtonCaptureError(f"Could not reserve the mouse for button capture: {exc}") from exc
-
         nodelay_enabled = False
+
+        # Discovery/HID backends can retain readers while setup is open. Button
+        # remapping is a core invariant and requires an exclusive EVIOCGRAB, so
+        # release those resources before opening the selected event node.
         try:
+            self.controller.backend.close()
+        except Exception:
+            pass
+
+        try:
+            try:
+                device = InputDevice(self.controller.selected.path)
+            except OSError as exc:
+                raise ButtonCaptureError(
+                    self._input_error_message(exc, phase="opening selected mouse")
+                ) from exc
+
+            try:
+                device.grab()
+            except OSError as exc:
+                raise ButtonCaptureError(
+                    self._input_error_message(exc, phase="exclusive mouse grab")
+                ) from exc
+
             self.stdscr.nodelay(True)
             nodelay_enabled = True
             while True:
@@ -522,11 +735,25 @@ class CursesSetupApp:
                 if key in (10, 13, curses.KEY_ENTER, 27):
                     break
                 try:
-                    events = device.read()
+                    # evdev.read() returns a lazy iterator; force iteration inside
+                    # the protected block so EAGAIN raised by device_read_many()
+                    # is handled as the normal nonblocking idle state.
+                    events = tuple(device.read())
                 except BlockingIOError:
+                    # evdev is opened O_NONBLOCK. No queued input is the normal
+                    # idle state while waiting for a button press.
                     events = ()
                 except OSError as exc:
-                    raise ButtonCaptureError(f"Mouse disconnected during button capture: {exc}") from exc
+                    # evdev 2.x/platform combinations may surface the same
+                    # nonblocking empty-read condition as plain OSError rather
+                    # than BlockingIOError. EAGAIN/EWOULDBLOCK is not a device
+                    # failure and must never abort button remapping.
+                    if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
+                        events = ()
+                    else:
+                        raise ButtonCaptureError(
+                            self._input_error_message(exc, phase="reading mouse events")
+                        ) from exc
                 for event in events:
                     if event.type != ecodes.EV_KEY or event.value != 1:
                         continue
@@ -541,11 +768,23 @@ class CursesSetupApp:
         finally:
             if nodelay_enabled:
                 self.stdscr.nodelay(False)
+            if device is not None:
+                try:
+                    device.ungrab()
+                except OSError:
+                    pass
+                try:
+                    device.close()
+                except OSError:
+                    pass
             try:
-                device.ungrab()
-            except OSError:
-                pass
-            device.close()
+                self.controller.refresh_discovery_backend(
+                    status="Button capture finished; hardware capabilities refreshed."
+                )
+            except Exception as exc:
+                self.controller.status = (
+                    f"Button capture ended; capability refresh failed: {exc}"
+                )
 
     def _draw_dpi_editor(self, session: DpiEditSession, value: str, action_cursor: int) -> None:
         assert self.stdscr is not None
@@ -729,6 +968,12 @@ class CursesSetupApp:
                     ],
                 ):
                     return False
+            elif action.kind in {ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY}:
+                self._run_automatic()
+            elif action.kind is ActionKind.GUIDED_DISCOVERY:
+                self._run_guided()
+            elif action.kind is ActionKind.MEASURE_POLLING:
+                self._run_polling_measurement()
             elif action.kind is ActionKind.EDIT_DPI:
                 self._dpi_editor(int(action.payload))
             elif action.kind is ActionKind.CAPTURE_BUTTONS:
@@ -736,8 +981,6 @@ class CursesSetupApp:
                     self._button_editor()
                 except ButtonCaptureError as exc:
                     self.controller.status = str(exc)
-            elif action.kind is ActionKind.GUIDED_DISCOVERY:
-                self._run_guided()
             elif action.kind is ActionKind.SAVE:
                 if self._confirm(
                     "Save configuration?",

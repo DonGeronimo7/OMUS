@@ -15,6 +15,9 @@ import selectors
 import time
 from typing import Any, Hashable, Iterable, Mapping, Sequence
 
+from .hid_descriptor import ParsedHidDescriptor
+from .hid_report import DecodedHidReport, decode_input_report
+
 
 @dataclass(frozen=True)
 class RawStreamIdentity:
@@ -44,6 +47,15 @@ class TimedReport:
     source: Hashable
     data: bytes
     diagnostic_source: str | None = None
+
+
+@dataclass(frozen=True)
+class TimedDecodedReport:
+    """Descriptor-backed preferred correlation unit for HID Input traffic."""
+
+    timestamp_ns: int
+    source: Hashable
+    decoded: DecodedHidReport
 
 
 @dataclass(frozen=True)
@@ -80,6 +92,72 @@ class CorrelationCandidate:
     values: tuple[int, ...]
     transitions: tuple[tuple[int | None, int | None], ...]
     mirrors: tuple[Hashable, ...] = ()
+
+
+@dataclass(frozen=True)
+class FieldCorrelationCandidate:
+    """A stable HID field transition; unlike a byte offset it survives path changes."""
+
+    source: Hashable
+    field_id: str
+    observations: int
+    values: tuple[int, ...]
+    transitions: tuple[tuple[int | None, int | None], ...]
+
+
+def decode_timed_reports(
+    reports: Iterable[TimedReport],
+    descriptors: Mapping[Hashable, ParsedHidDescriptor],
+) -> tuple[TimedDecodedReport, ...]:
+    """Decode descriptor-backed reports, safely omitting unavailable/malformed streams.
+
+    The original ``TimedReport`` objects remain untouched and available to the
+    byte-level compatibility fallback.
+    """
+
+    result: list[TimedDecodedReport] = []
+    previous: dict[Hashable, DecodedHidReport] = {}
+    for report in sorted(reports, key=lambda item: item.timestamp_ns):
+        descriptor = descriptors.get(report.source)
+        if descriptor is None:
+            continue
+        try:
+            decoded = decode_input_report(descriptor, report.data, previous=previous.get(report.source))
+        except ValueError:
+            continue
+        result.append(TimedDecodedReport(report.timestamp_ns, report.source, decoded))
+        previous[report.source] = decoded
+    return tuple(result)
+
+
+def detect_decoded_field_changes(
+    actions: Sequence[Sequence[TimedDecodedReport]],
+    *,
+    minimum_observations: int = 2,
+) -> tuple[FieldCorrelationCandidate, ...]:
+    """Correlate stable descriptor field identities across guided actions."""
+
+    if minimum_observations < 1:
+        raise ValueError("minimum_observations must be at least one")
+    found: dict[tuple[Hashable, str], list[tuple[int | None, int | None]]] = defaultdict(list)
+    values: dict[tuple[Hashable, str], set[int]] = defaultdict(set)
+    for action in actions:
+        per_key: dict[tuple[Hashable, str], list[int]] = defaultdict(list)
+        for report in sorted(action, key=lambda item: item.timestamp_ns):
+            for item in report.decoded.values:
+                if item.logical_value is not None:
+                    per_key[(report.source, item.field_id)].append(item.logical_value)
+        for key, sequence in per_key.items():
+            changes = [(left, right) for left, right in zip(sequence, sequence[1:]) if left != right]
+            if changes:
+                found[key].extend(changes)
+                values[key].update(sequence)
+    candidates = [
+        FieldCorrelationCandidate(source, field_id, len(transitions), tuple(sorted(values[(source, field_id)])), tuple(transitions))
+        for (source, field_id), transitions in found.items()
+        if len(transitions) >= minimum_observations
+    ]
+    return tuple(sorted(candidates, key=lambda item: (-item.observations, repr(item.source), item.field_id)))
 
 
 def diff_feature_snapshots(

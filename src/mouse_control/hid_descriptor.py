@@ -1,33 +1,75 @@
-"""Dependency-free HID report-descriptor parser used by discovery.
+"""Lossless, dependency-free HID report-descriptor schema parser.
 
-Discovery needs more than report lengths: Linux exposes a descriptor that maps
-wire bits to HID usages, logical ranges and Main-item flags.  We keep that
-structure protocol-neutral so guided learning can tell ordinary pointer/button
-traffic from vendor-defined or undeclared bytes without assigning vendor
-semantics such as DPI or polling rate.
+This module records descriptor-declared facts. It never infers vendor meaning
+and never grants hardware write authority.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum, IntEnum
+import hashlib
 from math import ceil
 
 from .discovery_models import HidReportDefinition
 
 
 class HidDescriptorError(ValueError):
-    """The HID report descriptor is malformed or truncated."""
+    pass
+
+
+class HidDiagnosticSeverity(str, Enum):
+    INFO = "info"; WARNING = "warning"; ERROR = "error"; FATAL = "fatal"
+
+
+@dataclass(frozen=True)
+class HidDescriptorDiagnostic:
+    severity: HidDiagnosticSeverity
+    code: str
+    message: str
+    offset: int | None = None
+
+
+class HidCollectionType(IntEnum):
+    PHYSICAL = 0; APPLICATION = 1; LOGICAL = 2; REPORT = 3
+    NAMED_ARRAY = 4; USAGE_SWITCH = 5; USAGE_MODIFIER = 6
+
+
+@dataclass(frozen=True)
+class HidCollection:
+    index: int
+    collection_type: int
+    usage_page: int | None
+    usage: int | None
+    parent_index: int | None
+
+    @property
+    def known_type(self) -> HidCollectionType | None:
+        try: return HidCollectionType(self.collection_type)
+        except ValueError: return None
+
+
+@dataclass(frozen=True)
+class HidMainFlags:
+    raw: int
+    constant: bool
+    variable: bool
+    relative: bool
+    wrap: bool
+    non_linear: bool
+    no_preferred: bool
+    null_state: bool
+    volatile: bool
+    buffered_bytes: bool
+
+    @classmethod
+    def from_raw(cls, raw: int) -> "HidMainFlags":
+        return cls(raw, bool(raw&1), bool(raw&2), bool(raw&4), bool(raw&8),
+                   bool(raw&0x10), bool(raw&0x20), bool(raw&0x40),
+                   bool(raw&0x80), bool(raw&0x100))
 
 
 @dataclass(frozen=True)
 class HidFieldDefinition:
-    """One descriptor Main item mapped onto its report bit range.
-
-    ``bit_offset`` is relative to the report payload and therefore excludes the
-    report-ID prefix. ``wire_bit_offset`` includes that prefix when a numbered
-    report is used, matching byte offsets observed directly through hidraw.
-    """
-
     report_id: int
     report_type: str
     bit_offset: int
@@ -38,59 +80,72 @@ class HidFieldDefinition:
     usages: tuple[tuple[int, int], ...] = ()
     logical_minimum: int | None = None
     logical_maximum: int | None = None
+    physical_minimum: int | None = None
+    physical_maximum: int | None = None
+    unit: int | None = None
+    unit_exponent: int | None = None
+    usage_minimum: tuple[int, int] | None = None
+    usage_maximum: tuple[int, int] | None = None
+    designator_index: int | None = None
+    designator_minimum: int | None = None
+    designator_maximum: int | None = None
+    string_index: int | None = None
+    string_minimum: int | None = None
+    string_maximum: int | None = None
+    collection_path: tuple[int, ...] = ()
+    application_usage: tuple[int, int] | None = None
+    physical_usage: tuple[int, int] | None = None
+    logical_usage: tuple[int, int] | None = None
+    field_index: int = 0
 
     @property
-    def bit_length(self) -> int:
-        return self.report_size * self.report_count
-
+    def main_flags(self) -> HidMainFlags: return HidMainFlags.from_raw(self.flags)
     @property
-    def wire_bit_offset(self) -> int:
-        return self.bit_offset + (8 if self.report_id else 0)
-
+    def bit_length(self) -> int: return self.report_size * self.report_count
     @property
-    def is_constant(self) -> bool:
-        return bool(self.flags & 0x01)
-
+    def wire_bit_offset(self) -> int: return self.bit_offset + (8 if self.report_id else 0)
     @property
-    def is_variable(self) -> bool:
-        return bool(self.flags & 0x02)
-
+    def is_constant(self) -> bool: return self.main_flags.constant
     @property
-    def is_relative(self) -> bool:
-        return bool(self.flags & 0x04)
-
+    def is_variable(self) -> bool: return self.main_flags.variable
     @property
-    def vendor_defined(self) -> bool:
-        return any(0xFF00 <= page <= 0xFFFF for page in self.usage_pages)
-
+    def is_relative(self) -> bool: return self.main_flags.relative
+    @property
+    def vendor_defined(self) -> bool: return any(0xFF00 <= p <= 0xFFFF for p in self.usage_pages)
     @property
     def role(self) -> str:
-        """Return a conservative structural role, never a vendor semantic."""
-
-        if self.is_constant:
-            return "padding"
-        if self.vendor_defined:
-            return "vendor"
+        if self.is_constant: return "padding"
+        if self.vendor_defined: return "vendor"
         pages = set(self.usage_pages)
-        usages = set(self.usages)
-        if 0x09 in pages:
-            return "button"
-        if any(page == 0x01 and usage in {0x30, 0x31, 0x38} for page, usage in usages):
-            return "pointer"
-        if 0x0C in pages:
-            return "consumer"
-        if pages:
-            return "standard"
-        return "undeclared"
+        if 0x09 in pages: return "button"
+        if any(p == 1 and u in {0x30,0x31,0x38} for p,u in self.usages): return "pointer"
+        if 0x0C in pages: return "consumer"
+        return "standard" if pages else "undeclared"
+    def stable_id(self, fingerprint: str) -> str:
+        material = repr((fingerprint, self.report_type, self.report_id,
+                         self.field_index, self.bit_offset, self.report_size,
+                         self.report_count, self.usages, self.collection_path))
+        return "HID-F" + hashlib.sha256(material.encode()).hexdigest()[:20].upper()
+    def member_stable_id(self, fingerprint: str, member_index: int) -> str:
+        """Stable observation identity for one positional field member.
 
+        Variable fields always have positional members.  An opaque
+        vendor-defined Array with no selector range is also exposed
+        positionally for observation, while retaining its descriptor-declared
+        Array flags and parent field identity.
+        """
+        if not self.has_positional_members or not 0 <= member_index < self.report_count:
+            raise ValueError("member index is outside a positional HID field")
+        return f"{self.stable_id(fingerprint)}/member-{member_index}"
+    @property
+    def has_positional_members(self) -> bool:
+        return ((self.is_variable and self.report_count > 1) or
+                (self.vendor_defined and self.report_count > 1 and
+                 self.usage_minimum is None and self.usage_maximum is None))
     def overlaps_wire_byte(self, byte_offset: int) -> bool:
-        if byte_offset < 0 or self.bit_length <= 0:
-            return False
-        byte_start = byte_offset * 8
-        byte_end = byte_start + 8
-        field_start = self.wire_bit_offset
-        field_end = field_start + self.bit_length
-        return field_start < byte_end and byte_start < field_end
+        return (byte_offset >= 0 and self.bit_length > 0 and
+                self.wire_bit_offset < (byte_offset+1)*8 and
+                byte_offset*8 < self.wire_bit_offset+self.bit_length)
 
 
 @dataclass(frozen=True)
@@ -98,293 +153,153 @@ class ParsedHidDescriptor:
     raw: bytes
     reports: tuple[HidReportDefinition, ...]
     fields: tuple[HidFieldDefinition, ...] = ()
-
+    collections: tuple[HidCollection, ...] = ()
+    diagnostics: tuple[HidDescriptorDiagnostic, ...] = ()
     @property
-    def input_reports(self) -> tuple[HidReportDefinition, ...]:
-        return get_input_reports(self)
-
+    def fingerprint(self) -> str: return hashlib.sha256(self.raw).hexdigest()
     @property
-    def output_reports(self) -> tuple[HidReportDefinition, ...]:
-        return get_output_reports(self)
-
+    def input_reports(self): return get_input_reports(self)
     @property
-    def feature_reports(self) -> tuple[HidReportDefinition, ...]:
-        return get_feature_reports(self)
+    def output_reports(self): return get_output_reports(self)
+    @property
+    def feature_reports(self): return get_feature_reports(self)
 
 
 @dataclass
-class _GlobalState:
-    usage_page: int = 0
-    logical_minimum: int | None = None
-    logical_maximum: int | None = None
-    report_size: int = 0
-    report_count: int = 0
-    report_id: int = 0
-
-    def copy(self) -> "_GlobalState":
-        return _GlobalState(
-            usage_page=self.usage_page,
-            logical_minimum=self.logical_minimum,
-            logical_maximum=self.logical_maximum,
-            report_size=self.report_size,
-            report_count=self.report_count,
-            report_id=self.report_id,
-        )
+class _Global:
+    usage_page: int=0; logical_minimum: int|None=None; logical_maximum: int|None=None
+    physical_minimum: int|None=None; physical_maximum: int|None=None
+    unit_exponent: int|None=None; unit: int|None=None
+    report_size: int=0; report_count: int=0; report_id: int=0
+    def copy(self): return _Global(**vars(self))
 
 
-def _unsigned(payload: bytes) -> int:
-    return int.from_bytes(payload, "little", signed=False) if payload else 0
+@dataclass
+class _Local:
+    usages: list[tuple[int,int]]
+    usage_minimum: tuple[int,int]|None=None; usage_maximum: tuple[int,int]|None=None
+    designator_index: int|None=None; designator_minimum: int|None=None; designator_maximum: int|None=None
+    string_index: int|None=None; string_minimum: int|None=None; string_maximum: int|None=None
+    @classmethod
+    def empty(cls): return cls([])
 
 
-def _signed(payload: bytes) -> int:
-    return int.from_bytes(payload, "little", signed=True) if payload else 0
+def _u(data: bytes) -> int: return int.from_bytes(data,"little") if data else 0
+def _s(data: bytes) -> int: return int.from_bytes(data,"little",signed=True) if data else 0
+def _usage(value:int,page:int,size:int): return ((value>>16)&0xffff,value&0xffff) if size==4 else (page,value)
 
 
-def _split_usage(value: int, fallback_page: int, payload_size: int) -> tuple[int, int]:
-    if payload_size == 4 and value > 0xFFFF:
-        return (value >> 16) & 0xFFFF, value & 0xFFFF
-    return fallback_page, value
-
-
-def _expanded_usages(
-    explicit: list[tuple[int, int]],
-    minimum: tuple[int, int] | None,
-    maximum: tuple[int, int] | None,
-) -> tuple[tuple[int, int], ...]:
-    result = list(explicit)
-    if minimum is not None and maximum is not None and minimum[0] == maximum[0]:
-        start = minimum[1]
-        stop = maximum[1]
-        # HID button ranges can be large. Structural classification only needs
-        # the exact usages when the range is reasonably bounded.
-        if start <= stop and stop - start <= 255:
-            result.extend((minimum[0], usage) for usage in range(start, stop + 1))
+def _expand(local:_Local, diagnostics:list[HidDescriptorDiagnostic], offset:int):
+    result=list(local.usages); low,high=local.usage_minimum,local.usage_maximum
+    if (low is None)!=(high is None):
+        diagnostics.append(HidDescriptorDiagnostic(HidDiagnosticSeverity.WARNING,"incomplete-usage-range","usage range has one bound",offset))
+    elif low and high:
+        if low[0]!=high[0] or low[1]>high[1]:
+            diagnostics.append(HidDescriptorDiagnostic(HidDiagnosticSeverity.ERROR,"invalid-usage-range","usage range is invalid",offset))
+        elif high[1]-low[1] <= 4096: result.extend((low[0],i) for i in range(low[1],high[1]+1))
         else:
-            result.extend((minimum, maximum))
+            diagnostics.append(HidDescriptorDiagnostic(HidDiagnosticSeverity.ERROR,"unbounded-usage-range","usage range is too large",offset)); result.extend((low,high))
     return tuple(dict.fromkeys(result))
 
 
+def _containing(collections, path, kind):
+    for index in reversed(path):
+        item=collections[index]
+        if item.collection_type==kind and item.usage_page is not None and item.usage is not None:
+            return item.usage_page,item.usage
+    return None
+
+
 def parse_report_descriptor(raw: bytes) -> ParsedHidDescriptor:
-    """Parse report structure and field-level HID metadata without semantics."""
-
-    if not isinstance(raw, (bytes, bytearray, memoryview)):
-        raise TypeError("raw HID descriptor must be bytes-like")
-    data = bytes(raw)
-    state = _GlobalState()
-    stack: list[_GlobalState] = []
-    local_usages: list[tuple[int, int]] = []
-    local_usage_minimum: tuple[int, int] | None = None
-    local_usage_maximum: tuple[int, int] | None = None
-    bit_lengths: dict[tuple[str, int], int] = {}
-    usage_pages: dict[tuple[str, int], set[int]] = {}
-    fields: list[HidFieldDefinition] = []
-
-    def clear_local() -> None:
-        nonlocal local_usage_minimum, local_usage_maximum
-        local_usages.clear()
-        local_usage_minimum = None
-        local_usage_maximum = None
-
-    offset = 0
+    if not isinstance(raw,(bytes,bytearray,memoryview)): raise TypeError("raw HID descriptor must be bytes-like")
+    data=bytes(raw); state=_Global(); stack=[]; local=_Local.empty(); path=[]
+    collections=[]; diagnostics=[]; lengths={}; pages={}; fields=[]; indexes={}; offset=0
+    def diag(severity,code,message,where): diagnostics.append(HidDescriptorDiagnostic(severity,code,message,where))
     while offset < len(data):
-        prefix = data[offset]
-        offset += 1
-
-        if prefix == 0xFE:  # Long item: size, long tag, payload.
-            if offset + 2 > len(data):
-                raise HidDescriptorError("truncated HID long-item header")
-            size = data[offset]
-            offset += 2  # Skip size and long tag.
-            if offset + size > len(data):
-                raise HidDescriptorError("truncated HID long item")
-            offset += size
+        where=offset; prefix=data[offset]; offset+=1
+        if prefix==0xfe:
+            if offset+2>len(data): diag(HidDiagnosticSeverity.FATAL,"truncated-long-header","truncated long-item header",where); break
+            size=data[offset]; offset+=2
+            if offset+size>len(data): diag(HidDiagnosticSeverity.FATAL,"truncated-long-item","truncated long item",where); break
+            diag(HidDiagnosticSeverity.INFO,"unknown-long-item","long item retained in raw descriptor",where); offset+=size; continue
+        size=(0,1,2,4)[prefix&3]; item_type=(prefix>>2)&3; tag=(prefix>>4)&15
+        if offset+size>len(data): diag(HidDiagnosticSeverity.FATAL,"truncated-short-item","truncated short item",where); break
+        payload=data[offset:offset+size]; offset+=size; value=_u(payload)
+        if item_type==1:
+            if tag==0: state.usage_page=value
+            elif tag==1: state.logical_minimum=_s(payload)
+            elif tag==2: state.logical_maximum=_s(payload) if (state.logical_minimum or 0)<0 else value
+            elif tag==3: state.physical_minimum=_s(payload)
+            elif tag==4: state.physical_maximum=_s(payload) if (state.physical_minimum or 0)<0 else value
+            elif tag==5:
+                nibble=value&15; state.unit_exponent=nibble-16 if nibble&8 else nibble
+            elif tag==6: state.unit=value
+            elif tag==7: state.report_size=value
+            elif tag==8:
+                if not 1<=value<=255: diag(HidDiagnosticSeverity.ERROR,"invalid-report-id",f"invalid report ID {value}",where)
+                else: state.report_id=value
+            elif tag==9: state.report_count=value
+            elif tag==10: stack.append(state.copy())
+            elif tag==11:
+                if stack: state=stack.pop()
+                else: diag(HidDiagnosticSeverity.ERROR,"global-pop-underflow","global pop without push",where)
             continue
-
-        size_code = prefix & 0x03
-        size = (0, 1, 2, 4)[size_code]
-        item_type = (prefix >> 2) & 0x03
-        tag = (prefix >> 4) & 0x0F
-        if offset + size > len(data):
-            raise HidDescriptorError("truncated HID short item")
-        payload = data[offset:offset + size]
-        offset += size
-        value = _unsigned(payload)
-
-        if item_type == 1:  # Global
-            if tag == 0x0:  # Usage Page
-                state.usage_page = value
-            elif tag == 0x1:  # Logical Minimum
-                state.logical_minimum = _signed(payload)
-            elif tag == 0x2:  # Logical Maximum
-                state.logical_maximum = (
-                    _signed(payload)
-                    if state.logical_minimum is not None and state.logical_minimum < 0
-                    else _unsigned(payload)
-                )
-            elif tag == 0x7:  # Report Size
-                state.report_size = value
-            elif tag == 0x8:  # Report ID
-                if value == 0 or value > 0xFF:
-                    raise HidDescriptorError(f"invalid report ID {value}")
-                state.report_id = value
-            elif tag == 0x9:  # Report Count
-                state.report_count = value
-            elif tag == 0xA:  # Push
-                stack.append(state.copy())
-            elif tag == 0xB:  # Pop
-                if not stack:
-                    raise HidDescriptorError("HID global-state pop without push")
-                state = stack.pop()
+        if item_type==2:
+            split=_usage(value,state.usage_page,size)
+            if tag==0: local.usages.append(split)
+            elif tag==1: local.usage_minimum=split
+            elif tag==2: local.usage_maximum=split
+            elif tag==3: local.designator_index=value
+            elif tag==4: local.designator_minimum=value
+            elif tag==5: local.designator_maximum=value
+            elif tag==7: local.string_index=value
+            elif tag==8: local.string_minimum=value
+            elif tag==9: local.string_maximum=value
             continue
-
-        if item_type == 2:  # Local
-            if tag == 0x0:  # Usage
-                local_usages.append(_split_usage(value, state.usage_page, size))
-            elif tag == 0x1:  # Usage Minimum
-                local_usage_minimum = _split_usage(value, state.usage_page, size)
-            elif tag == 0x2:  # Usage Maximum
-                local_usage_maximum = _split_usage(value, state.usage_page, size)
-            continue
-
-        if item_type != 0:  # Reserved
-            continue
-
-        report_type = {0x8: "input", 0x9: "output", 0xB: "feature"}.get(tag)
-        if report_type is not None:
-            key = (report_type, state.report_id)
-            field_offset = bit_lengths.get(key, 0)
-            field_usages = _expanded_usages(
-                local_usages,
-                local_usage_minimum,
-                local_usage_maximum,
-            )
-            pages = {state.usage_page}
-            pages.update(page for page, _usage in field_usages)
-            usage_pages.setdefault(key, set()).update(pages)
-            fields.append(
-                HidFieldDefinition(
-                    report_id=state.report_id,
-                    report_type=report_type,
-                    bit_offset=field_offset,
-                    report_size=state.report_size,
-                    report_count=state.report_count,
-                    flags=value,
-                    usage_pages=tuple(sorted(pages)),
-                    usages=field_usages,
-                    logical_minimum=state.logical_minimum,
-                    logical_maximum=state.logical_maximum,
-                )
-            )
-            bit_lengths[key] = field_offset + state.report_size * state.report_count
-
-        # Local items are reset after every Main item, including Collection.
-        clear_local()
-
-    reports: list[HidReportDefinition] = []
-    order = {"input": 0, "output": 1, "feature": 2}
-    for (report_type, report_id), bits in sorted(
-        bit_lengths.items(), key=lambda item: (order[item[0][0]], item[0][1])
-    ):
-        payload_bytes = ceil(bits / 8) if bits else 0
-        byte_length = payload_bytes + (1 if report_id else 0)
-        reports.append(
-            HidReportDefinition(
-                report_id=report_id,
-                report_type=report_type,
-                byte_length=byte_length,
-                usage_pages=tuple(sorted(usage_pages[(report_type, report_id)])),
-            )
-        )
-
-    return ParsedHidDescriptor(
-        raw=data,
-        reports=tuple(reports),
-        fields=tuple(fields),
-    )
+        if item_type==3: diag(HidDiagnosticSeverity.INFO,"reserved-item","reserved item ignored",where); continue
+        if tag==10:
+            use=local.usages[0] if local.usages else local.usage_minimum; index=len(collections)
+            collections.append(HidCollection(index,value,use[0] if use else None,use[1] if use else None,path[-1] if path else None)); path.append(index); local=_Local.empty(); continue
+        if tag==12:
+            if path: path.pop()
+            else: diag(HidDiagnosticSeverity.ERROR,"collection-underflow","end collection without collection",where)
+            local=_Local.empty(); continue
+        report_type={8:"input",9:"output",11:"feature"}.get(tag)
+        if report_type:
+            key=(report_type,state.report_id)
+            if state.report_size==0: diag(HidDiagnosticSeverity.ERROR,"zero-report-size","Main item has zero report size",where)
+            bits=state.report_size*state.report_count
+            if state.report_size>65536 or state.report_count>1000000 or bits>8388608:
+                diag(HidDiagnosticSeverity.FATAL,"unreasonable-report-size","report field exceeds safe limits",where); local=_Local.empty(); continue
+            if state.logical_minimum is not None and state.logical_maximum is not None and state.logical_minimum>state.logical_maximum:
+                diag(HidDiagnosticSeverity.ERROR,"invalid-logical-range","logical minimum exceeds maximum",where)
+            uses=_expand(local,diagnostics,where); field_pages={state.usage_page,*(p for p,_ in uses)}; pages.setdefault(key,set()).update(field_pages); field_index=indexes.get(key,0)
+            fields.append(HidFieldDefinition(state.report_id,report_type,lengths.get(key,0),state.report_size,state.report_count,value,
+                tuple(sorted(field_pages)),uses,state.logical_minimum,state.logical_maximum,state.physical_minimum,state.physical_maximum,
+                state.unit,state.unit_exponent,local.usage_minimum,local.usage_maximum,local.designator_index,local.designator_minimum,
+                local.designator_maximum,local.string_index,local.string_minimum,local.string_maximum,tuple(path),
+                _containing(collections,path,HidCollectionType.APPLICATION),_containing(collections,path,HidCollectionType.PHYSICAL),
+                _containing(collections,path,HidCollectionType.LOGICAL),field_index))
+            indexes[key]=field_index+1; lengths[key]=lengths.get(key,0)+bits
+        local=_Local.empty()
+    if path: diag(HidDiagnosticSeverity.ERROR,"unclosed-collection",f"{len(path)} collection(s) not closed",len(data))
+    if stack: diag(HidDiagnosticSeverity.WARNING,"unclosed-global-push",f"{len(stack)} push state(s) not popped",len(data))
+    order={"input":0,"output":1,"feature":2}; reports=[]
+    for (kind,rid),bits in sorted(lengths.items(),key=lambda x:(order[x[0][0]],x[0][1])):
+        reports.append(HidReportDefinition(rid,kind,ceil(bits/8)+(1 if rid else 0),tuple(sorted(pages[(kind,rid)]))))
+    return ParsedHidDescriptor(data,tuple(reports),tuple(fields),tuple(collections),tuple(diagnostics))
 
 
-def enumerate_report_ids(descriptor: ParsedHidDescriptor) -> tuple[int, ...]:
-    return tuple(sorted({report.report_id for report in descriptor.reports}))
-
-
-def _reports_of_type(
-    descriptor: ParsedHidDescriptor, report_type: str
-) -> tuple[HidReportDefinition, ...]:
-    return tuple(report for report in descriptor.reports if report.report_type == report_type)
-
-
-def get_input_reports(descriptor: ParsedHidDescriptor) -> tuple[HidReportDefinition, ...]:
-    return _reports_of_type(descriptor, "input")
-
-
-def get_output_reports(descriptor: ParsedHidDescriptor) -> tuple[HidReportDefinition, ...]:
-    return _reports_of_type(descriptor, "output")
-
-
-def get_feature_reports(descriptor: ParsedHidDescriptor) -> tuple[HidReportDefinition, ...]:
-    return _reports_of_type(descriptor, "feature")
-
-
-def fields_for_report(
-    descriptor: ParsedHidDescriptor,
-    *,
-    report_type: str,
-    report_id: int,
-) -> tuple[HidFieldDefinition, ...]:
-    return tuple(
-        field
-        for field in descriptor.fields
-        if field.report_type == report_type and field.report_id == report_id
-    )
-
-
-def fields_overlapping_wire_byte(
-    descriptor: ParsedHidDescriptor,
-    *,
-    report_type: str,
-    report_id: int,
-    byte_offset: int,
-) -> tuple[HidFieldDefinition, ...]:
-    """Return descriptor fields touching one raw hidraw byte offset."""
-
-    return tuple(
-        field
-        for field in fields_for_report(
-            descriptor,
-            report_type=report_type,
-            report_id=report_id,
-        )
-        if field.overlaps_wire_byte(byte_offset)
-    )
-
-
-def calculate_report_lengths(
-    descriptor: ParsedHidDescriptor,
-    *,
-    report_type: str | None = None,
-) -> dict[int, int]:
-    """Return report ID -> byte length, optionally restricted by report type.
-
-    If the same report ID occurs in multiple report types, the maximum length
-    is returned. Callers issuing a GET_FEATURE should normally pass
-    ``report_type="feature"``.
-    """
-
-    result: dict[int, int] = {}
-    for report in descriptor.reports:
-        if report_type is not None and report.report_type != report_type:
-            continue
-        result[report.report_id] = max(result.get(report.report_id, 0), report.byte_length)
+def enumerate_report_ids(d): return tuple(sorted({r.report_id for r in d.reports}))
+def _reports(d,t): return tuple(r for r in d.reports if r.report_type==t)
+def get_input_reports(d): return _reports(d,"input")
+def get_output_reports(d): return _reports(d,"output")
+def get_feature_reports(d): return _reports(d,"feature")
+def fields_for_report(d,*,report_type,report_id): return tuple(f for f in d.fields if f.report_type==report_type and f.report_id==report_id)
+def fields_overlapping_wire_byte(d,*,report_type,report_id,byte_offset): return tuple(f for f in fields_for_report(d,report_type=report_type,report_id=report_id) if f.overlaps_wire_byte(byte_offset))
+def calculate_report_lengths(d,*,report_type=None):
+    result={}
+    for r in d.reports:
+        if report_type is None or r.report_type==report_type: result[r.report_id]=max(result.get(r.report_id,0),r.byte_length)
     return result
-
-
-def vendor_defined_reports(
-    descriptor: ParsedHidDescriptor,
-) -> tuple[HidReportDefinition, ...]:
-    """Return reports touching HID vendor-defined usage pages (0xFF00-0xFFFF)."""
-
-    return tuple(
-        report
-        for report in descriptor.reports
-        if any(0xFF00 <= page <= 0xFFFF for page in report.usage_pages)
-    )
+def vendor_defined_reports(d): return tuple(r for r in d.reports if any(0xff00<=p<=0xffff for p in r.usage_pages))

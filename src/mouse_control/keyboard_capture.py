@@ -1,6 +1,6 @@
 """Temporary exclusive evdev keyboard capture for the setup wizard."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import os
 from select import select
 import sys
@@ -24,15 +24,16 @@ def keyboard_key_name(code: int) -> str | None:
                  and name != "KEY_RESERVED" and getattr(ecodes, name, None) == code), None)
 
 
-def _open_keyboards() -> list[InputDevice]:
+def _open_keyboards(*, exclude_paths: tuple[str, ...] = ()) -> list[InputDevice]:
     devices = []
     seen = set()
+    excluded = {os.path.realpath(item) for item in exclude_paths}
     paths = sorted(_iter_candidate_paths(),
                    key=lambda path: not path.endswith("-event-kbd"))
     try:
         for path in paths:
             realpath = os.path.realpath(path)
-            if realpath in seen:
+            if realpath in excluded or realpath in seen:
                 continue
             device = None
             try:
@@ -147,7 +148,12 @@ def _print_grab_failure(*, chord: bool = False) -> None:
         print("Enter the Linux KEY_* value manually with option 5 instead.")
 
 
-def capture_keyboard_key() -> str | None:
+def capture_keyboard_key(
+    *,
+    exclude_paths: tuple[str, ...] = (),
+    manage_terminal: bool = True,
+    reporter=print,
+) -> str | None:
     """Capture a fresh key press, or return None on cancellation/unavailability.
 
     Ctrl is resolved on release so Ctrl+C can cancel even without a terminal.
@@ -156,15 +162,18 @@ def capture_keyboard_key() -> str | None:
     devices: list[InputDevice] = []
     all_devices: list[InputDevice] = []
     try:
-        with _capture_terminal():
-            all_devices = _open_keyboards()
+        terminal_context = _capture_terminal() if manage_terminal else nullcontext()
+        with terminal_context:
+            all_devices = _open_keyboards(exclude_paths=exclude_paths)
             devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
-                print("No readable keyboard devices found. Check input permissions or use manual entry.")
+                if reporter is not None:
+                    reporter("No readable keyboard devices found. Check input permissions or use manual entry.")
                 return None
             try:
                 with _exclusive_keyboards(devices):
-                    print("Press the keyboard key you want to assign... (Ctrl+C to cancel)", flush=True)
+                    if reporter is not None:
+                        reporter("Press the keyboard key you want to assign... (Ctrl+C to cancel)")
                     controls = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
                     pending_ctrl: dict[tuple[int, int], str] = {}
                     while devices:
@@ -194,13 +203,19 @@ def capture_keyboard_key() -> str | None:
                                 devices.remove(device)
                                 pending_ctrl = {key: value for key, value in pending_ctrl.items()
                                                 if key[0] != device.fd}
-                    print("Keyboard devices disconnected. Try again or use manual entry.")
+                    if reporter is not None:
+                        reporter("Keyboard devices disconnected. Try again or use manual entry.")
             except KeyboardGrabError:
-                _print_grab_failure()
+                if reporter is print:
+                    _print_grab_failure()
+                elif reporter is not None:
+                    reporter("Safe keyboard capture is unavailable because Mouse Control could not reserve every keyboard input device.")
     except KeyboardInterrupt:
-        print("\nKeyboard capture cancelled.")
+        if reporter is not None:
+            reporter("Keyboard capture cancelled.")
     except OSError:
-        print("Keyboard capture stopped. Use manual entry.")
+        if reporter is not None:
+            reporter("Keyboard capture stopped. Use manual entry.")
     finally:
         for device in all_devices:
             try:
@@ -210,22 +225,31 @@ def capture_keyboard_key() -> str | None:
     return None
 
 
-def capture_keyboard_chord() -> str | None:
+def capture_keyboard_chord(
+    *,
+    exclude_paths: tuple[str, ...] = (),
+    manage_terminal: bool = True,
+    reporter=print,
+) -> str | None:
     """Capture keys held together, in press order, until all are released."""
     devices: list[InputDevice] = []
     all_devices: list[InputDevice] = []
     try:
         # Escape cancels; disabling terminal signals permits Ctrl+C chords.
-        with _capture_terminal(keep_signals=False):
-            all_devices = _open_keyboards()
+        terminal_context = (
+            _capture_terminal(keep_signals=False) if manage_terminal else nullcontext()
+        )
+        with terminal_context:
+            all_devices = _open_keyboards(exclude_paths=exclude_paths)
             devices = _prepare_neutral_keyboards(all_devices)
             if not devices:
-                print("No readable keyboard devices found. Use manual chord entry.")
+                if reporter is not None:
+                    reporter("No readable keyboard devices found. Use manual chord entry.")
                 return None
             try:
                 with _exclusive_keyboards(devices):
-                    print("Press and hold the keyboard shortcut, then release it... (Esc to cancel)",
-                          flush=True)
+                    if reporter is not None:
+                        reporter("Press and hold the keyboard shortcut, then release it... (Esc to cancel)")
                     active: set[tuple[int, int]] = set()
                     names: list[str] = []
                     seen: set[int] = set()
@@ -261,13 +285,19 @@ def capture_keyboard_chord() -> str | None:
                                 active.clear()
                                 names.clear()
                                 seen.clear()
-                    print("Keyboard devices disconnected. Use manual chord entry.")
+                    if reporter is not None:
+                        reporter("Keyboard devices disconnected. Use manual chord entry.")
             except KeyboardGrabError:
-                _print_grab_failure(chord=True)
+                if reporter is print:
+                    _print_grab_failure(chord=True)
+                elif reporter is not None:
+                    reporter("Safe keyboard chord capture is unavailable because Mouse Control could not reserve every keyboard input device.")
     except KeyboardInterrupt:
-        print("\nKeyboard chord capture cancelled.")
+        if reporter is not None:
+            reporter("Keyboard chord capture cancelled.")
     except OSError:
-        print("Keyboard chord capture stopped. Use manual chord entry.")
+        if reporter is not None:
+            reporter("Keyboard chord capture stopped. Use manual chord entry.")
     finally:
         for device in all_devices:
             try:

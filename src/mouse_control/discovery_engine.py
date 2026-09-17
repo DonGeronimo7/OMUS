@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
 
 from .device_profiles import DeviceProfileStore
-from .device_topology import TopologyError, build_device_graph
+from .device_topology import build_device_graph
 from .discovery import MouseDevice
 from .discovery_models import (
     DeviceNode,
@@ -25,6 +24,8 @@ from .hid_descriptor import (
     parse_report_descriptor,
     vendor_defined_reports,
 )
+from .hid_report import DecodedHidReport, decode_input_report
+from .hid_semantics import InterpretedHidField, interpret_descriptor
 from .hid_probe import ReadOnlyHidProbe
 from .learned_operations import (
     LearnedOperationError,
@@ -83,6 +84,14 @@ class DiscoveryEngine:
     def descriptors(self) -> dict[DeviceNode, ParsedHidDescriptor]:
         return dict(self._descriptors)
 
+    def semantic_fields(self, node: DeviceNode) -> tuple[InterpretedHidField, ...]:
+        """Expose spec/descriptor-derived meaning independently of protocols."""
+        return interpret_descriptor(self._descriptors[node])
+
+    def decode_input(self, node: DeviceNode, raw_report: bytes) -> DecodedHidReport:
+        """Decode one passive Input report; this path has no write primitive."""
+        return decode_input_report(self._descriptors[node], raw_report)
+
     @property
     def feature_snapshots(self) -> dict[DeviceNode, dict[int, bytes]]:
         return {node: dict(snapshot) for node, snapshot in self._feature_snapshots.items()}
@@ -101,8 +110,10 @@ class DiscoveryEngine:
         if not self._phases or self._phases[-1] is not phase:
             self._phases.append(phase)
 
-    def discover(self, mouse: MouseDevice) -> DiscoveryResult:
-        """Run automatic discovery for one already-selected evdev mouse."""
+    def discover(
+        self, mouse: MouseDevice, *, progress: Callable[[str], None] | None = None
+    ) -> DiscoveryResult:
+        """Run automatic discovery for one selected mouse with optional stage progress."""
 
         self._descriptors.clear()
         self._feature_snapshots.clear()
@@ -110,25 +121,37 @@ class DiscoveryEngine:
         self._observations.clear()
         self._phases.clear()
         self._profile_path = None
+        report = progress or (lambda _message: None)
 
+        report("• Establishing physical-device topology…")
         self._phase(DiscoveryPhase.ENUMERATE)
         physical = self.build_topology(mouse)
+        report("✓ Physical mouse identified")
         self._phase(DiscoveryPhase.CORRELATE)
+        report(f"✓ {len(physical.hidraw_nodes)} HID interface(s) correlated")
 
+        report("• Reading HID descriptors safely…")
         self._phase(DiscoveryPhase.DESCRIPTORS)
         self.inspect_descriptors(physical)
+        report(f"✓ {len(self._descriptors)} HID descriptor(s) collected")
 
+        report("• Searching known protocol teachers and repertoire…")
         self._phase(DiscoveryPhase.PROTOCOL)
         protocol = self.detect_protocol(physical)
 
         if protocol is not None:
+            report(f"✓ Known protocol matched: {protocol.name}")
             capabilities = self.query_known_protocol(protocol)
         else:
+            report("• No proven protocol match; observing unknown hardware read-only…")
             self._phase(DiscoveryPhase.OBSERVE)
             capabilities = self.observe_unknown_device(physical)
 
         self._phase(DiscoveryPhase.VALIDATE)
         result = self.validate(physical, protocol, capabilities)
+        for name, capability in sorted(result.capabilities.items()):
+            mode = "read/write" if capability.writable else "read-only" if capability.readable else "unknown"
+            report(f"✓ {name.replace('_', ' ')} capability: {mode}")
         self._phase(DiscoveryPhase.COMPLETE)
         result.phases = list(self._phases)
 
@@ -182,6 +205,10 @@ class DiscoveryEngine:
                     details={
                         "interface_number": node.interface_number,
                         "descriptor_sha256": node.descriptor_sha256,
+                        "semantic_fields": len(interpret_descriptor(descriptor)),
+                        "diagnostics": tuple(
+                            (item.severity.value, item.code) for item in descriptor.diagnostics
+                        ),
                     },
                 )
             )
@@ -437,9 +464,14 @@ class DiscoveryEngine:
             # Generic writes are still forbidden unless the capability carries
             # explicit PROVEN learned-operation promotion evidence.
             for name, item in tuple(normalized.items()):
-                learned_proven = any(
+                proof_codes = {
+                    "dpi": "learned-operation-proven",
+                    "report_rate": "learned-polling-operation-proven",
+                }
+                required_code = proof_codes.get(name)
+                learned_proven = required_code is not None and any(
                     evidence.level is EvidenceLevel.PROVEN
-                    and evidence.code == "learned-operation-proven"
+                    and evidence.code == required_code
                     for evidence in item.evidence
                 )
                 if item.writable and not learned_proven:
@@ -460,6 +492,17 @@ class DiscoveryEngine:
             capabilities=normalized,
             observations=list(self._observations),
             phases=list(self._phases),
+        )
+
+    def research_plan(self, result: DiscoveryResult):
+        """Return the next evidence-driven research step for this discovery result."""
+        from .discovery_research import build_discovery_research_plan
+
+        return build_discovery_research_plan(
+            result,
+            self._repertoire_candidates,
+            learned_operation_store=self._learned_operation_store,
+            learned_polling_store=self._learned_polling_store,
         )
 
     def save_profile(self, result: DiscoveryResult) -> Path | None:

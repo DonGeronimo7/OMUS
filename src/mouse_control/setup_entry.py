@@ -73,24 +73,30 @@ def run_tui_setup_wizard() -> int:
             print("Setup cancelled; existing configuration left unchanged.")
             return 0
 
-        device_changed = _device_changed(existing_config, selected)
         apply_dpi = (
             choices.dpi_changed
             or not _preference_exists(existing_config, "dpi", "active", "stages")
-            or device_changed
         )
         apply_polling = (
             choices.polling_changed
             or not _preference_exists(existing_config, "polling", "rate_hz")
-            or device_changed
         )
 
+        # Preferences are never write authority. A default/old config may be
+        # persisted for software behavior, but hardware application is strictly
+        # gated by the capability policy discovered for this exact device.
+        dpi_request = choices.active_dpi if (choices.dpi_writable and apply_dpi) else 0
+        polling_request = (
+            choices.polling_rate
+            if (choices.polling_writable and apply_polling)
+            else None
+        )
         cli._apply_hardware(
             backend,
             selected,
             choices.stages,
-            choices.active_dpi if apply_dpi else 0,
-            choices.polling_rate if apply_polling else None,
+            dpi_request,
+            polling_request,
             setup=True,
         )
         content = cli.merge_setup_config(
@@ -122,7 +128,7 @@ def run_tui_setup_wizard() -> int:
     except ButtonCaptureError:
         print("Setup failed; the existing configuration was not changed.", file=sys.stderr)
         return 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         print("\nSetup cancelled; the existing configuration was not changed.")
         return 1
     except Exception as exc:

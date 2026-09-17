@@ -1,5 +1,188 @@
 # AI handoff log
 
+## 2026-09-17 — v0.9.3 installed production and reconnect acceptance
+
+- The locally built Fedora 44 RPM upgraded the installed package from 0.9.1 to
+  0.9.3. RPM verification passed, `/usr/bin/mouse-control --version` reported
+  0.9.3, imports resolved from `/usr/lib/python3.14/site-packages`, and the
+  pre-upgrade configuration hash remained unchanged.
+- The installed full-screen TUI opened as the normal setup path, selected the
+  Logitech G305 (`046d:4074`), preserved the existing remaps and notification
+  preference, and restarted the packaged user service. The operator reported
+  the wizard, remapping, DPI, polling, and physical notifications worked; the
+  wizard felt somewhat slow, which is retained as a non-blocking UX observation.
+- Production runtime selected `Automatic Discovery (Native HID adapter)`, read
+  and reconciled 1000 Hz polling and 3000 DPI, and initialized the canonical DPI
+  notification watcher. Rapid physical cycles emitted exactly one ordered
+  notification per real press with `replaces_id=0`.
+- Two receiver reconnect cycles recovered the stable G305 evdev identity and
+  returned to Native HID. The operator observed zero reconnect/RESYNC popups;
+  post-LIVE physical presses remained one-for-one. Retired generations emitted
+  no late notification. The first cycle briefly retried a PROVEN learned adapter
+  while the receiver enumerated and logged response timeouts before Native HID
+  became available; it then settled at six service tasks with no continued
+  generation churn. A minor cursor recovery delay was observed.
+- The SIGMACHIP device was not attached for a new installed-package smoke. Its
+  accepted physical abstention evidence remains unchanged: no semantics or write
+  authority were inferred from absent evidence.
+
+## 2026-09-17 — Discovery DPI watcher reconnect
+
+- Physical evidence supplied by the operator: the teacher-free schema-v2
+  descriptor/member path emitted `800 → 1500 → 2000 → 2500 → 3000` through the
+  existing runtime/notification path with vendor/native handling bypassed and
+  unknown HID writes forbidden.
+- Root cause of the remaining failure: the acceptance CLI owned one
+  `DiscoveryBackend` directly, so EIO ended its hidraw watcher without the
+  existing supervisor lifecycle being able to rediscover and replace it.
+- Correction: the acceptance monitor now uses `HardwareSupervisor` and
+  `DpiMonitorSupervisor` with only `DiscoveryBackend(allow_writes=False)`
+  replacements. Failed watchers force a fresh generation even if a device
+  returns at the same node; live node paths remain runtime-only. Replacement
+  binding reruns physical/profile identity checks and reparses the current
+  descriptor before accepting the persisted member.
+- Physical reconnect result: EIO/ENODEV recovery, stale-handle closure,
+  rediscovery/member rebind, post-reconnect stability, and a physical
+  `3000 → 800` wrap are validated. About five reconnect popups isolated a
+  generation-baseline defect: only the first replacement state was classified
+  as resync, so later initialization states escaped as live changes.
+- Reconnect semantics: a replacement generation now remains in `RESYNC` until
+  its initial authoritative semantic stream reaches the watcher's normal idle
+  boundary. All valid states in that phase are stored silently and the final
+  state becomes the new baseline. `LIVE` then deduplicates the first same-state
+  packet and emits the first changed state once. This uses neither a packet
+  count nor an added sleep. Generation-gated callbacks continue to discard
+  events from retired watchers.
+- Safety: no HID++, vendor adapter, learned writer, desired-state mutation, or
+  generic write path is entered. Ambiguous physical matches and malformed or
+  changed descriptor members remain unbound with no raw fallback.
+- Automated validation: focused reconnect/discovery regression suite passed 86
+  tests; full suite passed 658 tests with one existing GLib
+  deprecation warning. Compileall and diff whitespace checks passed.
+- Physical validation: the five-stage path and reconnect transport recovery are
+  physically validated from operator reports. Zero-popup generation-aware
+  resync remains unverified and is the next bounded acceptance step.
+
+## 2026-09-17 — G305 member-level corpus replay
+
+- Root cause: the G305 Report-17 descriptor declares an opaque 19-byte vendor
+  Array (`Input 0x00`), so the Variable-only member patch kept the parent field
+  identity and behavior profiling combined all 570 positional observations.
+- Correction: multi-count Variable members and unresolved positional vendor Array members
+  now have stable `/member-N` observation identities plus explicit parent
+  provenance. Standard selector Arrays retain their descriptor semantics and
+  parent identity. Relative fields classify only as `relative_activity`.
+- Real corpus replay: `g305-dpi-validate` yields static members 0/1/2 with
+  values `1/7/16`, only member 3 cycles over `0..4`, and members 4–18 remain
+  static zero. Explicit same-device negative controls are clean.
+- Physical validation: the existing read-only exact-device G305 profile has
+  high-confidence measured CPI states near `823/1543/2048/2567/3067`, confirmed
+  wrap, and an exact state-bearing Report-17 mapping at raw offset 4. The
+  current live G305 resolves unambiguously to the profile model/instance and
+  exact interface-2 descriptor; offset 4 is payload member 3. This promotes the
+  member-3 `DPI_STAGE_INDEX` semantic candidate to `VALIDATED` while retaining
+  the raw mapping itself at `CORRELATED`.
+- Safety: raw captures and descriptors are unchanged. No CPI mapping, HID
+  write, runtime promotion, desired-state mutation, or write authority was
+  added. Physical CPI promotion remains blocked on a later explicit gate.
+- Automated validation: focused HID/runtime regression suite passed 100 tests;
+  full suite passed 648 tests with one existing GLib deprecation warning.
+- Runtime checkpoint: the exact-device G305 profile was upgraded to schema v2
+  with a validated descriptor-backed `hid_state` source for member 3. Runtime
+  reparses and verifies the live descriptor before decoding that member; an
+  invalid member is refused without falling back to the correlated raw mapping.
+  The acceptance monitor has an explicit write-disabled mode and continues to
+  use existing `DpiState`/notification machinery. Live identity rebinding to
+  interface 2 succeeded, but no operator DPI press or unplug/replug occurred
+  during the monitor window, so physical notification/reconnect acceptance is
+  still pending.
+
+## 2026-09-17 — HID Semantic Engine v2
+
+- Expanded the descriptor parser into a diagnostic schema model preserving
+  collection paths, physical/unit metadata, local usage/designator/string
+  declarations, complete Main flags, and stable descriptor/field identities.
+- Added bounded bit-level Input decoding for numbered/unnumbered reports,
+  signed non-byte-aligned values, Variable fields, and Array selectors.
+- Added centralized Usage interpretation, deterministic standard mouse
+  semantics, explicit expected-versus-observed evdev relationships, decoded
+  field correlation, vendor-field behavior profiles, and derived trace HID
+  enrichment. Raw-byte correlation remains as a compatibility fallback.
+- Safety: all new paths are observational and contain no HID write primitive;
+  vendor fields remain structured unknowns and cannot grant write authority.
+- Automated validation: the final complete suite passed 640 tests with one
+  existing GLib deprecation warning; compileall and whitespace checks passed.
+  Physical G305
+  and SIGMACHIP semantic validation remains pending because no sanitized
+  descriptor/report corpus is present in the repository.
+
+## 2026-09-17 — Trace evidence foundation
+
+- Added versioned canonical USB observation/setup/transaction models under an
+  observation-only `mouse_control.trace` package.
+- Added Linux binary-usbmon extended-header decoding and live per-bus capture,
+  with immediate current bus/address filtering derived from an unambiguous
+  physical device and stable fingerprint. No deprecated text parsing was added.
+- Added deterministic URB assembly covering missing halves, duplicate events,
+  URB reuse, metadata mismatch, out-of-order timestamps, and capture boundaries.
+- Added schema-v1 deterministic session manifests and streamed SHA-256 artifact
+  hashing. No PCAP import, semantic inference, replay, or write promotion is
+  part of this checkpoint.
+- Automated validation: 15 focused trace tests, the 94-test trace plus
+  Automatic Discovery regression suite, and the complete 626-test suite passed.
+  Compileall and whitespace checks passed. Live hardware capture remains
+  unverified.
+
+## 2026-09-17 — Setup observed-state integration
+
+- Setup Review now separates measured physical DPI/polling evidence from
+  configured software DPI/polling preferences and from proven write authority.
+- Exact-device calibrated profiles populate a read-only presentation snapshot;
+  switching devices clears it before any new exact-device profile is loaded.
+- Existing physical calibration with no transition source now offers bounded
+  runtime-source learning and explicitly reuses ruler/wrap calibration.
+- Absolute runtime sources are described as safely resynchronizing; trigger-only
+  sources remain explicitly unsynchronized at startup and after reconnect.
+- No backend capability, writable flag, configured preference, or hardware-write
+  path is promoted by calibrated read-side evidence.
+- Automated validation: focused Automatic Discovery/setup suite passed 168
+  tests; full suite passed 611 tests with one existing GLib deprecation warning.
+  Compileall and whitespace checks passed. Python sdist/wheel and Fedora 44 RPM
+  builds passed; RPM `%check` passed 611 tests and packaged CLI smoke tests.
+  Physical Titan validation remains pending.
+
+## 2026-09-17 — Calibrated read-only DPI runtime integration
+
+- Physical DPI cycles are saved as schema-v2 read-only profiles even when no
+  runtime source is isolated; later runs reuse calibration and retry only
+  transition capture.
+- Runtime binding resolves path-independent HID/evdev source identities against
+  current physical nodes and refuses ambiguous matches. Live paths may change
+  the supervisor signature without becoming persisted identity.
+- HID and shared-owner evdev absolute/trigger decoders feed
+  `ReadOnlyDpiCycleTracker`. Trigger-only state never advances while
+  unsynchronized and is invalidated on continuity loss. Observed states are
+  confirmed, have no writable stage, and never invoke `set_dpi()`.
+- Existing PROVEN learned-action cycling, native HID++, polling, remapping, and
+  notification behavior remain separate and pass the full automated gate.
+- `feature_state` is explicitly deferred: no polling is started until bounded
+  read-only GET_FEATURE ownership can be implemented safely.
+- Automated validation: 607 tests passed, plus compileall and whitespace
+  checks. Physical Titan validation remains pending.
+
+## 2026-09-16 — Discovery-first setup/TUI stabilization
+
+- Root cause: the production full-screen TUI existed, but it ordered Buttons
+  before DPI/Polling, did not make the comprehensive DiscoveryEngine the normal
+  setup driver for known devices, and duplicated list-only DPI validation.
+- Correction: discovery now drives setup before configuration; navigation uses
+  explicit history/review-return state; DPI supports min/max/step capabilities;
+  polling exposes protocol state separately from read-only timing measurement;
+  device switches invalidate device-specific discovery state after rollback.
+- Safety: unknown HID remains read-only. No speculative generic HID write path
+  was added; write authority remains protocol-backed or exact-model PROVEN.
+- Physical validation: pending on the G305 after installing/running this branch.
+
 ## 2026-09-15 — G305 polling acceptance runtime mismatch
 
 Request: user attachment `pasted-text.txt`, continuing reviewed commit

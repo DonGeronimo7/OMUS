@@ -65,6 +65,24 @@ def test_stale_rebind_request_cannot_replace_new_backend_twice():
     third.close.assert_not_called()
 
 
+def test_old_watcher_callback_is_ignored_after_generation_change():
+    first, second = backend(), backend()
+    captured = {}
+
+    def retain_callback(_device, callback, _stop, _ready):
+        captured["callback"] = callback
+
+    first.watch_dpi_events.side_effect = retain_callback
+    supervisor = HardwareSupervisor(first, G305, lambda _device: second)
+    delivered = MagicMock()
+    supervisor.watch_dpi_events(G305, delivered, MagicMock())
+
+    assert supervisor.rebind(0)
+    captured["callback"](DpiState(1500, confirmed=True))
+
+    delivered.assert_not_called()
+
+
 def test_dpi_battery_and_events_all_follow_the_current_backend():
     first, second = backend(dpi=800), backend(dpi=1500)
     supervisor = HardwareSupervisor(first, G305, lambda _device: second)
@@ -80,7 +98,13 @@ def test_dpi_battery_and_events_all_follow_the_current_backend():
 
     callback, stop = MagicMock(), MagicMock()
     supervisor.watch_dpi_events(G305, callback, stop)
-    second.watch_dpi_events.assert_called_once_with(G305, callback, stop, None)
+    second.watch_dpi_events.assert_called_once()
+    watched_device, guarded_callback, watched_stop, ready = (
+        second.watch_dpi_events.call_args.args)
+    assert watched_device == G305
+    assert guarded_callback is not callback
+    assert watched_stop is stop
+    assert ready is None
 
 
 def test_reconnect_reapplies_last_successful_runtime_dpi():
