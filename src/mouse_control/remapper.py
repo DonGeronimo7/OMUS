@@ -155,7 +155,8 @@ class MouseRemapper:
                  shutdown_event: threading.Event | None = None,
                  dpi_cycler: DpiCycler | None = None,
                  target_device: MouseDevice | None = None,
-                 retry_interval: float = 0.5) -> None:
+                 retry_interval: float = 0.5,
+                 event_observer: Any | None = None) -> None:
         self.device_path = device_path
         # An evdev event node is disposable.  Keep the selected mouse's
         # discovery identity separately so a changed eventN can be rebound.
@@ -172,6 +173,7 @@ class MouseRemapper:
         self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
         self.dpi_cycler = dpi_cycler
         self.retry_interval = retry_interval
+        self.event_observer = event_observer
         self._pressed_keys: set[int] = set()
         self._held_chords: set[int] = set()
         self._chord_key_counts: dict[int, int] = {}
@@ -307,6 +309,12 @@ class MouseRemapper:
         self.device = None
 
     def _handle(self, event_type: int, code: int, value: int) -> None:
+        observe = getattr(getattr(self, "event_observer", None), "observe_evdev_event", None)
+        if callable(observe):
+            try:
+                observe(event_type, code, value)
+            except Exception as exc:
+                LOG.warning("Calibrated evdev observation failed: %s", exc)
         if event_type == ecodes.EV_SYN:
             return
         if event_type != ecodes.EV_KEY:
@@ -375,6 +383,11 @@ class MouseRemapper:
                     if not self._is_disconnect(exc):
                         raise
                     self._release_pressed_keys()
+                    invalidate = getattr(
+                        self.event_observer, "invalidate_observer_continuity", None
+                    )
+                    if callable(invalidate):
+                        invalidate()
                     self._close_device()
                     disconnected = True
                     LOG.warning("Mouse disconnected; waiting for reconnect")

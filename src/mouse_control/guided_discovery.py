@@ -369,14 +369,103 @@ def run_deep_dpi_stage_learning(
         if not transition_sources and profile.get("raw_mappings"):
             transition_sources = tuple(profile["raw_mappings"])
         report("✓ Reusing existing exact-device DPI calibration; ruler/wrap learning is not repeated")
+        measured_cycle = _profile_measured_cycle(profile)
+        if transition_sources or not result.device.hidraw_nodes or not engine.descriptors:
+            if not transition_sources:
+                report("• Physical calibration saved; runtime source still unresolved")
+            return DeepDpiLearningOutcome(
+                result=result,
+                profile_path=profile_path,
+                measured_cycle=measured_cycle,
+                raw_mappings=(),
+                wrap_confirmed=bool(cycle.get("wrap_confirmed")) if isinstance(cycle, dict) else True,
+                action_identified=bool(transition_sources),
+                transition_sources=transition_sources,
+                reused_profile=True,
+            )
+
+        configured_cycle = tuple(int(value) for value in cycle.get("configured_order", ()))
+        if len(measured_cycle) != len(configured_cycle) + 1:
+            raise RuntimeError("saved physical DPI calibration has an inconsistent cycle")
+        session = session_factory(result.device, engine.descriptors)
+        transition_samples = []
+        for transition_index in range(1, len(configured_cycle) + 1):
+            step = GuidedStep(
+                transition_index,
+                len(configured_cycle),
+                "Identify runtime DPI transition source",
+                (
+                    "Keep the mouse still. After starting the sample, press the physical "
+                    "DPI/profile button exactly once. No ruler movement is required."
+                ),
+            )
+            if not prompt(step):
+                raise GuidedDiscoveryCancelled("runtime DPI-source learning cancelled")
+            sample = session.observe_action(seconds=transition_seconds)
+            transition_samples.append(sample)
+            report(_sample_summary(sample, prefix="Transition captured"))
+
+        learned = session.analyze(
+            transition_samples,
+            trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+            control_samples=(),
+        )
+        refinement = refine_teacher_free(learned)
+        action_specific_keys = frozenset(
+            shape.report_key for shape in refinement.report_shapes
+        )
+        descriptor_roles = {
+            (candidate.report_key, candidate.offset):
+                session.descriptor_roles_for_candidate(candidate)
+            for candidate in learned.report_candidates
+        }
+        mappings = (
+            infer_calibrated_raw_mappings(
+                transition_samples,
+                measured_cycle[1:],
+                allowed_report_keys=set(action_specific_keys),
+                descriptor_roles=descriptor_roles,
+            )
+            if action_specific_keys else ()
+        )
+        evdev_identities = {
+            os.fspath(node.path): _stable_node_identity(node)
+            for node in result.device.evdev_nodes
+        }
+        transition_sources = infer_calibrated_transition_sources(
+            transition_samples,
+            measured_cycle[1:],
+            cycle_order=configured_cycle,
+            raw_mappings=mappings,
+            contrastive_candidates=refinement.candidates,
+            guided_report_shapes=refinement.report_shapes,
+            control_samples=(),
+            evdev_source_identities=evdev_identities,
+            feature_report_metadata=_feature_report_metadata(session),
+        )
+        action_identified = _action_identified(learned)
+        if transition_sources:
+            updated = calibrated_profile_data(
+                device=result.device,
+                configured_cycle=configured_cycle,
+                measured_cycle=measured_cycle,
+                mappings=mappings,
+                action_report_keys=action_specific_keys,
+                transition_sources=transition_sources,
+            )
+            profile_path = save_calibrated_profile(updated)
+            report("✓ Runtime DPI source learned")
+            report("✓ Saved exact-device calibrated read-only DPI event profile")
+        else:
+            report("• Physical calibration saved; runtime source still unresolved")
         return DeepDpiLearningOutcome(
             result=result,
             profile_path=profile_path,
-            measured_cycle=_profile_measured_cycle(profile),
-            raw_mappings=(),
-            wrap_confirmed=bool(cycle.get("wrap_confirmed")) if isinstance(cycle, dict) else True,
-            action_identified=True,
-            transition_sources=transition_sources,
+            measured_cycle=measured_cycle,
+            raw_mappings=tuple(mappings),
+            wrap_confirmed=True,
+            action_identified=action_identified,
+            transition_sources=tuple(transition_sources),
             reused_profile=True,
         )
 

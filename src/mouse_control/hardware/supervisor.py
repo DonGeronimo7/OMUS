@@ -85,13 +85,15 @@ class HardwareSupervisor(HardwareBackend):
             nodes = tuple(sorted(
                 (
                     str(node.path),
+                    node.subsystem,
+                    node.node_type,
                     node.bus,
                     node.vendor_id,
                     node.product_id,
                     node.interface_number,
                     node.descriptor_sha256,
                 )
-                for node in physical.hidraw_nodes
+                for node in physical.all_nodes
             ))
         learned = None
         if binding is not None:
@@ -101,6 +103,14 @@ class HardwareSupervisor(HardwareBackend):
                 binding.report_id,
                 binding.offset,
                 tuple(sorted(binding.raw_to_dpi.items())),
+                binding.kind,
+                binding.cycle_order,
+                binding.event_type,
+                binding.code,
+                binding.press_value,
+                binding.release_value,
+                binding.press_pattern,
+                binding.release_pattern,
             )
         learned_writers = (
             (
@@ -276,6 +286,24 @@ class HardwareSupervisor(HardwareBackend):
     def get_polling_rate(self, device): return self._call("get_polling_rate", device)
     def get_polling_rates(self, device): return self._call("get_polling_rates", device)
     def set_polling_rate(self, device, hz): return self._call("set_polling_rate", device, hz)
+
+    def observe_evdev_event(self, event_type, code, value) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            backend = self._backend
+        observe = getattr(backend, "observe_evdev_event", None)
+        if callable(observe):
+            observe(event_type, code, value)
+
+    def invalidate_observer_continuity(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            backend = self._backend
+        invalidate = getattr(backend, "invalidate_observer_continuity", None)
+        if callable(invalidate):
+            invalidate()
 
     def watch_dpi_events(self, device, callback, shutdown_event,
                          ready_callback=None) -> None:

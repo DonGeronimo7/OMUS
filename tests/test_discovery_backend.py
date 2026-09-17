@@ -11,6 +11,8 @@ from mouse_control.discovery import MouseDevice
 from mouse_control.discovery_models import DeviceNode, PhysicalDevice
 from mouse_control.hardware.base import HardwareError
 from mouse_control.hardware.discovery_backend import DiscoveryBackend
+from mouse_control.remapper import MouseRemapper
+from evdev import ecodes
 
 
 def _physical() -> PhysicalDevice:
@@ -101,6 +103,20 @@ def _backend(tmp_path: Path) -> DiscoveryBackend:
     )
 
 
+def _schema_v2_profile(source: dict) -> dict:
+    profile = _profile()
+    profile["schema_version"] = 2
+    profile["transition_sources"] = [{**source, "write_authorized": False}]
+    return profile
+
+
+def _backend_with_profile(tmp_path: Path, profile: dict, physical: PhysicalDevice) -> DiscoveryBackend:
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    (profile_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
+    return DiscoveryBackend(profile_directory=profile_dir, topology_builder=lambda _device: physical)
+
+
 def test_discovery_backend_reuses_calibrated_read_mapping_without_write_authority(tmp_path):
     backend = _backend(tmp_path)
     device = MouseDevice("G305", "/dev/input/test", vendor=0x046D, product=0x4074, bustype=3)
@@ -165,3 +181,132 @@ def test_discovery_backend_remains_safe_fallback_without_learned_profile(tmp_pat
     assert not backend.supports_dpi(device)
     assert not backend.supports_dpi_events(device)
     assert not backend.get_capabilities(device).dpi.writable
+
+
+def test_schema_v2_hid_state_binds_by_stable_interface_and_refuses_ambiguity(tmp_path):
+    source = {
+        "kind": "hid_state",
+        "cycle_order": [800, 1500, 2000],
+        "observations": 3,
+        "confidence": "validated",
+        "report": {
+            "report_type": "input", "bus": 3, "vendor_id": 0x046D,
+            "product_id": 0x4074, "interface_number": 2,
+            "descriptor_sha256": "descriptor-hash", "report_length": 5,
+            "report_id": 2,
+        },
+        "offset": 4,
+        "raw_to_configured_dpi": {"0": 800, "1": 1500, "2": 2000},
+    }
+    physical = _physical()
+    backend = _backend_with_profile(tmp_path, _schema_v2_profile(source), physical)
+    device = MouseDevice("G305", "/dev/input/test", vendor=0x046D, product=0x4074, bustype=3)
+    assert backend.supports_device(device)
+    assert backend._binding is not None
+    assert backend._binding.kind == "hid_state"
+    assert not backend.supports_dpi(device)
+    assert backend.supports_dpi_events(device)
+
+    duplicate = PhysicalDevice(**{
+        **physical.__dict__,
+        "hidraw_nodes": [physical.hidraw_nodes[0], physical.hidraw_nodes[0]],
+    })
+    ambiguous_dir = tmp_path / "ambiguous"
+    ambiguous_dir.mkdir()
+    ambiguous = _backend_with_profile(ambiguous_dir, _schema_v2_profile(source), duplicate)
+    assert ambiguous.supports_device(device)
+    assert ambiguous._binding is None
+    assert not ambiguous.supports_dpi_events(device)
+
+
+def test_schema_v2_hid_trigger_tracks_read_only_without_set_dpi(tmp_path):
+    source = {
+        "kind": "hid_cycle_trigger",
+        "cycle_order": [800, 1500, 2000],
+        "observations": 3,
+        "confidence": "validated",
+        "report": {
+            "report_type": "input", "bus": 3, "vendor_id": 0x046D,
+            "product_id": 0x4074, "interface_number": 2,
+            "descriptor_sha256": "descriptor-hash", "report_length": 5,
+            "report_id": 2,
+        },
+        "press_pattern_hex": "0220000000",
+        "release_pattern_hex": "0200000000",
+    }
+    backend = _backend_with_profile(tmp_path, _schema_v2_profile(source), _physical())
+    device = MouseDevice("G305", "/dev/input/test", vendor=0x046D, product=0x4074, bustype=3)
+    assert backend.supports_device(device)
+    assert backend._read_only_tracker is not None
+    assert backend._decode_calibrated_hid(bytes.fromhex("0220000000")) is None
+    backend._read_only_tracker.seed(800)
+    state = backend._decode_calibrated_hid(bytes.fromhex("0220000000"))
+    assert state is not None and state.display_value == 1500
+    assert state.confirmed and not state.cycle_trigger and state.active_stage is None
+    assert backend._decode_calibrated_hid(bytes.fromhex("0220000000")) is None
+    backend._decode_calibrated_hid(bytes.fromhex("0200000000"))
+    assert backend._decode_calibrated_hid(bytes.fromhex("0220000000")).display_value == 2000
+    assert not backend.supports_dpi(device)
+
+
+def test_evdev_transition_uses_remapper_owner_and_preserves_passthrough(tmp_path):
+    physical = _physical()
+    evdev = DeviceNode(
+        path=Path("/dev/input/event-test"), sysfs_path=None, subsystem="input",
+        node_type="event", bus=3, vendor_id=0x046D, product_id=0x4074,
+        interface_number=1, name="G305", descriptor_sha256=None,
+    )
+    physical.evdev_nodes = [evdev]
+    source = {
+        "kind": "evdev_cycle_trigger", "cycle_order": [800, 1500, 2000],
+        "observations": 3, "confidence": "validated",
+        "interface": {"bus": 3, "vendor_id": 0x046D, "product_id": 0x4074,
+                      "interface_number": 1, "name": "G305"},
+        "event_type": ecodes.EV_KEY, "code": ecodes.BTN_EXTRA,
+        "press_value": 1, "release_value": 0,
+    }
+    backend = _backend_with_profile(tmp_path, _schema_v2_profile(source), physical)
+    device = MouseDevice("G305", str(evdev.path), vendor=0x046D, product=0x4074, bustype=3)
+    assert backend.supports_device(device)
+    backend._read_only_tracker.seed(800)
+    stop = threading.Event()
+    ready = threading.Event()
+    seen = []
+    watcher = threading.Thread(
+        target=backend.watch_dpi_events,
+        args=(device, seen.append, stop, ready.set),
+        daemon=True,
+    )
+    watcher.start()
+    assert ready.wait(0.5)
+
+    remapper = MouseRemapper(str(evdev.path), {}, target_device=device, event_observer=backend)
+    remapper.ui = Mock()
+    remapper._handle(ecodes.EV_KEY, ecodes.BTN_EXTRA, 1)
+    remapper._handle(ecodes.EV_KEY, ecodes.BTN_EXTRA, 1)
+    remapper._handle(ecodes.EV_KEY, ecodes.BTN_EXTRA, 0)
+    stop.set()
+    watcher.join(0.5)
+
+    assert [state.display_value for state in seen] == [1500]
+    assert remapper.ui.write.call_args_list[0].args == (ecodes.EV_KEY, ecodes.BTN_EXTRA, 1)
+    assert remapper.ui.write.call_args_list[-1].args == (ecodes.EV_KEY, ecodes.BTN_EXTRA, 0)
+
+
+def test_feature_state_source_stays_explicitly_unsupported_without_polling_owner(tmp_path):
+    source = {
+        "kind": "feature_state", "cycle_order": [800, 1500],
+        "observations": 2, "confidence": "validated",
+        "interface": {"bus": 3, "vendor_id": 0x046D, "product_id": 0x4074,
+                      "interface_number": 2, "descriptor_sha256": "descriptor-hash"},
+        "offset": 4, "raw_to_configured_dpi": {"0": 800, "1": 1500},
+    }
+    profile = _schema_v2_profile(source)
+    profile["raw_mappings"] = []
+    backend = _backend_with_profile(tmp_path, profile, _physical())
+    device = MouseDevice("G305", "/dev/input/test", vendor=0x046D, product=0x4074, bustype=3)
+
+    assert backend.supports_device(device)
+    assert backend._binding is None
+    assert not backend.supports_dpi_events(device)
+    assert not backend.get_capabilities(device).dpi.readable

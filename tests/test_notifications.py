@@ -5,7 +5,7 @@ import asyncio
 import sys
 import threading
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -478,6 +478,24 @@ def test_first_event_is_submitted_without_notifier_readiness_gating():
     supervisor._run()
 
     assert notifier.submissions == [800, 1500]
+
+
+def test_read_only_observed_transition_notifies_without_writable_cycle():
+    backend = Mock()
+    notifier = Mock()
+    cycler = Mock()
+    monitor = DpiEventMonitor(
+        backend, MOUSE, [800, 1500], 800,
+        notifier=notifier, dpi_cycler=cycler,
+    )
+
+    monitor.handle_state(DpiState(1500, confirmed=True, active_stage=None))
+    monitor.handle_state(DpiState(1500, confirmed=True, active_stage=None))
+
+    assert cycler.observe_dpi.call_args_list == [call(1500), call(1500)]
+    cycler.cycle.assert_not_called()
+    backend.set_dpi.assert_not_called()
+    notifier.notify_dpi.assert_called_once_with(1500)
 
 
 def test_supervisor_repeated_unavailable_has_bounded_wait_and_one_warning(caplog):

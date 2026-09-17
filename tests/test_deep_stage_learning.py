@@ -142,3 +142,50 @@ def test_physical_only_calibration_is_saved_without_runtime_source(tmp_path):
     assert saved_profile["transition_sources"] == []
     assert saved_profile["write_authorized"] is False
     progress.assert_any_call("• Physical calibration saved; runtime source still unresolved")
+
+
+def test_physical_only_profile_retries_runtime_learning_without_ruler(tmp_path):
+    states = [
+        {"configured_dpi": dpi, "measured_cpi": float(dpi),
+         "polling_hz": 1000, "confidence": "high"}
+        for dpi in (800, 1500, 800)
+    ]
+    profile = {
+        "dpi_cycle": {"configured_order": [800, 1500], "states": states,
+                      "wrap_confirmed": True},
+        "transition_sources": [],
+        "raw_mappings": [],
+    }
+    device = SimpleNamespace(ambiguous=False, hidraw_nodes=[object()], evdev_nodes=[])
+    result = SimpleNamespace(device=device)
+    sample = SimpleNamespace(
+        action=SimpleNamespace(hid_reports=(), evdev_events=(), feature_changes=()),
+    )
+    learned = SimpleNamespace(samples=(), report_candidates=())
+    session = Mock(descriptors={})
+    session.observe_action.return_value = sample
+    session.analyze.return_value = learned
+    existing_path = tmp_path / "physical-only.json"
+
+    with (
+        patch("mouse_control.guided_discovery.find_calibrated_profile",
+              return_value=(existing_path, profile)),
+        patch("mouse_control.guided_discovery.capture_calibrated_motion") as ruler,
+        patch("mouse_control.guided_discovery.refine_teacher_free",
+              return_value=SimpleNamespace(report_shapes=(), candidates=(), hypotheses=())),
+        patch("mouse_control.guided_discovery.infer_calibrated_transition_sources",
+              return_value=()),
+    ):
+        outcome = run_deep_dpi_stage_learning(
+            SimpleNamespace(path="/dev/input/test"), result,
+            SimpleNamespace(descriptors={object(): object()}),
+            prompt=lambda _step: True,
+            calibration_passes=1,
+            session_factory=lambda *_args: session,
+        )
+
+    assert outcome.reused_profile
+    assert outcome.profile_path == existing_path
+    assert outcome.transition_sources == ()
+    assert session.observe_action.call_count == 2
+    ruler.assert_not_called()

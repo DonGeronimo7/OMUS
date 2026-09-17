@@ -656,7 +656,8 @@ def run_from_config(path: Path | None = None) -> int:
     battery_monitor.start()
     try:
         MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
-                      target_device=mouse or configured_mouse).run()
+                      target_device=mouse or configured_mouse,
+                      event_observer=hardware).run()
     finally:
         if monitor is not None:
             monitor.stop()
