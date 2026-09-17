@@ -481,6 +481,17 @@ class DiscoveryEngine:
             phases=list(self._phases),
         )
 
+    def research_plan(self, result: DiscoveryResult):
+        """Return the next evidence-driven research step for this discovery result."""
+        from .discovery_research import build_discovery_research_plan
+
+        return build_discovery_research_plan(
+            result,
+            self._repertoire_candidates,
+            learned_operation_store=self._learned_operation_store,
+            learned_polling_store=self._learned_polling_store,
+        )
+
     def save_profile(self, result: DiscoveryResult) -> Path | None:
         try:
             path = self._profile_store.save(result)

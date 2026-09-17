@@ -11,7 +11,7 @@ from evdev import InputDevice, ecodes
 from . import __version__
 from .device_topology import TopologyError
 from .guided_discovery import (
-    GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_guided_discovery,
+    GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_deep_dpi_stage_learning,
 )
 from .polling_observation import measure_current_polling
 from .hardware import HardwareError
@@ -409,6 +409,31 @@ class CursesSetupApp:
             self.controller.apply_discovery_error(f"Discovery stage failed: {exc}")
             return
         self.controller.apply_automatic_discovery(outcome)
+        plan = getattr(outcome, "research_plan", None)
+        if plan is not None and getattr(plan, "reversible_probe_available", False):
+            self._confirm(
+                "Reversible write research available",
+                [
+                    "Mouse Control found an exact-model DEMONSTRATED transaction grammar.",
+                    "It is not runtime write authority yet; physical promotion is still required.",
+                    "Deeper read-side learning is deferred until this evidence-backed probe is resolved.",
+                ],
+                yes="Enter Continue",
+                no="Esc Continue",
+            )
+        elif plan is not None and getattr(plan, "deeper_learning_recommended", False):
+            if self._confirm(
+                "Continue to deeper protocol learning?",
+                [
+                    "Automatic Discovery could not construct an executable generic write grammar.",
+                    "Mouse Control can now learn the complete physical DPI-stage cycle read-only.",
+                    "This uses ruler-based CPI calibration plus simultaneous HID observation.",
+                    "No unknown DPI or polling configuration write will be sent.",
+                ],
+                yes="Enter Begin deeper learning",
+                no="b Not now",
+            ):
+                self._run_guided()
 
     def _run_polling_measurement(self) -> None:
         if not self._confirm(
@@ -438,34 +463,39 @@ class CursesSetupApp:
         self.controller.apply_polling_measurement(measurement)
 
     def _run_guided(self) -> None:
+        if self.controller.discovery_result is None or self.controller.discovery_engine is None:
+            self.controller.status = "Run Automatic Discovery before deeper protocol learning."
+            return
         try:
-            outcome = run_guided_discovery(
+            outcome = run_deep_dpi_stage_learning(
                 self.controller.selected,
+                self.controller.discovery_result,
+                self.controller.discovery_engine,
                 prompt=self._guided_prompt,
                 progress=self._guided_progress,
             )
         except GuidedDiscoveryCancelled:
-            self.controller.status = "Guided discovery cancelled; no hardware authority changed."
+            self.controller.status = "Deeper protocol learning cancelled; no hardware authority changed."
             return
-        except (TopologyError, PermissionError, OSError, HardwareError) as exc:
-            self.controller.status = f"Guided discovery unavailable: {exc}"
+        except (TopologyError, PermissionError, OSError, HardwareError, ValueError) as exc:
+            self.controller.status = f"Deeper protocol learning unavailable: {exc}"
             return
-        self.controller.apply_guided_outcome(outcome)
+        self.controller.apply_deep_learning_outcome(outcome)
         lines = []
-        if outcome.dpi_action_identified:
-            lines.append("✓ DPI button behavior identified")
-        elif outcome.learning is not None:
-            lines.append("? DPI behavior was not conclusive")
-        if self.controller.choices.dpi_writable:
-            lines.append("✓ DPI control safely proven for this exact mouse")
+        if outcome.wrap_confirmed:
+            lines.append("✓ Complete physical DPI cycle and wraparound observed")
         else:
-            lines.append("? DPI write command not yet proven")
-        if self.controller.choices.polling_writable:
-            lines.append("✓ Polling-rate control safely proven")
+            lines.append("? Complete physical DPI cycle was not confirmed")
+        if outcome.action_identified:
+            lines.append("✓ DPI-button action isolated from ordinary motion")
+        if outcome.raw_mappings:
+            lines.append("✓ Persistent raw DPI-stage state correlated with physical CPI")
+        if outcome.profile_path is not None:
+            lines.append("✓ Exact-device read-only stage profile saved for runtime notifications")
         else:
-            lines.append("? Polling-rate control could not yet be safely proven")
-            lines.append("Current polling rate will remain unchanged.")
-        self._confirm("Discovery result", lines, yes="Enter Continue", no="Esc Continue")
+            lines.append("? No runtime stage profile was promoted")
+        lines.append("Write authority remains unchanged by deeper read-side learning.")
+        self._confirm("Deeper discovery result", lines, yes="Enter Continue", no="Esc Continue")
 
     def _suspend_curses(self, function: Callable[[], Any]) -> Any:
         assert self.stdscr is not None

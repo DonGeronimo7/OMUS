@@ -82,12 +82,21 @@ def run_tui_setup_wizard() -> int:
             or not _preference_exists(existing_config, "polling", "rate_hz")
         )
 
+        # Preferences are never write authority. A default/old config may be
+        # persisted for software behavior, but hardware application is strictly
+        # gated by the capability policy discovered for this exact device.
+        dpi_request = choices.active_dpi if (choices.dpi_writable and apply_dpi) else 0
+        polling_request = (
+            choices.polling_rate
+            if (choices.polling_writable and apply_polling)
+            else None
+        )
         cli._apply_hardware(
             backend,
             selected,
             choices.stages,
-            choices.active_dpi if apply_dpi else 0,
-            choices.polling_rate if apply_polling else None,
+            dpi_request,
+            polling_request,
             setup=True,
         )
         content = cli.merge_setup_config(

@@ -12,6 +12,14 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .contrastive_inference import refine_teacher_free
+from .calibrated_discovery import (
+    CalibratedDpiState,
+    calibrated_cycle_hypothesis,
+    capture_calibrated_motion,
+    infer_calibrated_raw_mappings,
+)
+from .calibrated_profiles import calibrated_profile_data, save_calibrated_profile
+from .sensor_calibration import measure_sensor_state_auto, summarize_calibrations
 from .discovery_engine import DiscoveryEngine
 from .learning_session import ReadOnlyLearningSession
 from .protocol_grammar import SemanticBehavior
@@ -38,6 +46,7 @@ class AutomaticDiscoveryOutcome:
 
     result: Any
     engine: DiscoveryEngine
+    research_plan: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +58,18 @@ class GuidedDpiLearningOutcome:
     samples: tuple[Any, ...]
     action_identified: bool
     teacher_used: bool
+
+
+@dataclass(frozen=True)
+class DeepDpiLearningOutcome:
+    """Full teacher-free DPI-stage calibration suitable for runtime notifications."""
+
+    result: Any
+    profile_path: Any | None
+    measured_cycle: tuple[CalibratedDpiState, ...]
+    raw_mappings: tuple[Any, ...]
+    wrap_confirmed: bool
+    action_identified: bool
 
 
 @dataclass(frozen=True)
@@ -235,6 +256,184 @@ def run_guided_dpi_learning(
     )
 
 
+def _rounded_stage_label(measured_cpi: float) -> int:
+    # CPI calibration is physical evidence, not a claim about firmware labels.
+    # A 50-CPI display quantum avoids false precision while preserving stage identity.
+    return max(50, int(round(float(measured_cpi) / 50.0) * 50))
+
+
+def _same_physical_stage(left: CalibratedDpiState, right: CalibratedDpiState) -> bool:
+    high = max(float(left.measured_cpi), float(right.measured_cpi), 1.0)
+    return abs(float(left.measured_cpi) - float(right.measured_cpi)) / high <= 0.12
+
+
+def run_deep_dpi_stage_learning(
+    selected: Any,
+    result: Any,
+    engine: DiscoveryEngine,
+    *,
+    prompt: PromptCallback,
+    progress: ProgressCallback | None = None,
+    distance_mm: float = 254.0,
+    calibration_passes: int = 3,
+    calibration_seconds: float = 8.0,
+    transition_seconds: float = 1.5,
+    max_stages: int = 8,
+    session_factory: Callable[..., ReadOnlyLearningSession] = ReadOnlyLearningSession,
+) -> DeepDpiLearningOutcome:
+    """Learn a complete physical DPI cycle without a vendor teacher or writes.
+
+    Each state is physically calibrated from evdev motion while correlated hidraw
+    streams are observed. DPI-button transitions are captured separately. The
+    cycle ends only after at least two distinct states and a physical wrap back to
+    the initial state. A calibrated read-only profile is saved only when a
+    persistent action-specific raw state field is found and cycle semantics are
+    validated.
+    """
+    if distance_mm <= 0 or calibration_passes <= 0 or calibration_seconds <= 0:
+        raise ValueError("calibration distance, passes, and capture window must be positive")
+    if transition_seconds <= 0 or max_stages < 2:
+        raise ValueError("transition window must be positive and max_stages must be at least two")
+    if result.device.ambiguous:
+        raise PermissionError("physical identity is ambiguous; calibrated learning cannot be persisted safely")
+    if not result.device.hidraw_nodes or not engine.descriptors:
+        raise PermissionError("no readable correlated HID descriptor path is available for stage learning")
+
+    report = progress or (lambda _message: None)
+    session = session_factory(result.device, engine.descriptors)
+    motion_controls: list[Any] = []
+
+    def calibrate(stage_number: int) -> CalibratedDpiState:
+        measurements = []
+        for pass_index in range(1, calibration_passes + 1):
+            step = GuidedStep(
+                pass_index,
+                calibration_passes,
+                f"Calibrate DPI stage {stage_number}",
+                (
+                    f"Place the mouse at a ruler start mark. After starting the sample, move exactly "
+                    f"{distance_mm:g} mm in one straight direction. Pass {pass_index}/{calibration_passes}."
+                ),
+            )
+            if not prompt(step):
+                raise GuidedDiscoveryCancelled("calibrated DPI-stage learning cancelled")
+            capture = capture_calibrated_motion(
+                session,
+                evdev_path=selected.path,
+                seconds=calibration_seconds,
+            )
+            measurement = measure_sensor_state_auto(
+                capture.calibration_events,
+                distance_mm=distance_mm,
+            )
+            measurements.append(measurement)
+            motion_controls.append(capture.sample)
+            report(
+                f"Stage {stage_number} pass {pass_index}: ~{measurement.rounded_dpi} CPI; "
+                f"straightness {measurement.straightness * 100:.1f}%"
+            )
+        summary = summarize_calibrations(measurements)
+        label = _rounded_stage_label(summary.estimated_dpi)
+        report(
+            f"Stage {stage_number}: measured ~{summary.estimated_dpi:.1f} CPI "
+            f"({summary.confidence} confidence; display label ~{label})"
+        )
+        return CalibratedDpiState(
+            configured_dpi=label,
+            measured_cpi=summary.estimated_dpi,
+            polling_hz=summary.standard_polling_hz,
+            confidence=summary.confidence,
+        )
+
+    report("• Calibrating the current physical DPI stage…")
+    initial = calibrate(1)
+    measured_cycle: list[CalibratedDpiState] = [initial]
+    transition_samples: list[Any] = []
+    resulting_states: list[CalibratedDpiState] = []
+    wrap_confirmed = False
+
+    for transition_index in range(1, max_stages + 1):
+        step = GuidedStep(
+            transition_index,
+            max_stages,
+            "Advance physical DPI stage",
+            (
+                "Keep the mouse still. After starting the sample, press the physical DPI/profile "
+                "button exactly once. Mouse Control will then calibrate the resulting stage."
+            ),
+        )
+        if not prompt(step):
+            raise GuidedDiscoveryCancelled("calibrated DPI-stage learning cancelled")
+        transition = session.observe_action(seconds=transition_seconds)
+        transition_samples.append(transition)
+        report(_sample_summary(transition, prefix="Transition captured"))
+
+        state = calibrate(len(measured_cycle) + 1)
+        resulting_states.append(state)
+        measured_cycle.append(state)
+        if len(measured_cycle) >= 3 and _same_physical_stage(state, initial):
+            wrap_confirmed = True
+            report("✓ Physical DPI cycle wrapped back to the initial stage")
+            break
+
+    learned = session.analyze(
+        transition_samples,
+        trigger_behavior=SemanticBehavior.DPI_CYCLE_TRIGGER,
+        control_samples=motion_controls,
+    )
+    refinement = refine_teacher_free(learned)
+    action_specific_keys = frozenset(shape.report_key for shape in refinement.report_shapes)
+    descriptor_roles = {
+        (candidate.report_key, candidate.offset): session.descriptor_roles_for_candidate(candidate)
+        for candidate in learned.report_candidates
+    }
+    mappings = (
+        infer_calibrated_raw_mappings(
+            transition_samples,
+            resulting_states,
+            allowed_report_keys=set(action_specific_keys),
+            descriptor_roles=descriptor_roles,
+        )
+        if action_specific_keys else ()
+    )
+    cycle = calibrated_cycle_hypothesis(resulting_states) if wrap_confirmed else None
+    action_identified = _action_identified(learned)
+    profile_path = None
+
+    if (
+        wrap_confirmed
+        and mappings
+        and cycle is not None
+        and cycle.confidence == "validated"
+    ):
+        # configured_cycle excludes the final wrap-confirmation state.
+        configured_cycle = tuple(state.configured_dpi for state in measured_cycle[:-1])
+        profile = calibrated_profile_data(
+            device=result.device,
+            configured_cycle=configured_cycle,
+            measured_cycle=tuple(measured_cycle),
+            mappings=mappings,
+            action_report_keys=action_specific_keys,
+        )
+        profile_path = save_calibrated_profile(profile)
+        report("✓ Saved exact-device calibrated read-only DPI event profile")
+    elif not wrap_confirmed:
+        report("? Full DPI-cycle wrap was not observed; no runtime profile was promoted")
+    elif not mappings:
+        report("? DPI stages changed physically, but no unambiguous persistent raw state field was found")
+    else:
+        report("? DPI-cycle evidence did not reach validated confidence; no runtime profile was promoted")
+
+    return DeepDpiLearningOutcome(
+        result=result,
+        profile_path=profile_path,
+        measured_cycle=tuple(measured_cycle),
+        raw_mappings=tuple(mappings),
+        wrap_confirmed=wrap_confirmed,
+        action_identified=action_identified,
+    )
+
+
 def run_automatic_discovery(
     selected: Any,
     *,
@@ -245,7 +444,7 @@ def run_automatic_discovery(
     report = progress or (lambda _message: None)
     engine = engine_factory()
     result = engine.discover(selected, progress=report)
-    return AutomaticDiscoveryOutcome(result=result, engine=engine)
+    return AutomaticDiscoveryOutcome(result=result, engine=engine, research_plan=engine.research_plan(result))
 
 
 def run_guided_discovery(

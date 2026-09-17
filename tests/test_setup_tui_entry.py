@@ -96,6 +96,8 @@ def test_tui_setup_success_reuses_existing_commit_and_service_flow(tmp_path):
         enable_service=True,
         dpi_changed=True,
         polling_changed=True,
+        dpi_writable=True,
+        polling_writable=True,
     )
     backend = Mock()
     result = SetupTuiResult(True, MOUSE, backend, choices)

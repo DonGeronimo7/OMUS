@@ -144,6 +144,9 @@ class SetupController:
         self.discovery_error: str | None = None
         self.discovery_progress: list[str] = []
         self.guided_outcome: GuidedDiscoveryOutcome | None = None
+        self.deep_learning_outcome: Any | None = None
+        self.research_plan: Any | None = None
+        self.discovery_engine: Any | None = None
         self.polling_measurement: Any | None = None
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
@@ -241,6 +244,9 @@ class SetupController:
         self.discovery_error = None
         self.discovery_progress.clear()
         self.guided_outcome = None
+        self.deep_learning_outcome = None
+        self.research_plan = None
+        self.discovery_engine = None
         self.polling_measurement = None
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
 
@@ -298,6 +304,8 @@ class SetupController:
     def apply_automatic_discovery(self, outcome: Any) -> None:
         """Consume DiscoveryEngine output, then rebind the production backend."""
         self.discovery_result = outcome.result if hasattr(outcome, "result") else outcome
+        self.discovery_engine = getattr(outcome, "engine", None)
+        self.research_plan = getattr(outcome, "research_plan", None)
         self.discovery_complete = True
         self.discovery_error = None
         # A discovery pass may have exposed an already-PROVEN exact-model store.
@@ -323,8 +331,14 @@ class SetupController:
 
     @property
     def guided_discovery_available(self) -> bool:
-        # The generic guided learner is intentionally DPI-observation only.
-        return not self.choices.dpi_writable and not self.discovery_skipped
+        # Deeper learning is specifically the fallback for an unknown protocol
+        # when Automatic Discovery has no executable generic write probe.
+        return bool(
+            self.discovery_complete
+            and not self.discovery_skipped
+            and self.research_plan is not None
+            and getattr(self.research_plan, "deeper_learning_recommended", False)
+        )
 
     def _discovered_capability(self, name: str):
         if self.discovery_result is None:
@@ -387,6 +401,14 @@ class SetupController:
                 if self.discovery_complete
                 else "? Polling capability not yet discovered"
             )
+
+        if self.research_plan is not None:
+            lines.append(f"• DPI research state: {self.research_plan.dpi.status.value}")
+            lines.append(f"• Polling research state: {self.research_plan.polling.status.value}")
+            if self.research_plan.reversible_probe_available:
+                lines.append("! A bounded reversible learned write probe is available before deeper learning")
+            elif self.research_plan.deeper_learning_recommended:
+                lines.append("✓ Deeper protocol learning is available for physical DPI-stage/event adaptation")
 
         if self.no_write_path:
             lines.append("✓ Discovery complete: no verified host-accessible DPI/polling write path")
@@ -664,6 +686,19 @@ class SetupController:
         else:
             self.status = "Guided observation finished; no speculative write authority was added."
 
+    def apply_deep_learning_outcome(self, outcome: Any) -> None:
+        self.deep_learning_outcome = outcome
+        if getattr(outcome, "profile_path", None) is not None:
+            self.refresh_discovery_backend(
+                status="Calibrated DPI-stage behavior learned; runtime notifications are now available."
+            )
+        elif getattr(outcome, "wrap_confirmed", False):
+            self.status = (
+                "Physical DPI cycle was observed, but no unambiguous persistent HID stage field was promoted."
+            )
+        else:
+            self.status = "Deeper DPI-stage learning finished without a complete validated cycle."
+
     def detail_rows(self) -> list[DisplayRow]:
         if self.section is SetupSection.DEVICE:
             return [
@@ -688,7 +723,7 @@ class SetupController:
             next_section = self._next_configuration_section(SetupSection.HARDWARE)
             next_label = f"Continue to {next_section.value.lower()} configuration"
             if self.guided_discovery_available:
-                rows.append(DisplayRow("Continue deeper guided DPI learning", 1))
+                rows.append(DisplayRow("Run deeper protocol / DPI-stage learning", 1))
                 rows.append(DisplayRow(next_label, 2))
             else:
                 rows.append(DisplayRow(next_label, 1))

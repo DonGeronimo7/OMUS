@@ -170,17 +170,20 @@ def test_known_protocol_and_proven_learned_devices_skip_unnecessary_learning():
     assert "✓ Learned exact-model support" in app.hardware_lines()
 
 
-def test_unknown_device_offers_guided_discovery_and_can_skip():
+def test_unknown_device_offers_deeper_learning_only_after_automatic_research_plan():
     unknown = {
         MOUSE1.path: FakeBackend(dpi=False, polling=False, protocol=None),
         MOUSE2.path: FakeBackend(),
     }
     app, _ = controller(backends=unknown)
     app.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    # Deeper learning is not a pre-discovery generic escape hatch.
+    assert app.guided_discovery_available is False
+    assert app.handle_key("ENTER").kind is ActionKind.AUTOMATIC_DISCOVERY
+
+    app.discovery_complete = True
+    app.research_plan = SimpleNamespace(deeper_learning_recommended=True)
     assert app.guided_discovery_available is True
-    assert app.handle_key("ENTER").kind in {
-        ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY
-    }
     app.row_cursor = 1
     assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
     app.row_cursor = 2
