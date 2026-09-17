@@ -129,8 +129,10 @@ def test_integrated_keyboard_capture_excludes_selected_mouse(monkeypatch, tmp_pa
     assert keyboard.closed is False
 
 
-def test_sigmachip_busy_capture_is_reported_as_recoverable():
+def test_sigmachip_busy_capture_reports_exact_phase():
     exc = BlockingIOError(11, "Resource temporarily unavailable")
-    message = CompleteCursesSetupApp._input_error_message(exc)
-    assert "temporarily busy" in message
+    message = CompleteCursesSetupApp._input_error_message(
+        exc, phase="exclusive mouse grab"
+    )
+    assert "busy during exclusive mouse grab" in message
     assert "mappings unchanged" in message
