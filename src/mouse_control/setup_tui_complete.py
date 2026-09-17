@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import curses
 import errno
+import os
 from typing import Any, Callable
 
 from evdev import InputDevice, ecodes
@@ -33,6 +34,32 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                 "mappings unchanged; release the competing grab and try button capture again."
             )
         return f"Input capture failed: {exc}"
+
+    @staticmethod
+    def _exclude_selected_mouse_from_keyboards(devices, mouse_path: str):
+        """Never let keyboard capture re-grab the mouse already owned by setup.
+
+        Some composite/gaming mice expose KEY_* codes on their mouse event node.
+        The generic keyboard scanner can therefore classify that same node as a
+        keyboard. During button mapping the mouse is already EVIOCGRAB'd, so a
+        second grab of the same real device returns EAGAIN/EBUSY. Keep exactly
+        one owner for the selected mouse and close the duplicate keyboard fd.
+        """
+        selected_realpath = os.path.realpath(mouse_path)
+        kept = []
+        for device in devices:
+            try:
+                same_device = os.path.realpath(device.path) == selected_realpath
+            except OSError:
+                same_device = False
+            if same_device:
+                try:
+                    device.close()
+                except OSError:
+                    pass
+                continue
+            kept.append(device)
+        return kept
 
     def _hardware_viewport(self, height: int):
         rows = self.controller.detail_rows()
@@ -115,11 +142,32 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
             "Button capture is ambiguous: multiple matching mice are connected. Keep only the selected mouse attached or choose it again."
         )
 
+    def _choose_button_action(self, button: str) -> str | None:
+        """Choose an action while excluding the already-grabbed mouse from key capture."""
+        from . import setup_tui_integrated as integrated_tui
+
+        mouse_path = getattr(self, "_button_capture_path", None)
+        if not mouse_path:
+            mouse_path = self._resolved_button_path()
+        original_open_keyboards = integrated_tui._open_keyboards
+
+        def open_keyboards_without_selected_mouse():
+            devices = original_open_keyboards()
+            return self._exclude_selected_mouse_from_keyboards(devices, mouse_path)
+
+        integrated_tui._open_keyboards = open_keyboards_without_selected_mouse
+        try:
+            return super()._choose_button_action(button)
+        finally:
+            integrated_tui._open_keyboards = original_open_keyboards
+
     def _button_editor(self) -> None:
         assert self.stdscr is not None
         device = None
+        self._button_capture_path = None
         try:
             path = self._resolved_button_path()
+            self._button_capture_path = path
             device = InputDevice(path)
             device.grab()
         except OSError as exc:
@@ -191,6 +239,7 @@ class CompleteCursesSetupApp(IntegratedCursesSetupApp):
                     device.close()
                 except OSError:
                     pass
+            self._button_capture_path = None
 
 
 def run_complete_setup_tui(
