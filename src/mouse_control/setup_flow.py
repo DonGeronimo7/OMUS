@@ -365,13 +365,31 @@ def polling_screen(choices):
 def review_screen(device, choices):
     print("\nMouse configuration")
     print(f"Device: {device.name}")
-    print("DPI stages: " + " → ".join(map(str, choices.stages)))
+    print("Configured software stages: " + " → ".join(map(str, choices.stages)))
+    if choices.measured_polling_rate is not None:
+        print(
+            f"Measured polling: ~{choices.measured_polling_rate} Hz "
+            f"({choices.measured_polling_confidence or 'unknown'} confidence)"
+        )
+    else:
+        print("Measured polling: unavailable")
     print(
-        f"Polling rate: {choices.polling_rate} Hz"
+        f"Configured polling preference: {choices.polling_rate} Hz"
         if choices.polling_rate
-        else f"Polling rate: unchanged ({choices.current_polling_rate} Hz current)"
+        else (
+            "Configured polling preference: unchanged "
+            f"({choices.current_polling_rate} Hz protocol-reported)"
+        )
         if choices.current_polling_rate is not None
-        else "Polling rate: unchanged"
+        else "Configured polling preference: unchanged"
+    )
+    print(
+        "DPI write control: "
+        + ("available (proven)" if choices.dpi_writable else "unavailable / unproven")
+    )
+    print(
+        "Polling write control: "
+        + ("available (proven)" if choices.polling_writable else "unavailable / unproven")
     )
     print(f"Buttons: {len(choices.mappings)} mappings")
     print("[1] Edit DPI  [2] Edit polling  [3] Edit buttons")

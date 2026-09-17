@@ -1,4 +1,6 @@
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from mouse_control.discovery import MouseDevice
 from mouse_control.guided_discovery import GuidedDiscoveryOutcome, GuidedDpiLearningOutcome
@@ -230,3 +232,111 @@ def test_ambiguous_discovery_result_never_promotes_writable_state():
     assert app.choices.dpi_writable is False
     assert app.choices.polling_writable is False
     assert "ambiguous" in app.status.lower()
+
+
+def calibrated_profile(*, sources=()):
+    return {
+        "dpi_cycle": {
+            "confidence": "validated",
+            "states": [
+                {"measured_cpi": 812.0, "polling_hz": 500, "confidence": "high"},
+                {"measured_cpi": 1595.0, "polling_hz": 500, "confidence": "high"},
+                {"measured_cpi": 2410.0, "polling_hz": 500, "confidence": "high"},
+                {"measured_cpi": 808.0, "polling_hz": 500, "confidence": "high"},
+            ],
+        },
+        "transition_sources": [{"kind": kind} for kind in sources],
+    }
+
+
+def unknown_controller_with_old_config():
+    unknown = {
+        MOUSE1.path: FakeBackend(dpi=False, polling=False, protocol=None),
+        MOUSE2.path: FakeBackend(dpi=False, polling=False, protocol=None),
+    }
+    return controller(
+        backends=unknown,
+        existing={
+            "dpi": {"active": 1000, "stages": [1000, 1500, 2000, 2500, 3000]},
+            "polling": {"rate_hz": 1000},
+        },
+    )
+
+
+def test_read_only_review_separates_old_preferences_from_missing_measurements():
+    app, _ = unknown_controller_with_old_config()
+    app.discovery_complete = True
+    app.section_index = SECTIONS.index(SetupSection.REVIEW)
+    text = "\n".join(row.text for row in app.detail_rows())
+
+    assert "Measured physical DPI cycle: unavailable" in text
+    assert "Measured polling: unavailable" in text
+    assert "Configured software stages: 1000 → 1500 → 2000 → 2500 → 3000" in text
+    assert "Configured polling preference: 1000 Hz" in text
+    assert "DPI write control: unavailable / unproven" in text
+    assert "Polling write control: unavailable / unproven" in text
+
+
+def test_exact_device_profile_surfaces_calibration_polling_and_source_state():
+    app, _ = unknown_controller_with_old_config()
+    physical = SimpleNamespace(hidraw_nodes=[object()], ambiguous=False)
+    outcome = SimpleNamespace(
+        result=SimpleNamespace(device=physical, capabilities={}, protocol=None),
+        engine=object(),
+        research_plan=SimpleNamespace(
+            deeper_learning_recommended=True,
+            reversible_probe_available=False,
+            dpi=SimpleNamespace(status=SimpleNamespace(value="no-evidence")),
+            polling=SimpleNamespace(status=SimpleNamespace(value="no-evidence")),
+        ),
+    )
+    with patch(
+        "mouse_control.setup_tui.find_calibrated_profile",
+        return_value=(Path("calibrated.json"), calibrated_profile()),
+    ):
+        app.apply_automatic_discovery(outcome)
+
+    assert app.observed_hardware.calibrated_dpi_cycle == (812, 1595, 2410)
+    assert app.observed_hardware.measured_polling_rate == 500
+    assert app.deep_learning_label == "Learn runtime DPI transition source"
+    lines = app.hardware_lines()
+    assert "✓ Physical DPI cycle already calibrated" in lines
+    assert "? Runtime DPI transition source unresolved" in lines
+    assert any("ruler calibration will be reused" in line for line in lines)
+
+    app.section_index = SECTIONS.index(SetupSection.REVIEW)
+    text = "\n".join(row.text for row in app.detail_rows())
+    assert "Measured physical DPI cycle: ~812 → ~1595 → ~2410" in text
+    assert "Measured polling: ~500 Hz (high confidence)" in text
+    assert "Configured polling preference: 1000 Hz" in text
+
+
+def test_runtime_source_status_distinguishes_absolute_and_trigger_semantics():
+    app, _ = unknown_controller_with_old_config()
+    app.discovery_result = SimpleNamespace(device=SimpleNamespace())
+    outcome = SimpleNamespace(profile_path=Path("calibrated.json"), wrap_confirmed=True)
+
+    with patch(
+        "mouse_control.setup_tui.find_calibrated_profile",
+        return_value=(Path("calibrated.json"), calibrated_profile(sources=("hid_state",))),
+    ):
+        app.apply_deep_learning_outcome(outcome)
+    assert "synchronize and resynchronize safely" in app.status
+
+    with patch(
+        "mouse_control.setup_tui.find_calibrated_profile",
+        return_value=(Path("calibrated.json"), calibrated_profile(sources=("hid_cycle_trigger",))),
+    ):
+        app.apply_deep_learning_outcome(outcome)
+    assert "unsynchronized at startup and after reconnect" in app.status
+
+
+def test_device_switch_clears_exact_device_observed_evidence():
+    app, _ = unknown_controller_with_old_config()
+    app.observed_hardware = app.observed_hardware.__class__(
+        calibrated_dpi_cycle=(800, 1600), profile_path=Path("first.json")
+    )
+    app.handle_key("DOWN")
+    app.handle_key("ENTER")
+    assert app.selected is MOUSE2
+    assert not app.observed_hardware.has_physical_calibration

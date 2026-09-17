@@ -61,7 +61,7 @@ def test_finish_persists_reviewed_stages_and_runtime_loads_exact_list(tmp_path, 
     ]
     result, output = run_wizard(path, backend, answers, capsys)
     assert result == 0
-    assert 'DPI stages: 800 → 1450 → 2000 → 2400 → 3200' in output
+    assert 'Configured software stages: 800 → 1450 → 2000 → 2400 → 3200' in output
     saved = config.load_config(path)
     assert saved['dpi']['stages'] == FINAL
     assert saved['dpi']['active'] == 800

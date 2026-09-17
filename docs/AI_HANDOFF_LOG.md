@@ -1,5 +1,23 @@
 # AI handoff log
 
+## 2026-09-17 — Setup observed-state integration
+
+- Setup Review now separates measured physical DPI/polling evidence from
+  configured software DPI/polling preferences and from proven write authority.
+- Exact-device calibrated profiles populate a read-only presentation snapshot;
+  switching devices clears it before any new exact-device profile is loaded.
+- Existing physical calibration with no transition source now offers bounded
+  runtime-source learning and explicitly reuses ruler/wrap calibration.
+- Absolute runtime sources are described as safely resynchronizing; trigger-only
+  sources remain explicitly unsynchronized at startup and after reconnect.
+- No backend capability, writable flag, configured preference, or hardware-write
+  path is promoted by calibrated read-side evidence.
+- Automated validation: focused Automatic Discovery/setup suite passed 168
+  tests; full suite passed 611 tests with one existing GLib deprecation warning.
+  Compileall and whitespace checks passed. Python sdist/wheel and Fedora 44 RPM
+  builds passed; RPM `%check` passed 611 tests and packaged CLI smoke tests.
+  Physical Titan validation remains pending.
+
 ## 2026-09-17 — Calibrated read-only DPI runtime integration
 
 - Physical DPI cycles are saved as schema-v2 read-only profiles even when no

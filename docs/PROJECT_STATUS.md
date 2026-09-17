@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-17
 
+## 2026-09-17 setup observed-state separation
+
+Setup now loads an exact-device calibrated read-only profile into a dedicated
+presentation snapshot. Review labels measured physical DPI, measured polling,
+configured software preferences, and proven write controls independently, so a
+new unknown mouse cannot appear to inherit another mouse's hardware readings.
+An existing physical calibration is shown before deeper learning; when its
+runtime source is unresolved, setup offers transition-source capture and states
+that ruler calibration will be reused. Absolute and trigger-only learned sources
+retain their distinct synchronization semantics. This presentation state never
+changes backend write capabilities or configuration values.
+
 ## v0.9.0 release status
 
 Automatic Discovery is now integrated into the production runtime. A single

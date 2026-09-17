@@ -13,6 +13,7 @@ from enum import Enum, auto
 import io
 from typing import Any, Callable
 
+from .calibrated_profiles import find_calibrated_profile
 from .guided_discovery import GuidedDiscoveryOutcome
 from .hardware import HardwareError, get_backend
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
@@ -63,6 +64,26 @@ class SetupTuiResult:
     selected: Any
     backend: Any
     choices: SetupChoices
+
+
+@dataclass(frozen=True)
+class ObservedHardwareState:
+    """Read-only exact-device evidence, separate from user preferences."""
+
+    calibrated_dpi_cycle: tuple[int, ...] = ()
+    calibration_confidence: str | None = None
+    measured_polling_rate: int | None = None
+    measured_polling_confidence: str | None = None
+    transition_source_kinds: tuple[str, ...] = ()
+    profile_path: Any | None = None
+
+    @property
+    def has_physical_calibration(self) -> bool:
+        return bool(self.calibrated_dpi_cycle)
+
+    @property
+    def has_runtime_source(self) -> bool:
+        return bool(self.transition_source_kinds)
 
 
 @dataclass
@@ -149,6 +170,7 @@ class SetupController:
         self.research_probe_outcome: Any | None = None
         self.discovery_engine: Any | None = None
         self.polling_measurement: Any | None = None
+        self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
 
@@ -250,6 +272,7 @@ class SetupController:
         self.research_probe_outcome = None
         self.discovery_engine = None
         self.polling_measurement = None
+        self.observed_hardware = ObservedHardwareState()
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
 
         # Never silently apply a different mouse's persisted hardware rate. The
@@ -303,6 +326,51 @@ class SetupController:
             self.discovery_progress.append(message)
             self.status = message
 
+    def _refresh_observed_profile(self) -> None:
+        """Load validated read-only evidence for the discovered physical device."""
+        self.observed_hardware = ObservedHardwareState()
+        device = getattr(self.discovery_result, "device", None)
+        if device is None:
+            return
+        found = find_calibrated_profile(device)
+        if found is None:
+            return
+        path, profile = found
+        cycle = profile.get("dpi_cycle", {})
+        states = cycle.get("states", ()) if isinstance(cycle, dict) else ()
+        measured_cycle = tuple(
+            int(round(float(state["measured_cpi"])))
+            for state in states[:-1]
+            if isinstance(state, dict) and state.get("measured_cpi") is not None
+        )
+        polling_values = [
+            int(state["polling_hz"])
+            for state in states
+            if isinstance(state, dict) and state.get("polling_hz") is not None
+        ]
+        state_confidences = {
+            str(state.get("confidence"))
+            for state in states
+            if isinstance(state, dict) and state.get("confidence")
+        }
+        sources = profile.get("transition_sources", ())
+        self.observed_hardware = ObservedHardwareState(
+            calibrated_dpi_cycle=measured_cycle,
+            calibration_confidence=str(cycle.get("confidence", "unknown")),
+            measured_polling_rate=(
+                max(set(polling_values), key=polling_values.count) if polling_values else None
+            ),
+            measured_polling_confidence=(
+                next(iter(state_confidences)) if len(state_confidences) == 1 else "mixed"
+            ) if polling_values else None,
+            transition_source_kinds=tuple(
+                str(source["kind"])
+                for source in sources
+                if isinstance(source, dict) and source.get("kind")
+            ),
+            profile_path=path,
+        )
+
     def apply_automatic_discovery(self, outcome: Any) -> None:
         """Consume DiscoveryEngine output, then rebind the production backend."""
         self.discovery_result = outcome.result if hasattr(outcome, "result") else outcome
@@ -319,6 +387,7 @@ class SetupController:
             pass
         self.backend = self._backend_factory(self.selected)
         self._discover_into_choices()
+        self._refresh_observed_profile()
         self.status = (
             "Automatic Discovery complete. No verified host-accessible DPI/polling write path; "
             "continue with DPI-stage observation and button remapping."
@@ -340,7 +409,17 @@ class SetupController:
             and not self.discovery_skipped
             and self.research_plan is not None
             and getattr(self.research_plan, "deeper_learning_recommended", False)
+            and not self.observed_hardware.has_runtime_source
         )
+
+    @property
+    def deep_learning_label(self) -> str:
+        if (
+            self.observed_hardware.has_physical_calibration
+            and not self.observed_hardware.has_runtime_source
+        ):
+            return "Learn runtime DPI transition source"
+        return "Run deeper protocol / DPI-stage learning"
 
     def _discovered_capability(self, name: str):
         if self.discovery_result is None:
@@ -410,7 +489,15 @@ class SetupController:
             if self.research_plan.reversible_probe_available:
                 lines.append("! A bounded reversible learned write probe is available before deeper learning")
             elif self.research_plan.deeper_learning_recommended:
-                lines.append("✓ Deeper protocol learning is available for physical DPI-stage/event adaptation")
+                if self.observed_hardware.has_physical_calibration:
+                    lines.append("✓ Physical DPI cycle already calibrated")
+                    if self.observed_hardware.has_runtime_source:
+                        lines.append("✓ Runtime DPI transition source learned")
+                    else:
+                        lines.append("? Runtime DPI transition source unresolved")
+                        lines.append("→ Learn runtime transition source (ruler calibration will be reused)")
+                else:
+                    lines.append("✓ Deeper protocol learning is available for physical DPI-stage/event adaptation")
 
         if self.no_write_path:
             lines.append("✓ Discovery complete: no verified host-accessible DPI/polling write path")
@@ -701,8 +788,24 @@ class SetupController:
         self.deep_learning_outcome = outcome
         if getattr(outcome, "profile_path", None) is not None:
             self.refresh_discovery_backend(
-                status="Calibrated DPI-stage behavior learned; runtime notifications are now available."
+                status="Calibrated DPI-stage behavior learned."
             )
+            self._refresh_observed_profile()
+            kinds = set(self.observed_hardware.transition_source_kinds)
+            if kinds & {"hid_state", "feature_state", "evdev_absolute_stage"}:
+                self.status = (
+                    "Physical DPI cycle calibrated; absolute runtime notifications can "
+                    "synchronize and resynchronize safely."
+                )
+            elif kinds & {"hid_cycle_trigger", "evdev_cycle_trigger"}:
+                self.status = (
+                    "Physical DPI cycle calibrated; trigger notifications remain "
+                    "unsynchronized at startup and after reconnect."
+                )
+            else:
+                self.status = (
+                    "Physical DPI cycle calibrated; runtime transition source remains unresolved."
+                )
         elif getattr(outcome, "wrap_confirmed", False):
             self.status = (
                 "Physical DPI cycle was observed, but no unambiguous persistent HID stage field was promoted."
@@ -734,7 +837,7 @@ class SetupController:
             next_section = self._next_configuration_section(SetupSection.HARDWARE)
             next_label = f"Continue to {next_section.value.lower()} configuration"
             if self.guided_discovery_available:
-                rows.append(DisplayRow("Run deeper protocol / DPI-stage learning", 1))
+                rows.append(DisplayRow(self.deep_learning_label, 1))
                 rows.append(DisplayRow(next_label, 2))
             else:
                 rows.append(DisplayRow(next_label, 1))
@@ -832,14 +935,53 @@ class SetupController:
                 DisplayRow("Keep disabled" + ("  ✓" if not self.choices.enable_service else ""), 1),
             ]
 
-        return [
+        rows = [
             DisplayRow("Final review"),
             DisplayRow(f"Mouse:       {self.selected.name}"),
-            DisplayRow("DPI stages:  " + " → ".join(map(str, self.choices.stages))),
+        ]
+        if self.observed_hardware.calibrated_dpi_cycle:
+            rows.append(DisplayRow(
+                "Measured physical DPI cycle: ~"
+                + " → ~".join(map(str, self.observed_hardware.calibrated_dpi_cycle))
+                + f" ({self.observed_hardware.calibration_confidence} confidence)"
+            ))
+        else:
+            rows.append(DisplayRow("Measured physical DPI cycle: unavailable"))
+        measured_rate = (
+            self.choices.measured_polling_rate
+            if self.choices.measured_polling_rate is not None
+            else self.observed_hardware.measured_polling_rate
+        )
+        measured_confidence = (
+            self.choices.measured_polling_confidence
+            if self.choices.measured_polling_rate is not None
+            else self.observed_hardware.measured_polling_confidence
+        )
+        rows.extend([
             DisplayRow(
-                f"Polling:     {self.choices.polling_rate} Hz"
+                (
+                    f"Measured polling: ~{measured_rate} Hz "
+                    f"({measured_confidence or 'unknown'} confidence)"
+                )
+                if measured_rate is not None
+                else "Measured polling: unavailable"
+            ),
+            DisplayRow(
+                "Configured software stages: "
+                + " → ".join(map(str, self.choices.stages))
+            ),
+            DisplayRow(
+                f"Configured polling preference: {self.choices.polling_rate} Hz"
                 if self.choices.polling_rate is not None
-                else "Polling:     unchanged"
+                else "Configured polling preference: unchanged"
+            ),
+            DisplayRow(
+                "DPI write control: available (proven)"
+                if self.choices.dpi_writable else "DPI write control: unavailable / unproven"
+            ),
+            DisplayRow(
+                "Polling write control: available (proven)"
+                if self.choices.polling_writable else "Polling write control: unavailable / unproven"
             ),
             DisplayRow(f"Buttons:     {len(self.choices.mappings)} mappings"),
             DisplayRow(f"Service:     {'enabled' if self.choices.enable_service else 'disabled'}"),
@@ -850,7 +992,8 @@ class SetupController:
             DisplayRow("Edit DPI", 1),
             DisplayRow("Edit polling", 2),
             DisplayRow("Edit buttons", 3),
-        ]
+        ])
+        return rows
 
 
 def run_setup_tui(
