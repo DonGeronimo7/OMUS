@@ -110,6 +110,7 @@ def calibrated_profile_data(
     mappings: Sequence[CalibratedRawMapping],
     action_report_keys: Iterable[object] = (),
     transition_sources: Sequence[CalibratedTransitionSource] = (),
+    calibration_confidence: str = "validated",
 ) -> dict[str, Any]:
     """Build path-independent read-side learning data from one accepted run."""
 
@@ -172,6 +173,7 @@ def calibrated_profile_data(
                 len(states) >= 2
                 and states[0]["configured_dpi"] == states[-1]["configured_dpi"]
             ),
+            "confidence": str(calibration_confidence),
             "semantic_evidence": "physically-calibrated",
         },
         "action_reports": reports,
@@ -181,6 +183,71 @@ def calibrated_profile_data(
         ],
         "write_authorized": False,
     }
+
+
+def physical_calibration_is_reusable(profile: Mapping[str, Any]) -> bool:
+    """Return whether schema-v2 data proves a complete reusable physical cycle.
+
+    Runtime transition-source discovery is intentionally not part of this test.
+    A physically measured cycle remains valuable even when the only unresolved
+    question is how to observe future presses at runtime.
+    """
+
+    if profile.get("schema_version") != 2 or profile.get("write_authorized") is not False:
+        return False
+    cycle = profile.get("dpi_cycle")
+    if not isinstance(cycle, Mapping):
+        return False
+    order = cycle.get("configured_order")
+    states = cycle.get("states")
+    if (
+        not isinstance(order, list)
+        or len(order) < 2
+        or len(set(order)) < 2
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in order
+        )
+    ):
+        return False
+    if (
+        cycle.get("wrap_confirmed") is not True
+        or cycle.get("confidence") != "validated"
+        or cycle.get("semantic_evidence") != "physically-calibrated"
+        or not isinstance(states, list)
+        or len(states) != len(order) + 1
+    ):
+        return False
+
+    observed: list[int] = []
+    for state in states:
+        if not isinstance(state, Mapping):
+            return False
+        configured = state.get("configured_dpi")
+        measured = state.get("measured_cpi")
+        confidence = state.get("confidence")
+        polling = state.get("polling_hz")
+        if (
+            not isinstance(configured, int)
+            or isinstance(configured, bool)
+            or configured <= 0
+            or not isinstance(measured, (int, float))
+            or isinstance(measured, bool)
+            or float(measured) <= 0
+            or not isinstance(confidence, str)
+            or not confidence
+            or (
+                polling is not None
+                and (
+                    not isinstance(polling, int)
+                    or isinstance(polling, bool)
+                    or polling <= 0
+                )
+            )
+        ):
+            return False
+        observed.append(configured)
+    return observed[:-1] == order and observed[-1] == order[0]
 
 
 def validate_calibrated_profile(profile: Mapping[str, Any]) -> None:
@@ -278,7 +345,7 @@ def profile_matches_device(profile: Mapping[str, Any], device) -> bool:
 
 
 def find_calibrated_profile(device) -> tuple[Path, dict[str, Any]] | None:
-    """Return one exact validated runtime profile, refusing ambiguous matches."""
+    """Return one exact validated learned calibration, refusing ambiguity."""
 
     directory = get_calibrated_profile_directory()
     if not directory.is_dir():
@@ -296,7 +363,11 @@ def find_calibrated_profile(device) -> tuple[Path, dict[str, Any]] | None:
             continue
         if raw.get("schema_version") == 1 and not raw.get("raw_mappings"):
             continue
-        if raw.get("schema_version") == 2 and not raw.get("transition_sources"):
+        if (
+            raw.get("schema_version") == 2
+            and not raw.get("transition_sources")
+            and not physical_calibration_is_reusable(raw)
+        ):
             continue
         matches.append((path, raw))
     return matches[0] if len(matches) == 1 else None
