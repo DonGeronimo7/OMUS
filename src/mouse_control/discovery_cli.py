@@ -21,6 +21,8 @@ from .guided_discovery import (
     run_guided_dpi_learning,
 )
 from .learning_session import ReadOnlyLearningSession
+from .community_report import build_community_report, render_community_report
+from . import __version__
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -37,6 +39,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--verbose", action="store_true", help="show discovery evidence")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    parser.add_argument(
+        "--community-report", metavar="FILE",
+        help="write a deterministic privacy-conscious report suitable for an issue",
+    )
     parser.add_argument(
         "--no-save", action="store_true",
         help="do not cache the path-independent discovery profile",
@@ -279,6 +285,22 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result_to_dict(result, profile_path=engine.profile_path), indent=2, sort_keys=True))
     else:
         print(render_discovery_result(result, profile_path=engine.profile_path, verbose=args.verbose))
+
+    if args.community_report:
+        report_text = render_community_report(
+            build_community_report(result, version=__version__)
+        )
+        try:
+            with open(args.community_report, "x", encoding="utf-8") as handle:
+                handle.write(report_text)
+        except FileExistsError:
+            print("Community report destination already exists; refusing to overwrite it.", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"Could not write community report: {exc}", file=sys.stderr)
+            return 1
+        if not args.json:
+            print(f"\nCommunity discovery report saved: {args.community_report}")
 
     if args.learn_dpi_button:
         try:

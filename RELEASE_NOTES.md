@@ -1,13 +1,14 @@
-# Mouse Control v0.9.3
+# Mouse Control v0.9.4
 
-## Automatic Hardware Discovery becomes materially functional
+## Pre-v1 discovery architecture milestone
 
-Mouse Control 0.9.3 promotes the validated Automatic Hardware Discovery
-checkpoint while preserving the mature v0.8.2 runtime contract and the current
-full-screen setup TUI. Discovery correlates one physical mouse across evdev and
-hidraw, parses its HID descriptor into stable report/field/member identities,
-collects contrastive evidence from real actions, and persists only semantics
-that meet the required evidence level.
+Mouse Control 0.9.4 establishes the final major discovery-architecture layer
+planned before v1 qualification work becomes primarily a matter of community
+evidence and protocol recipes. It adds bounded temporal dialogue assembly,
+operation-specific proof states, conservative experiment eligibility,
+dependent-field inference, and a deterministic privacy-conscious community
+report while preserving the mature v0.8.2/v0.9.3 runtime contract and the
+current full-screen setup TUI.
 
 For the physically validated G305 acceptance path, the teacher-free runtime can
 rebind the exact persisted descriptor member and recognize the configured DPI
@@ -52,7 +53,7 @@ claim.
 
 ## Compatibility
 
-The v0.9.3 release retains native HID++ production behavior, OpenRazer,
+The v0.9.4 release retains native HID++ production behavior, native exact-model Razer support,
 configured DPI stages and software cycling, polling safety policy, one popup per
 real transition, remapping and keyboard chords, reconnect and late insertion,
 configuration preservation, user-service behavior, and the v0.9.1 TUI flow.
@@ -72,11 +73,11 @@ The complete v0.8.2 stability and functionality contract remains the baseline.
 
 ## Downloads
 
-- [RPM: mouse-control-0.9.3-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control-0.9.3-1.fc44.noarch.rpm)
-- [DEB: mouse-control_0.9.3-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control_0.9.3-1_all.deb)
-- [AppImage: Mouse-Control-0.9.3-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/Mouse-Control-0.9.3-x86_64.AppImage)
-- [Wheel: mouse_control-0.9.3-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3-py3-none-any.whl)
-- [Source: mouse_control-0.9.3.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3.tar.gz)
+- [RPM: mouse-control-0.9.4-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control-0.9.4-1.fc44.noarch.rpm)
+- [DEB: mouse-control_0.9.4-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control_0.9.4-1_all.deb)
+- [AppImage: Mouse-Control-0.9.4-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/Mouse-Control-0.9.4-x86_64.AppImage)
+- [Wheel: mouse_control-0.9.4-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4-py3-none-any.whl)
+- [Source: mouse_control-0.9.4.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4.tar.gz)
 
 ---
 # Mouse Control v0.9.1

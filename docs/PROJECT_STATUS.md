@@ -1,5 +1,27 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
+
+- Protocol-neutral temporal dialogue assembly now retains physical/source/
+  channel/report/generation identity while distinguishing delayed replies,
+  busy/poll flows, tagged and grammar-separated overlap, echoes, unsolicited
+  events, physical actions, reconnect invalidation, and stale responses.
+- Operation-scoped proof states now distinguish observation, recognition,
+  decoding, hypothesis, experiment eligibility/execution, verification,
+  PROVEN authority, conflict, and revocation. Experiment eligibility is a
+  separate descriptive authority and cannot grant runtime write permission.
+- Dependent-field inference retains alternative literal/duplicate/byte-order/
+  scale/affine/lookup/stage explanations; unexplained changing bytes prevent
+  promotion.
+- `mouse-control discover --output FILE` and
+  `mouse-control-discover --community-report FILE` generate deterministic,
+  allowlisted JSON reports without device paths, serials, usernames, or input
+  history. Reports include proof state, protocol candidates, scoped conflicts,
+  safety status, trajectory metrics, and requested next evidence.
+- Generic discovery remains read-only. No new HID writer, runtime promotion,
+  or desired-state mutation was added. Razer protocol implementation remains
+  automated-test evidence only pending physical qualification.
+
 ## 2026-09-17 — HID intelligence consolidation and native Razer runtime
 
 - The descriptor engine now preserves Delimiter alternate usage sets, handles

@@ -73,6 +73,10 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--fix", action="store_true", help="offer safe dependency-installation guidance")
     support = sub.add_parser("support", help="create a privacy-safe hardware support report")
     support.add_argument("--guided", action="store_true", help="also capture one optional button press")
+    discover = sub.add_parser("discover", help="generate a structured read-only discovery report")
+    discover.add_argument("--device", type=int, metavar="N")
+    discover.add_argument("--output", type=Path, required=True, metavar="FILE")
+    discover.add_argument("--generic-only", action="store_true")
 
     sub.add_parser("install-service", help="install and enable the systemd user service")
     sub.add_parser("start", help="start the background service")
@@ -566,6 +570,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "support":
         return run_support(guided=args.guided)
+
+    if args.command == "discover":
+        from .discovery_cli import main as discovery_main
+        command = ["--community-report", os.fspath(args.output)]
+        if args.device is not None:
+            command.extend(("--device", str(args.device)))
+        if args.generic_only:
+            command.append("--generic-only")
+        return discovery_main(command)
 
     if args.command == "update":
         return run_update(check=args.check, assume_yes=args.yes)

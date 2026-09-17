@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.4 — 2026-09-17
+
+### Pre-v1 discovery architecture foundation
+
+- Add bounded temporal dialogue assembly for delayed replies, busy/poll flows,
+  overlapping transactions, unsolicited physical events, reconnect generation
+  changes, stale replies, echoes, and unresolved ambiguity.
+- Add operation-scoped proof states and an experiment-eligibility model that is
+  deliberately separate from runtime PROVEN write authority.
+- Infer literal, duplicated, byte-swapped, scaled, affine, lookup, and stage
+  dependencies while blocking promotion when changing bytes remain unexplained.
+- Generate deterministic privacy-conscious community discovery reports with
+  protocol candidates, operation proof states, conflicts, safety status,
+  progress metrics, and exact next evidence.
+- Preserve read-only generic discovery and all established v0.8.2/v0.9.3
+  remapping, HID++, Razer, reconnect, notification, and write-safety paths.
+
 ## 0.9.3 — 2026-09-17
 
 ### Descriptor-backed Automatic Hardware Discovery

@@ -1,5 +1,20 @@
 # AI handoff log
 
+## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
+
+- Baseline: `codex/tui-only-setup` at `cad809d` with a clean working tree.
+- Added a bounded temporal dialogue model, operation-specific proof lifecycle,
+  separate experiment eligibility authority, multi-candidate dependent-field
+  inference, scoped conflict provenance, and deterministic community reports.
+- Added `mouse-control discover --output FILE` and the advanced discovery
+  CLI's `--community-report FILE`; destinations are created exclusively and
+  generic unknown-device discovery remains read-only.
+- Validation: focused discovery/regression suite passed 112 tests; full suite
+  passed 651 tests with the existing GLib warning; compileall, diff whitespace,
+  and sdist/wheel build passed.
+- Version metadata advanced to 0.9.4. No push, merge, tag, release,
+  installation, or physical hardware validation was performed.
+
 ## 2026-09-17 — HID intelligence and native Razer consolidation
 
 - Baseline: branch `codex/tui-only-setup`, TUI cleanup commit `e327932`.

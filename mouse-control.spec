@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.9.3
+Version:        0.9.4
 Release:        1%{?dist}
 Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
@@ -78,6 +78,11 @@ done
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 %changelog
+* Thu Sep 17 2026 Marc-Anthony Geronimo - 0.9.4-1
+- Add the pre-v1 temporal dialogue, proof-state, experiment, and report foundations.
+- Keep generic discovery read-only and operation writes PROVEN-only.
+- Preserve the v0.8.2 and v0.9.3 compatibility contracts.
+
 * Thu Sep 17 2026 Marc-Anthony Geronimo - 0.9.3-1
 - Release descriptor-backed Automatic Hardware Discovery acceptance.
 - Preserve native HID++, remapping, polling, notifications, and v0.8.2 compatibility.

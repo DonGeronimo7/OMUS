@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mouse-control"
-version = "0.9.3"
+version = "0.9.4"
 description = "Linux mouse remapping with Automatic Discovery and validated DPI/polling control"
 authors = [
     {name = "Marc-A. Geronimo"}
