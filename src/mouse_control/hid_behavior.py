@@ -29,12 +29,18 @@ class HidFieldBehavior:
     def classification(self):
         values=self.unique_values
         if len(values)<=1: return HidBehaviorClass.STATIC
+        ordered=list(self.transitions)
+        # A one-way unit progression has counter evidence, even if its small
+        # observed range could otherwise resemble an enum or a DPI cycle.
+        if len(values)>=3 and ordered and all(b-a==1 for a,b in ordered): return HidBehaviorClass.COUNTER
         if len(values)<=8 and len(values)>=2:
             base=self.counts.most_common(1)[0][0]
-            if any(a==base and b!=base for a,b in self.transitions) and any(a!=base and b==base for a,b in self.transitions): return HidBehaviorClass.MOMENTARY
             if len(values)>=3 and (max(values),min(values)) in self.transitions: return HidBehaviorClass.CYCLIC_STATE
+            # A multi-value state that eventually returns to its baseline is
+            # not a momentary button.  Restrict momentary recognition to the
+            # binary press/release pattern so a complete stage cycle wins.
+            if len(values)==2 and any(a==base and b!=base for a,b in self.transitions) and any(a!=base and b==base for a,b in self.transitions): return HidBehaviorClass.MOMENTARY
             return HidBehaviorClass.ENUM_STATE
-        ordered=list(self.transitions)
         if ordered and all(b-a==1 for a,b in ordered): return HidBehaviorClass.COUNTER
         if self.change_rate>0.5: return HidBehaviorClass.CONTINUOUS
         return HidBehaviorClass.PERSISTENT_STATE
