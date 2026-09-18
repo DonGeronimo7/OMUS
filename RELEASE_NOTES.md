@@ -14,8 +14,9 @@ Small lifecycle bug-fix revision on top of v0.9.6.
 - Missing, corrupt, ambiguous, incompatible, or differently bound evidence
   continues to abstain and require discovery. Explicit Rediscover still forces
   the full discovery pipeline.
-- No-argument launch opens the existing home screen for users with a valid
-  configuration, while first-run users still enter setup.
+- No-argument launch, the desktop application launcher, `mouse-control setup`,
+  and `mouse-control tui` all open the same full-screen TUI. The obsolete
+  line-oriented launcher screen is not shipped.
 
 ## Safety and compatibility
 

@@ -6,7 +6,6 @@ import argparse
 import logging
 import os
 from pathlib import Path
-import subprocess
 import sys
 import threading
 
@@ -40,7 +39,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("setup", help="run the interactive setup wizard")
+    sub.add_parser("setup", help="run the interactive setup TUI")
+    sub.add_parser("tui", help="run the interactive setup TUI")
     run_parser = sub.add_parser("run", help="apply the saved configuration")
     run_parser.add_argument("--config", type=Path,
                             help="use an explicit configuration file instead of the default")
@@ -260,21 +260,6 @@ def run_setup_wizard() -> int:
     return run_tui_setup_wizard()
 
 
-def _has_usable_setup_config() -> bool:
-    """Return whether no-argument launch belongs to an established user."""
-    try:
-        existing = _load_setup_config()
-        _initial_choices(existing)
-    except (OSError, ValueError, TypeError):
-        return False
-    device = existing.get("device")
-    return bool(
-        isinstance(device, dict)
-        and isinstance(device.get("vendor"), int)
-        and isinstance(device.get("product"), int)
-    )
-
-
 def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
                     stages: list[int], active_dpi: int, polling_rate_hz: int | None,
                     *, setup: bool = False) -> None:
@@ -471,104 +456,19 @@ def run_from_config(path: Path | None = None) -> int:
     return 0
 
 
-def _run_service_action(action: str) -> int:
-    actions = {
-        "1": ("Status", status_service),
-        "2": ("Start", start_service),
-        "3": ("Restart", restart_service),
-        "4": ("Stop", stop_service),
-        "5": ("Install and enable", install_service),
-    }
-    label, operation = actions[action]
-    try:
-        result = operation()
-        return int(result) if isinstance(result, int) else 0
-    except (ServiceNotInstalled, OSError, subprocess.CalledProcessError) as exc:
-        print(f"Service {label.lower()} unavailable: {exc}", file=sys.stderr)
-        return 1
-
-
-def _service_menu(input_func=input) -> int:
-    print("\nService controls")
-    print("  1. Service status")
-    print("  2. Start service")
-    print("  3. Restart service")
-    print("  4. Stop service")
-    print("  5. Install and enable service")
-    print("  B. Back")
-    try:
-        choice = input_func("Service action: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return 0
-    if choice in {"b", "", "q"}:
-        return 0
-    if choice in {"1", "2", "3", "4", "5"}:
-        return _run_service_action(choice)
-    print("Please choose a numbered service action or B to go back.")
-    return 0
-
-
-def run_home_screen(*, input_func=input, columns: int | None = None) -> int:
-    """Present a lightweight, keyboard-first terminal home screen."""
-    print_banner(columns=columns)
-    try:
-        active = is_service_active()
-    except (OSError, subprocess.CalledProcessError):
-        active = None
-    status = "Running" if active else "Not running" if active is False else "Unknown"
-    status_style = "success" if active else "muted" if active is False else "warning"
-    print(f"\nService: {style(status, status_style)}")
-    print("\n  1. Configure mouse")
-    print("  2. Button remapping")
-    print("  3. DPI & polling")
-    print("  4. Hardware support")
-    print("  5. Service controls")
-    print("  6. Diagnostics")
-    print("  7. Help / About")
-    print("  Q. Quit")
-
-    routes = {
-        "1": run_setup_wizard,
-        "2": run_setup_wizard,
-        "3": run_setup_wizard,
-        "4": run_support,
-        "6": print_doctor,
-    }
-    while True:
-        try:
-            choice = input_func("\nChoose an option: ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print("\nGoodbye.")
-            return 0
-        if choice in {"q", "quit"}:
-            print("Goodbye.")
-            return 0
-        if choice == "5":
-            _service_menu(input_func)
-            return 0
-        if choice == "7":
-            _build_parser().print_help()
-            return 0
-        route = routes.get(choice)
-        if route is not None:
-            return int(route() or 0)
-        print("Please choose 1–7 or Q to quit.")
-
-
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s %(name)s: %(message)s")
     supplied_argv = sys.argv[1:] if argv is None else argv
     if not supplied_argv:
         if sys.stdin.isatty() and sys.stdout.isatty():
-            return run_home_screen() if _has_usable_setup_config() else run_setup_wizard()
+            return run_setup_wizard()
         _build_parser().print_help()
         return 0
 
     args = _build_parser().parse_args(supplied_argv)
 
-    if args.command == "setup":
+    if args.command in {"setup", "tui"}:
         return run_setup_wizard()
 
     if args.command == "run":

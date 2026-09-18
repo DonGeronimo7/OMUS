@@ -68,7 +68,7 @@ if [ -z "$appdir" ]; then
   appdir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 fi
 
-exec "$appdir/usr/python/bin/python3" -m mouse_control.cli "$@"
+exec "$appdir/usr/python/bin/python3" -m mouse_control "$@"
 EOF
 
 chmod +x AppDir/usr/bin/mouse-control

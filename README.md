@@ -64,8 +64,8 @@ Launch the guided interface as your normal desktop user:
 mouse-control
 ```
 
-`mouse-control setup` opens the same interface. Do not run normal setup or the
-background service as root.
+`mouse-control setup` and `mouse-control tui` open the same interface. Do not
+run normal setup or the background service as root.
 
 ## What to expect
 

@@ -1,5 +1,18 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — v0.9.6-2 canonical TUI regression correction
+
+- The desktop launcher, no-argument `mouse-control`, explicit `setup`/`tui`,
+  RPM, DEB, AppImage, and `python -m mouse_control` paths converge on the
+  full-screen setup TUI through the normal application dispatcher.
+- The older line-oriented launcher screen and its unused executable wrapper
+  are removed. No alternate interactive UI or configuration-sensitive launcher
+  branch remains.
+- Hardware control, remapping, configuration, service, discovery, notification,
+  battery, and reconnect behavior are unchanged. Automated/package evidence is
+  recorded in the matching handoff-log entry; physical launcher observation is
+  separate and must not be inferred from tests.
+
 ## 2026-09-18 — v0.9.6-2 lifecycle patch released
 
 - Unsaved setup sessions now restore and verify a previously active service
@@ -11,10 +24,9 @@
   instance, transport, and responder checks pass. Missing, corrupt, ambiguous,
   or mismatched evidence continues to require discovery, while explicit
   Rediscover still forces the complete pipeline.
-- No-argument interactive launch opens the existing home screen for a valid
-  established configuration and retains setup for first run. Explicit setup,
-  run, service, diagnostics, research, update, and rediscovery commands remain
-  unchanged.
+- The published artifact made no-argument established-user launches select the
+  older home screen while first-run launches entered setup. The correction
+  above removes that split; explicit noninteractive commands remain unchanged.
 - Automated validation passes 710 tests locally and in Fedora RPM `%check`.
   The authoritative release workflow passed Python 3.12/3.13/3.14, wheel/sdist,
   Debian, Fedora 44 RPM, AppImage, packaged CLI smokes, exact-asset publication,
@@ -185,9 +197,9 @@ Last updated: 2026-09-17
 ## TUI-only interactive setup
 
 The full-screen setup TUI is the sole supported interactive setup experience.
-Both `mouse-control` in a terminal and `mouse-control setup` route directly to
-the same TUI transaction, as do retained home-screen setup choices. Redirected
-or programmatic CLI setup is rejected before curses is imported or invoked;
+`mouse-control` in a terminal, `mouse-control setup`, and `mouse-control tui`
+route directly to the same TUI transaction. Redirected or programmatic CLI
+setup is rejected before curses is imported or invoked;
 it never falls back to the retired line-oriented prompt wizard. The legacy
 routing alias, prompt flow, action menus, and setup-only compatibility tests
 have been removed. Runtime/configuration APIs remain available independently

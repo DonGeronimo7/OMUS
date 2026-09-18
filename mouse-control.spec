@@ -84,7 +84,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 * Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.6-2
 - Restore the prior service state after every unsaved setup exit.
 - Reuse exact-device discovery evidence when established users configure a mouse.
-- Route established no-argument launches to the application home screen.
+- Route every interactive launch through the canonical full-screen TUI.
 
 * Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.6-1
 - Require SHA-256 verification before direct release artifact installation.

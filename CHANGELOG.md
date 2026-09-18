@@ -9,8 +9,8 @@
   failures; surface restoration failure instead of reporting success.
 - Load valid persisted discovery state through exact current topology without
   initiating deep Automatic Discovery merely because setup was opened.
-- Route established no-argument launches to the home screen while retaining
-  first-run setup and every explicit command path.
+- Route no-argument, desktop, explicit setup/TUI, AppImage, and source launches
+  through the same full-screen TUI and remove the obsolete launcher UI.
 - Preserve exact-device binding, PROVEN-only writes, configuration, remapping,
   notifications, battery behavior, reconnect behavior, and v0.9.6 security.
 

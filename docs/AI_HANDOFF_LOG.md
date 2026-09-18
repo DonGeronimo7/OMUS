@@ -1,5 +1,40 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.6-2 canonical TUI launcher correction
+
+- Root cause: the desktop file correctly invoked `mouse-control`, but the
+  primary dispatcher sent no-argument established-user launches to the older
+  line-oriented `run_home_screen()` while `mouse-control setup` entered the
+  current full-screen curses TUI. The AppImage wrapper also bypassed the
+  declared application entry point by invoking `mouse_control.cli` directly.
+- Correction: no-argument, explicit `setup`/`tui`, packaged console-script,
+  AppImage, and `python -m mouse_control` execution now converge through the
+  normal application dispatcher on the full-screen setup TUI. The obsolete
+  home/service-menu implementation and unused `packaging/mouse-control` wrapper
+  were removed; noninteractive commands remain unchanged.
+- Regression coverage: entry-point tests prove no-argument and both explicit
+  TUI commands reach the same function, the console script delegates through
+  `mouse_control.app:main`, source module execution uses that application entry,
+  packaging has one desktop source with exact `Exec=mouse-control`, and no
+  active legacy launcher or direct AppImage CLI-module route remains.
+- Validation: the focused launcher/setup/package suite passed 100 tests; the
+  complete source suite passed 711 tests with the existing GLib warning;
+  compileall and `git diff --check` passed. Wheel/sdist and Fedora RPM builds
+  passed; RPM `%check` passed all 711 tests.
+- Artifact inspection/install: the wheel contains `__main__.py` and one primary
+  `mouse_control.app:main` console script. The RPM installed through DNF in a
+  disposable Fedora 44 system and the DEB installed through APT in disposable
+  Ubuntu 24.04; both installed exact `Exec=mouse-control`, generated the primary
+  executable from `mouse_control.app:main`, and passed version/help/TUI-help and
+  source-module smokes. The AppImage built successfully, passed the same smokes,
+  and its extracted AppRun delegates to `usr/bin/mouse-control`, whose wrapper
+  executes `python -m mouse_control`.
+- Host desktop clicking remains unverified: replacing the host's already
+  installed 0.9.6-2 RPM requires an interactive sudo password unavailable to
+  this session. No physical hardware behavior was exercised or inferred. No
+  hardware writer, authority, identity, remapping, reconnect, notification,
+  battery, service, or configuration behavior changed.
+
 ## 2026-09-18 — v0.9.6-2 publication and CI fixture follow-up
 
 - Product commit `05979b8` was fast-forwarded to `main`, tagged
