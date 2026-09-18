@@ -6,10 +6,69 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 from pathlib import Path
-from .models import TRACE_SCHEMA_VERSION, CaptureSource
+from typing import Any, Iterable, Iterator, Mapping
+
+from .models import (
+    TRACE_SCHEMA_VERSION,
+    CaptureQuality,
+    CaptureSource,
+    CompletenessStatus,
+    UrbEventType,
+    UsbDirection,
+    UsbObservation,
+    UsbSetupPacket,
+    UsbTransferType,
+)
 
 
 SESSION_MANIFEST_SCHEMA_VERSION = 1
+
+
+def observation_to_record(item: UsbObservation) -> dict[str, Any]:
+    """Encode one canonical observation without discarding optional provenance."""
+
+    result = asdict(item)
+    for name in ("source", "direction", "transfer_type", "event_type"):
+        result[name] = getattr(item, name).value
+    result["payload"] = item.payload.hex()
+    if item.capture_quality is not None:
+        result["capture_quality"]["completeness"] = item.capture_quality.completeness.value
+    return result
+
+
+def observation_from_record(raw: Mapping[str, Any]) -> UsbObservation:
+    """Decode a canonical observation, accepting older records without provenance."""
+
+    values = dict(raw)
+    values["source"] = CaptureSource(values["source"])
+    values["direction"] = UsbDirection(values["direction"])
+    values["transfer_type"] = UsbTransferType(values["transfer_type"])
+    values["event_type"] = UrbEventType(values["event_type"])
+    values["payload"] = bytes.fromhex(str(values["payload"]))
+    setup = values.get("setup")
+    if setup is not None:
+        values["setup"] = UsbSetupPacket(**setup)
+    quality = values.get("capture_quality")
+    if quality is not None:
+        quality_values = dict(quality)
+        quality_values["completeness"] = CompletenessStatus(
+            quality_values.get("completeness", CompletenessStatus.UNKNOWN.value)
+        )
+        values["capture_quality"] = CaptureQuality(**quality_values)
+    return UsbObservation(**values)
+
+
+def observations_to_jsonl(items: Iterable[UsbObservation]) -> str:
+    return "".join(
+        json.dumps(observation_to_record(item), sort_keys=True, separators=(",", ":")) + "\n"
+        for item in items
+    )
+
+
+def observations_from_jsonl(text: str) -> Iterator[UsbObservation]:
+    for line in text.splitlines():
+        if line.strip():
+            yield observation_from_record(json.loads(line))
 
 
 def sha256_file(path: Path, *, chunk_size: int = 1 << 20) -> str:

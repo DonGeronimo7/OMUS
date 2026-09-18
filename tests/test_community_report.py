@@ -21,3 +21,19 @@ def test_report_is_deterministic_redacted_and_exposes_missing_evidence() -> None
     assert parsed["operations"]["dpi"]["proof_state"] == "unknown"
     assert parsed["next_evidence"]
     assert parsed["safety"]["active_writes_authorized"] is False
+
+
+def test_integrated_evidence_is_recursively_privacy_filtered() -> None:
+    device = PhysicalDevice("Unknown", 1, 2, 3, None, model_fingerprint="model")
+    report = build_community_report(
+        DiscoveryResult(device, None, {}), version="0.9.4",
+        integrated_evidence={
+            "dialogues": [{"kind": "response", "note": "read /home/alice/capture.bin"}],
+            "serial_number": "secret",
+            "nested": {"device_path": "/dev/hidraw7", "safe": "retained"},
+        },
+    )
+    text = render_community_report(report)
+    assert "/home/alice" not in text and "/dev/hidraw7" not in text
+    assert "serial_number" not in text and "device_path" not in text
+    assert report["integrated_evidence"]["nested"]["safe"] == "retained"

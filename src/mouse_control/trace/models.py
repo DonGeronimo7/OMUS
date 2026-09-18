@@ -48,6 +48,27 @@ class TransactionAnomaly(str, Enum):
     CAPTURE_BOUNDARY = "capture_boundary"
 
 
+class CompletenessStatus(str, Enum):
+    COMPLETE = "complete"
+    TRUNCATED = "truncated"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class CaptureQuality:
+    """Session/source quality facts; absence is deliberately not encoded as zero."""
+
+    source_representation: str | None = None
+    full_binary_header_available: bool | None = None
+    dropped_record_count: int | None = None
+    clock_timebase: str | None = None
+    completeness: CompletenessStatus = CompletenessStatus.UNKNOWN
+
+    def __post_init__(self) -> None:
+        if self.dropped_record_count is not None and self.dropped_record_count < 0:
+            raise ValueError("dropped_record_count cannot be negative")
+
+
 @dataclass(frozen=True)
 class UsbSetupPacket:
     bm_request_type: int
@@ -89,6 +110,13 @@ class UsbObservation:
     captured_length: int
     payload: bytes
     physical_device_fingerprint: str
+    setup_flag: int | None = None
+    data_flag: int | None = None
+    interval: int | None = None
+    start_frame: int | None = None
+    transfer_flags: int | None = None
+    descriptor_count: int | None = None
+    capture_quality: CaptureQuality | None = None
 
     def __post_init__(self) -> None:
         if not self.capture_id:
@@ -101,6 +129,16 @@ class UsbObservation:
             raise ValueError("declared_length cannot be negative")
         if not self.physical_device_fingerprint:
             raise ValueError("physical_device_fingerprint is required")
+        for name in ("setup_flag", "data_flag"):
+            value = getattr(self, name)
+            if value is not None and not 0 <= value <= 0xFF:
+                raise ValueError(f"{name} must fit in one byte")
+        for name in ("interval", "start_frame", "descriptor_count"):
+            value = getattr(self, name)
+            if value is not None and value < 0:
+                raise ValueError(f"{name} cannot be negative")
+        if self.transfer_flags is not None and not 0 <= self.transfer_flags <= 0xFFFFFFFF:
+            raise ValueError("transfer_flags must fit in four bytes")
 
 
 @dataclass(frozen=True)

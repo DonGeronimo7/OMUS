@@ -26,6 +26,19 @@ class TransactionAuthorizationError(TransactionError):
 class RetryableTransactionError(TransactionError):
     """The current step may be retried within its declared retry budget."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        side_effect_possible: bool = False,
+        retry_safe: bool = True,
+        recovery_required: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.side_effect_possible = side_effect_possible
+        self.retry_safe = retry_safe
+        self.recovery_required = recovery_required
+
 
 @dataclass(frozen=True)
 class TransactionAuthorization:
@@ -44,12 +57,39 @@ class TransactionContext:
     values: MutableMapping[str, Any] = field(default_factory=dict)
     completed: set[str] = field(default_factory=set)
     trace: list[tuple[str, str, Any]] = field(default_factory=list)
+    outcomes: list["TransactionOutcome"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class TransactionOutcome:
+    status: str
+    side_effect_possible: bool = False
+    retry_safe: bool = True
+    recovery_required: bool = False
+    expected_disconnect: bool = False
+    resulting_generation: int | None = None
 
 
 @dataclass(frozen=True)
 class StepResult:
     value: Any = None
     status: str = "success"
+    side_effect_possible: bool = False
+    retry_safe: bool = True
+    recovery_required: bool = False
+    expected_disconnect: bool = False
+    resulting_generation: int | None = None
+
+    @property
+    def outcome(self) -> TransactionOutcome:
+        return TransactionOutcome(
+            status=self.status,
+            side_effect_possible=self.side_effect_possible,
+            retry_safe=self.retry_safe,
+            recovery_required=self.recovery_required,
+            expected_disconnect=self.expected_disconnect,
+            resulting_generation=self.resulting_generation,
+        )
 
 
 class TransactionAdapter(Protocol):
@@ -154,7 +194,13 @@ class TransactionEngine:
                     raw_result = adapter.execute(step, ctx)
                     result = raw_result.value if isinstance(raw_result, StepResult) else raw_result
                     status = raw_result.status if isinstance(raw_result, StepResult) else "success"
+                    if isinstance(raw_result, StepResult):
+                        ctx.outcomes.append(raw_result.outcome)
                     if status == "retry":
+                        if raw_result.side_effect_possible or not raw_result.retry_safe:
+                            raise TransactionError(
+                                f"{spec.name}: step {index} cannot be resent until state is inspected"
+                            )
                         raise RetryableTransactionError(
                             f"{spec.name}: step {index} requested retry"
                         )
@@ -170,6 +216,16 @@ class TransactionEngine:
                     break
                 except RetryableTransactionError as exc:
                     last_error = exc
+                    if exc.side_effect_possible or not exc.retry_safe or exc.recovery_required:
+                        ctx.outcomes.append(TransactionOutcome(
+                            status="failure",
+                            side_effect_possible=exc.side_effect_possible,
+                            retry_safe=exc.retry_safe,
+                            recovery_required=exc.recovery_required,
+                        ))
+                        raise TransactionError(
+                            f"{spec.name}: step {index} cannot be resent until state is inspected"
+                        ) from exc
                     if attempt + 1 >= attempts:
                         break
                     if step.delay_ms:

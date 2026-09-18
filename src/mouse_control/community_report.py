@@ -24,6 +24,24 @@ def _safe_text(value: str) -> str:
     return re.sub(r"(?:/[A-Za-z0-9_.@:+-]+){2,}", "<redacted-path>", value)
 
 
+def _safe_nested(value: Any) -> Any:
+    """Recursively redact path text and reject identity-bearing key names."""
+
+    if isinstance(value, str):
+        return _safe_text(value)
+    if isinstance(value, list):
+        return [_safe_nested(item) for item in value]
+    if isinstance(value, tuple):
+        return [_safe_nested(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _safe_nested(item)
+            for key, item in value.items()
+            if not any(token in str(key).lower() for token in ("serial", "path", "username", "uniq"))
+        }
+    return value
+
+
 def _operation(name: str, capability: Any | None) -> dict[str, Any]:
     levels = tuple(item.level.name for item in capability.evidence) if capability else ()
     state = proof_state_from_evidence(levels)
@@ -35,7 +53,12 @@ def _operation(name: str, capability: Any | None) -> dict[str, Any]:
     }
 
 
-def build_community_report(result: DiscoveryResult, *, version: str) -> dict[str, Any]:
+def build_community_report(
+    result: DiscoveryResult,
+    *,
+    version: str,
+    integrated_evidence: dict[str, object] | None = None,
+) -> dict[str, Any]:
     """Build an allowlisted report; paths, serials, and instance IDs never enter it."""
     device = result.device
     interfaces = [
@@ -74,7 +97,7 @@ def build_community_report(result: DiscoveryResult, *, version: str) -> dict[str
         next_evidence.append("repeat nonuniform DPI-stage observations and physically calibrate absolute CPI")
     if operations["report_rate"]["proof_state"] not in {"verified", "proven"}:
         next_evidence.append("collect read-only polling observations for each hardware rate setting")
-    return {
+    report = {
         "schema": REPORT_SCHEMA,
         "mouse_control_version": version,
         "device": {
@@ -101,6 +124,9 @@ def build_community_report(result: DiscoveryResult, *, version: str) -> dict[str
             "requires_architecture_change": None,
         },
     }
+    if integrated_evidence is not None:
+        report["integrated_evidence"] = _safe_nested(integrated_evidence)
+    return report
 
 
 def render_community_report(report: dict[str, Any]) -> str:

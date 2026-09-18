@@ -15,7 +15,9 @@ from mouse_control.protocol_codec import (
     infer_trailing_checksums,
 )
 from mouse_control.protocol_grammar import CodecKind, CodecSpec
-from mouse_control.protocol_repertoire import DEFAULT_REPERTOIRE, match_repertoire
+from mouse_control.protocol_repertoire import (
+    DEFAULT_REPERTOIRE, SemanticExchange, match_repertoire, recognize_family_semantics,
+)
 from mouse_control.semantic_inference import infer_stage_hypotheses
 
 
@@ -157,3 +159,50 @@ def test_stage_inference_labels_repeated_small_state_changes_only_as_hypothesis(
     assert len(result) == 1
     assert result[0].behavior.value == "dpi_stage_index"
     assert result[0].confidence == "correlated"
+
+
+def _bitmouse_request(*, target: int, sequence: int, reply_length: int) -> bytes:
+    frame = bytearray(64)
+    frame[1:6] = bytes((0x72, target, sequence, 0x31, reply_length))
+    frame[0] = sum(frame[1:6]) & 0xFF
+    return bytes(frame)
+
+
+def test_bitmouse_semantic_phase_recognizes_grammar_but_never_authorizes_write() -> None:
+    n = node(vendor=0x9999, product=0x2222)
+    matches = match_repertoire(
+        physical(vendor=0x9999, product=0x2222, n=n),
+        {n: descriptor(
+            HidReportDefinition(0x72, "output", 64, (0xFF00,)),
+            HidReportDefinition(0x72, "input", 64, (0xFF00,)),
+        )},
+    )
+    structural = next(item for item in matches if item.family.name == "bitmouse-72")
+    request = _bitmouse_request(target=4, sequence=9, reply_length=3)
+    response = bytearray([0xEE] * 64)
+    response[:8] = bytes((0x72, 4, 9, 0, 3, 0x10, 0x20, 0x30))
+    semantic = recognize_family_semantics(
+        structural, (SemanticExchange(request, bytes(response)),)
+    )
+
+    assert semantic.recognized
+    assert semantic.semantic_records == (bytes(response[:8]),)
+    assert b"\xee" not in semantic.semantic_records[0]
+    assert semantic.write_authorized is False
+    assert structural.write_authorized is False
+
+
+def test_bitmouse_semantic_phase_refuses_sequence_collision() -> None:
+    n = node()
+    structural = next(item for item in match_repertoire(
+        physical(n=n), {n: descriptor(
+            HidReportDefinition(0x72, "output", 64, (0xFF00,)),
+            HidReportDefinition(0x72, "input", 64, (0xFF00,)),
+        )},
+    ) if item.family.name == "bitmouse-72")
+    request = _bitmouse_request(target=1, sequence=2, reply_length=1)
+    response = bytearray(64)
+    response[:6] = bytes((0x72, 1, 99, 0, 1, 7))
+    semantic = recognize_family_semantics(structural, (SemanticExchange(request, bytes(response)),))
+    assert not semantic.recognized
+    assert "sequence-correlation" in semantic.missing

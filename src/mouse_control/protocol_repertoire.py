@@ -28,6 +28,28 @@ from .protocol_grammar import (
 
 
 @dataclass(frozen=True)
+class SemanticExchange:
+    request: bytes
+    response: bytes
+
+
+@dataclass(frozen=True)
+class SemanticFamilyRecognition:
+    candidate: FamilyCandidate
+    matched: tuple[str, ...]
+    missing: tuple[str, ...]
+    semantic_records: tuple[bytes, ...]
+
+    @property
+    def recognized(self) -> bool:
+        return bool(self.matched) and not self.missing
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
 class FamilyCandidate:
     family: ProtocolFamily
     score: int
@@ -75,6 +97,26 @@ def _source(
 # classification but remain write-disabled until mouse-control proves them on
 # hardware or a modern upstream verification justifies promotion.
 DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
+    ProtocolFamily(
+        name="bitmouse-72",
+        revision="semantic-frame-v1",
+        sources=(
+            _source(
+                "source-derived semantic fixture",
+                "BITMOUSE 0x72 asymmetric request/reply grammar",
+                SourceTrust.REFERENCE,
+                notes="Independently expressed recognition facts; no runtime recipe or hardware qualification.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("output", 0x72, exact_length=64, vendor_usage_required=True, weight=6),
+            ReportSignature("input", 0x72, exact_length=64, vendor_usage_required=True, weight=6),
+        ),
+        transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=12,
+        notes="Structural compatibility requires semantic target/sequence/length discrimination.",
+    ),
     ProtocolFamily(
         name="hidpp2",
         revision="dynamic-root",
@@ -302,6 +344,55 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="Useful transaction-state-machine teacher; writes intentionally remain untrusted.",
     ),
 )
+
+
+def recognize_family_semantics(
+    candidate: FamilyCandidate,
+    exchanges: Iterable[SemanticExchange],
+) -> SemanticFamilyRecognition:
+    """Apply a safe passive semantic discriminator to a structural candidate."""
+
+    if candidate.family.name != "bitmouse-72":
+        return SemanticFamilyRecognition(candidate, (), ("no-safe-semantic-discriminator",), ())
+    matched: set[str] = set()
+    missing: set[str] = set()
+    records: list[bytes] = []
+    seen = False
+    for exchange in exchanges:
+        request, response = exchange.request, exchange.response
+        if len(request) != 64 or len(response) != 64:
+            missing.add("fixed-64-byte-hid-frame")
+            continue
+        seen = True
+        # Request: checksum, report, target, sequence, command, declared reply length.
+        if request[1] != 0x72 or response[0] != 0x72:
+            missing.add("asymmetric-0x72-report-placement")
+            continue
+        matched.add("asymmetric-0x72-report-placement")
+        semantic_end = 6
+        if request[0] != (sum(request[1:semantic_end]) & 0xFF):
+            missing.add("leading-request-checksum")
+        else:
+            matched.add("leading-request-checksum")
+        if response[1] != request[2]:
+            missing.add("target-correlation")
+        else:
+            matched.add("target-correlation")
+        if response[2] != request[3]:
+            missing.add("sequence-correlation")
+        else:
+            matched.add("sequence-correlation")
+        declared = response[4]
+        if declared != request[5] or 5 + declared > len(response):
+            missing.add("declared-semantic-reply-length")
+        else:
+            matched.add("declared-semantic-reply-length")
+            records.append(response[:5 + declared])
+    if not seen:
+        missing.add("passive-request-response-exchange")
+    return SemanticFamilyRecognition(
+        candidate, tuple(sorted(matched)), tuple(sorted(missing)), tuple(records)
+    )
 
 
 def observed_reports(

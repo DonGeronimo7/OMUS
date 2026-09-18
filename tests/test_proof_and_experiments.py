@@ -3,7 +3,9 @@ import pytest
 from mouse_control.experiment_authority import (
     ExperimentAuthority, ExperimentEligibility, ExperimentSpec, StorageEffect,
 )
-from mouse_control.proof_state import OperationProof, ProofState, ProofTransitionError
+from mouse_control.proof_state import (
+    EvidenceTruth, OperationEvidence, OperationProof, ProofState, ProofTransitionError,
+)
 
 
 def test_proof_is_operation_specific_and_cannot_skip_verification() -> None:
@@ -56,3 +58,21 @@ def test_unknown_or_persistent_experiment_remains_blocked() -> None:
     )
     assert result.eligibility is ExperimentEligibility.BLOCKED
 
+
+def test_operation_evidence_keeps_unknown_false_and_proof_authority_independent() -> None:
+    demonstrated = OperationEvidence(
+        transport_accepted=EvidenceTruth.TRUE,
+        protocol_response_valid=EvidenceTruth.TRUE,
+        readable_state_changed=EvidenceTruth.FALSE,
+        physical_effect_verified=EvidenceTruth.UNKNOWN,
+        failure_observed=EvidenceTruth.TRUE,
+        side_effect_after_failure=EvidenceTruth.UNKNOWN,
+        recovery_required=EvidenceTruth.TRUE,
+        recovery_verified=EvidenceTruth.FALSE,
+        evidence_source_ids=("trace:session-1/urb-7",),
+    )
+    proof = OperationProof("dpi.write").with_demonstrated(demonstrated)
+
+    assert proof.demonstrated.physical_effect_verified is EvidenceTruth.UNKNOWN
+    assert proof.demonstrated.readable_state_changed is EvidenceTruth.FALSE
+    assert proof.write_authorized is False
