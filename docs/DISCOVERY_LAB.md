@@ -11,7 +11,7 @@ second capture stack.
 ```text
 Hardware Discovery
 → Open Discovery Lab
-→ Run Full Automatic Lab — Differential Analyzer milestone
+→ Run Full Automatic Lab
 ```
 
 The first milestone runs the Differential Protocol Analyzer. Later Lab
@@ -96,19 +96,39 @@ measured only when the existing bounded-burst assembler retains an exact replay
 completion boundary; explicit-end or generation-change completion remains
 unknown when no completion timestamp exists.
 
-## Automatic run
+## Controlled Action Matrix and automatic run
 
-The current TUI run chooses the capture plan automatically:
+`LabExperimentPlan` is attached to, and produces, the existing
+`LabExperiment`. The planner considers passive, physical-only, external-vendor,
+bounded-engine, and unavailable actions. Automatic execution currently admits
+the first three classes. A bounded-engine action is excluded unless separately
+eligible under the experiment-authority model, and the plan never grants
+runtime write authority.
 
-1. untouched baseline;
-2. three isolated repeats of the labelled physical control;
-3. untouched post-action interval;
-4. ordinary motion plus one left click as a negative control;
-5. analysis, ranking, hypothesis generation, and next-experiment selection.
+The initial templates cover quiet baseline, ordinary movement, a generic
+button, one DPI stage, a multi-stage DPI sequence, disconnect/reconnect,
+charging transition, and an external vendor-setting demonstration. The planner:
 
-The user only performs the prompted physical actions. Mouse Control handles
-capture windows, repeat count, field and packet differences, timing,
-correlation, integrity analysis, ranking, and replay-fixture representation.
+1. partitions unresolved hypotheses with the existing information-gain model;
+2. rejects unsafe/unavailable actions and uses human effort only to break
+   equivalent-information ties;
+3. chooses bounded question-specific repeats and a semantic negative control;
+4. selects HID/Feature, USB/logical, dialogue, timing, differential, freshness,
+   dependency, integrity, topology, CPI, and polling instruments as relevant;
+5. derives baseline/action/post/control windows from retained timing evidence,
+   or records bounded-default uncertainty;
+6. executes baseline, prompted action, post-action, negative control, physical
+   verification, analysis, hypothesis update, and information-gain recalculation;
+7. records an explicit stop reason or retains the next best plan.
+
+The CPI verifier is selected for DPI ambiguity and asks for one measured-guide
+pass. The polling verifier is selected for polling ambiguity and measures
+selected-device motion timestamps. These remain independent physical evidence;
+neither assigns protocol semantics or authorizes a write.
+
+Hypotheses are never silently discarded. Supported, strengthened, weakened,
+rejected, conflicted, and unresolved states retain their positive and negative
+evidence. Plan/result replay fixtures are deterministic and privacy-redacted.
 
 ## Safety and privacy
 
@@ -125,10 +145,9 @@ correlation, integrity analysis, ranking, and replay-fixture representation.
 
 ## Deferred master-Lab milestones
 
-The controlled action matrix, multi-instrument information-gain orchestration,
-state/effect/persistence verifier,
+The state/effect/persistence verifier,
 receiver/child routing mapper, battery/charging investigator, vendor capture
-importer, complete multi-instrument automatic orchestrator,
+importer,
 `ProtocolKnowledgePackage`, automatic positive/negative contribution fixtures,
 repository contribution pipeline, and blind-device v1 acceptance suite remain
 bounded future milestones.

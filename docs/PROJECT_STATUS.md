@@ -1,5 +1,30 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab controlled-action orchestration milestone
+
+- The Lab now models all supported physical, passive, external-vendor,
+  bounded-engine, and unavailable action classes. Eight initial templates cover
+  quiet, movement, generic buttons, one/multiple DPI stages, reconnect,
+  charging, and vendor-setting demonstrations.
+- `LabExperimentPlan` selects the safest maximum-information action, instruments,
+  bounded repeat count, semantic negative control, timing-derived observation
+  windows, success/stop criteria, and minimum human instruction. Equal-value
+  actions are ordered by physical effort, duration, risk, equipment, and repeat
+  burden. Bounded engine actions remain excluded without separate authority.
+- Execution is event-driven and feeds every completed plan into the existing
+  Differential Analyzer. Hypotheses retain strengthened, supported, weakened,
+  rejected, conflicted, or unresolved outcomes and negative evidence. An
+  unresolved result retains the recalculated next plan; resolved, conflicted,
+  cancelled, and no-safe-action outcomes retain explicit stop reasons.
+- DPI and polling ambiguity automatically select and invoke the existing
+  independent physical CPI and polling verifiers in the TUI. Timing profiles
+  determine bounded capture/settling windows when available; conservative
+  defaults explicitly retain uncertainty otherwise.
+- Focused Lab/protocol/TUI/measurement/authority/security validation passes 122
+  tests; the complete suite passes 858 with the existing GLib warning.
+  Compileall and diff checks pass. Physical hardware validation remains pending.
+  No hardware write, install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — Discovery Lab protocol timing profiler milestone
 
 - `LabExperiment` now retains canonical timing observations and profiles derived

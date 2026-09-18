@@ -19,6 +19,7 @@ from .hardware import HardwareError, get_backend
 from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 from .performance import timed
+from .lab_orchestrator import initial_lab_hypotheses, plan_next_experiment
 
 
 def _format_timing_ns(value: int | None) -> str:
@@ -988,11 +989,30 @@ class SetupController:
             return rows
 
         if self.section is SetupSection.LAB:
-            rows = [
-                DisplayRow("Discovery Lab — Differential Protocol Analyzer"),
-                DisplayRow("Selected-device capture is local, bounded, and read-only."),
-            ]
             experiment = self.lab_experiment
+            plan = (
+                getattr(experiment, "next_plan", None)
+                or getattr(experiment, "plan", None)
+                or plan_next_experiment(initial_lab_hypotheses())
+            )
+            rows = [
+                DisplayRow("Discovery Lab — Automatic Experiment Planner"),
+                DisplayRow("Selected-device capture is local, bounded, and read-only."),
+                DisplayRow(f"Current question: {plan.purpose}"),
+            ]
+            if plan.selected_action is not None:
+                rows.extend([
+                    DisplayRow(f"Best experiment: {plan.selected_action.label}"),
+                    DisplayRow(
+                        f"Why: expected information gain {plan.expected_information_gain_bits:.2f} bits; "
+                        f"{plan.safety_class.value.replace('_', ' ')}."
+                    ),
+                    DisplayRow(
+                        "Mouse Control will automatically: capture baseline/action/control, "
+                        "profile timing, compare fields, and update hypotheses."
+                    ),
+                    DisplayRow(f"Your part: {plan.human_instructions[0]}"),
+                ])
             analysis = getattr(experiment, "analysis", None)
             if analysis is None:
                 rows.extend([
@@ -1069,8 +1089,25 @@ class SetupController:
                     rows.append(DisplayRow(
                         f"Uncertain: {len(analysis.contradictions)} negative-control contradiction(s)."
                     ))
+                updates = getattr(experiment, "hypothesis_updates", ())
+                strengthened = [item for item in updates if item.after.value in {"supported", "strengthened"}]
+                rejected = [item for item in updates if item.after.value in {"rejected", "weakened"}]
+                if strengthened:
+                    rows.append(DisplayRow(
+                        "Result: " + ", ".join(item.hypothesis_id for item in strengthened)
+                        + " gained evidence."
+                    ))
+                if rejected:
+                    rows.append(DisplayRow(
+                        "Rejected or weakened: " + ", ".join(item.hypothesis_id for item in rejected)
+                    ))
+                next_plan = getattr(experiment, "next_plan", None)
+                if next_plan is not None and next_plan.selected_action is not None:
+                    rows.append(DisplayRow(
+                        f"Next uncertainty: {next_plan.purpose}; try {next_plan.selected_action.label}."
+                    ))
             rows.extend([
-                DisplayRow("Run Full Automatic Lab — Differential Analyzer milestone", 0),
+                DisplayRow("Run Full Automatic Lab", 0),
                 DisplayRow(
                     f"Continue to {self._next_configuration_section(SetupSection.LAB).value.lower()} configuration",
                     1,

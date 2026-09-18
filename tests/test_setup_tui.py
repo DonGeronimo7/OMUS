@@ -494,6 +494,9 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
     assert app.section is SetupSection.LAB
     rows = app.detail_rows()
     assert any("Run Full Automatic Lab" in row.text for row in rows)
+    assert any("Current question:" in row.text for row in rows)
+    assert any("Best experiment:" in row.text for row in rows)
+    assert any("Your part:" in row.text for row in rows)
     assert app.handle_key("ENTER").kind is ActionKind.RUN_DISCOVERY_LAB
 
     analysis = SimpleNamespace(

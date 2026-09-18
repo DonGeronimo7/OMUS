@@ -15,12 +15,18 @@ from .device_topology import TopologyError
 from .discovery_lab import (
     DiscoveryLabCancelled,
     FieldSignal,
-    run_read_only_differential_lab,
+    LabInstrument,
+    LabStep,
+    PhysicalEvidence,
 )
+from .lab_orchestrator import execute_lab_plan, initial_lab_hypotheses, plan_next_experiment
+from .calibrated_discovery import capture_calibrated_motion
 from .guided_discovery import (
     GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_deep_dpi_stage_learning,
 )
 from .polling_observation import measure_current_polling
+from .sensor_calibration import measure_sensor_state_auto
+from .learning_session import ReadOnlyLearningSession
 from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
@@ -662,7 +668,7 @@ class CursesSetupApp:
         self._confirm("Deeper discovery result", lines, yes="Enter Continue", no="Esc Continue")
 
     def _run_discovery_lab(self) -> None:
-        """Run the first bounded Lab instrument over existing read-only capture."""
+        """Plan and run the safest highest-information read-only Lab experiment."""
 
         if self.controller.discovery_result is None or self.controller.discovery_engine is None:
             self.controller.status = "Run Automatic Discovery before starting the Discovery Lab."
@@ -670,13 +676,45 @@ class CursesSetupApp:
         result = self.controller.discovery_result
         engine = self.controller.discovery_engine
         generation = int(getattr(self.controller.backend, "generation", 0) or 0)
+        previous = getattr(self.controller.lab_experiment, "timing_profile", None)
+        plan = plan_next_experiment(initial_lab_hypotheses(), timing_profile=previous)
+
+        def verify_cpi(_plan):
+            if not self._lab_prompt(LabStep(1, 1, "Physical CPI verification", "Move the mouse exactly 10 inches (254 mm) along a straight measured guide.")):
+                raise DiscoveryLabCancelled("user_cancelled")
+            session = ReadOnlyLearningSession(result.device, engine.descriptors)
+            captured = capture_calibrated_motion(
+                session, evdev_path=self.controller.selected.path, seconds=8.0,
+            )
+            measured = measure_sensor_state_auto(
+                captured.calibration_events, distance_mm=254.0,
+            )
+            return (
+                PhysicalEvidence("physical_cpi", measured.estimated_dpi, "CPI", "observed"),
+            )
+
+        def verify_polling(_plan):
+            if not self._lab_prompt(LabStep(1, 1, "Physical polling verification", "Move the selected mouse continuously and briskly during the capture.")):
+                raise DiscoveryLabCancelled("user_cancelled")
+            measured = measure_current_polling(self.controller.selected.path, seconds=3.0)
+            value = measured.standard_hz if measured.standard_hz is not None else (measured.inferred_hz or 0.0)
+            return (
+                PhysicalEvidence("physical_polling", value, "Hz", measured.confidence),
+            )
+
+        verifiers = {
+            LabInstrument.CPI_VERIFIER: verify_cpi,
+            LabInstrument.POLLING_VERIFIER: verify_polling,
+        }
         try:
-            experiment = run_read_only_differential_lab(
+            experiment = execute_lab_plan(
                 result.device,
                 engine.descriptors,
+                plan,
                 prompt=self._lab_prompt,
-                progress=self._guided_progress,
+                progress=lambda event: self._guided_progress(event.message),
                 connection_generation=generation,
+                verifier_runners=verifiers,
             )
         except DiscoveryLabCancelled:
             self.controller.status = "Discovery Lab cancelled; retained evidence and authority are unchanged."
@@ -699,7 +737,7 @@ class CursesSetupApp:
         if recommendation is not None:
             lines.append(f"→ Next recommended experiment: {recommendation.experiment.replace('_', ' ')}")
         lines.append("No hardware write was attempted or authorized.")
-        self._confirm("Differential Protocol Analyzer", lines, yes="Enter Inspect result", no="Esc Inspect result")
+        self._confirm("Automatic Discovery Lab", lines, yes="Enter Inspect result", no="Esc Inspect result")
 
     def _suspend_curses(self, function: Callable[[], Any]) -> Any:
         assert self.stdscr is not None

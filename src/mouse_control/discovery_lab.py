@@ -87,6 +87,212 @@ class FieldSignal(str, Enum):
     STALE_OR_PADDING = "stale_or_padding"
 
 
+class ControlledActionType(str, Enum):
+    QUIET = "quiet"
+    MOVE_MOUSE = "move_mouse"
+    STOP_MOVEMENT = "stop_movement"
+    DPI_BUTTON_UP = "dpi_button_up"
+    DPI_BUTTON_DOWN = "dpi_button_down"
+    DPI_BUTTON_GENERIC = "dpi_button_generic"
+    PROFILE_NEXT = "profile_next"
+    PROFILE_PREVIOUS = "profile_previous"
+    MOUSE_BUTTON_PRESS = "mouse_button_press"
+    CONNECT_CABLE = "connect_cable"
+    DISCONNECT_CABLE = "disconnect_cable"
+    CONNECT_RECEIVER = "connect_receiver"
+    DISCONNECT_RECEIVER = "disconnect_receiver"
+    CONNECT_CHARGING = "connect_charging"
+    DISCONNECT_CHARGING = "disconnect_charging"
+    POWER_CYCLE = "power_cycle"
+    VENDOR_CHANGE_DPI = "vendor_change_dpi"
+    VENDOR_CHANGE_POLLING = "vendor_change_polling"
+    VENDOR_CHANGE_PROFILE = "vendor_change_profile"
+    CUSTOM_LABELLED_ACTION = "custom_labelled_action"
+
+
+class ActionSafetyClass(str, Enum):
+    PASSIVE = "passive"
+    PHYSICAL_ONLY = "physical_only"
+    EXTERNAL_VENDOR_DEMONSTRATION = "external_vendor_demonstration"
+    BOUNDED_ENGINE_EXPERIMENT = "bounded_engine_experiment"
+    UNAVAILABLE = "unavailable"
+
+
+class LabInstrument(str, Enum):
+    HID_OBSERVATION = "hid_observation"
+    FEATURE_BASELINE = "feature_baseline"
+    SELECTED_DEVICE_USBMON = "selected_device_usbmon"
+    LOGICAL_RECORD_RECONSTRUCTION = "logical_record_reconstruction"
+    TEMPORAL_DIALOGUE = "temporal_dialogue"
+    PROTOCOL_TIMING_PROFILER = "protocol_timing_profiler"
+    DIFFERENTIAL_ANALYZER = "differential_analyzer"
+    CPI_VERIFIER = "cpi_verifier"
+    POLLING_VERIFIER = "polling_verifier"
+    FRESHNESS_ANALYSIS = "freshness_analysis"
+    DEPENDENCY_INFERENCE = "dependency_inference"
+    INTEGRITY_INFERENCE = "integrity_inference"
+    RECEIVER_TOPOLOGY = "receiver_topology"
+
+
+class LabStopReason(str, Enum):
+    HYPOTHESIS_RESOLVED = "hypothesis_resolved"
+    SEMANTIC_CORRELATION_CONFIRMED = "semantic_correlation_confirmed"
+    FAMILY_RECOGNIZED = "family_recognized"
+    INSUFFICIENT_SAFE_ACTIONS = "insufficient_safe_actions"
+    VENDOR_CAPTURE_REQUIRED = "vendor_capture_required"
+    POWER_CYCLE_REQUIRED = "power_cycle_required"
+    HARDWARE_REQUIRED = "hardware_required"
+    CONFLICT_FOUND = "conflict_found"
+    USER_CANCELLED = "user_cancelled"
+
+
+class HypothesisDisposition(str, Enum):
+    SUPPORTED = "supported"
+    STRENGTHENED = "strengthened"
+    WEAKENED = "weakened"
+    REJECTED = "rejected"
+    CONFLICTED = "conflicted"
+    UNRESOLVED = "unresolved"
+
+
+class LabProgressStage(str, Enum):
+    PLAN = "plan"
+    BASELINE = "baseline"
+    USER_PROMPT = "user_prompt"
+    ACTION_CAPTURE = "action_capture"
+    POST_ACTION = "post_action"
+    NEGATIVE_CONTROL = "negative_control"
+    REPEAT = "repeat"
+    PHYSICAL_VERIFICATION = "physical_verification"
+    ANALYSIS = "analysis"
+    HYPOTHESIS_UPDATE = "hypothesis_update"
+    INFORMATION_GAIN_RECALCULATION = "information_gain_recalculation"
+
+
+@dataclass(frozen=True)
+class ControlledAction:
+    action_id: str
+    action_type: ControlledActionType
+    label: str
+    safety_class: ActionSafetyClass
+    human_instruction: str
+    physical_effort: int = 1
+    duration_cost: int = 1
+    risk_cost: int = 0
+    equipment_cost: int = 0
+    repeat_burden: int = 1
+    semantic_tags: tuple[str, ...] = ()
+
+    @property
+    def human_cost(self) -> int:
+        return self.physical_effort + self.duration_cost + self.risk_cost + self.equipment_cost + self.repeat_burden
+
+
+@dataclass(frozen=True)
+class ObservationWindowPlan:
+    baseline_seconds: float
+    action_seconds: float
+    post_action_seconds: float
+    negative_control_seconds: float
+    settling_seconds: float = 0.0
+    source: str = "bounded conservative default"
+    uncertainty: str | None = None
+
+
+@dataclass(frozen=True)
+class LabHypothesis:
+    hypothesis_id: str
+    question: str
+    claim: str
+    topic: str
+    predicted_outcomes: Mapping[str, Any]
+    weight: float = 1.0
+    candidate_field: tuple[str, int] | None = None
+    disposition: HypothesisDisposition = HypothesisDisposition.UNRESOLVED
+    evidence: tuple[str, ...] = ()
+    negative_evidence: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class HypothesisUpdate:
+    hypothesis_id: str
+    before: HypothesisDisposition
+    after: HypothesisDisposition
+    evidence: tuple[str, ...]
+    negative_evidence: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LabExperimentPlan:
+    plan_id: str
+    purpose: str
+    target_hypotheses: tuple[LabHypothesis, ...]
+    candidate_actions: tuple[ControlledAction, ...]
+    selected_action: ControlledAction | None
+    baseline_requirements: tuple[str, ...]
+    action_capture_requirements: tuple[str, ...]
+    post_action_requirements: tuple[str, ...]
+    negative_control_requirements: tuple[str, ...]
+    negative_control: ControlledAction | None
+    repeat_count: int
+    instruments: tuple[LabInstrument, ...]
+    success_criteria: tuple[str, ...]
+    stop_criteria: tuple[str, ...]
+    expected_information_gain_bits: float
+    safety_class: ActionSafetyClass
+    human_instructions: tuple[str, ...]
+    windows: ObservationWindowPlan
+    stop_reason: LabStopReason | None = None
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+    def replay_fixture(self) -> dict[str, object]:
+        return {
+            "plan_id": self.plan_id,
+            "purpose": self.purpose,
+            "target_hypotheses": [
+                {
+                    "hypothesis_id": item.hypothesis_id,
+                    "question": item.question,
+                    "claim": item.claim,
+                    "topic": item.topic,
+                    "weight": item.weight,
+                    "candidate_field": list(item.candidate_field) if item.candidate_field else None,
+                    "disposition": item.disposition.value,
+                }
+                for item in sorted(self.target_hypotheses, key=lambda item: item.hypothesis_id)
+            ],
+            "candidate_actions": [item.action_id for item in self.candidate_actions],
+            "selected_action": self.selected_action.action_id if self.selected_action else None,
+            "negative_control": self.negative_control.action_id if self.negative_control else None,
+            "repeat_count": self.repeat_count,
+            "instruments": [item.value for item in self.instruments],
+            "expected_information_gain_bits": self.expected_information_gain_bits,
+            "safety_class": self.safety_class.value,
+            "human_instructions": list(self.human_instructions),
+            "windows": {
+                "baseline_seconds": self.windows.baseline_seconds,
+                "action_seconds": self.windows.action_seconds,
+                "post_action_seconds": self.windows.post_action_seconds,
+                "negative_control_seconds": self.windows.negative_control_seconds,
+                "settling_seconds": self.windows.settling_seconds,
+                "source": self.windows.source,
+                "uncertainty": self.windows.uncertainty,
+            },
+            "stop_reason": self.stop_reason.value if self.stop_reason else None,
+        }
+
+
+@dataclass(frozen=True)
+class LabProgressEvent:
+    stage: LabProgressStage
+    message: str
+    completed: int
+    total: int
+
+
 @dataclass(frozen=True)
 class ProtocolObservation:
     """One path-independent protocol frame assigned to a Lab interval."""
@@ -347,6 +553,10 @@ class LabExperiment:
     confidence: str = "observed"
     timing_profile: ProtocolTimingProfile | None = None
     analysis: DifferentialAnalysis | None = None
+    plan: LabExperimentPlan | None = None
+    hypothesis_updates: tuple[HypothesisUpdate, ...] = ()
+    stop_reason: LabStopReason | None = None
+    next_plan: LabExperimentPlan | None = None
 
     def __post_init__(self) -> None:
         if not self.experiment_id or not self.purpose:
@@ -409,6 +619,7 @@ class LabExperiment:
             "connection_generation": self.connection_generation,
             "purpose": self.purpose,
             "human_action": self.human_action,
+            "plan": self.plan.replay_fixture() if self.plan is not None else None,
             "observations": [
                 {
                     "source_id": redact_id(item.source_id),
@@ -461,6 +672,18 @@ class LabExperiment:
                 }
                 for item in (timing.summaries if timing is not None else ())
             ],
+            "hypothesis_updates": [
+                {
+                    "hypothesis_id": item.hypothesis_id,
+                    "before": item.before.value,
+                    "after": item.after.value,
+                    "evidence": list(item.evidence),
+                    "negative_evidence": list(item.negative_evidence),
+                }
+                for item in sorted(self.hypothesis_updates, key=lambda item: item.hypothesis_id)
+            ],
+            "stop_reason": self.stop_reason.value if self.stop_reason else None,
+            "next_plan": self.next_plan.replay_fixture() if self.next_plan is not None else None,
         }
 
 

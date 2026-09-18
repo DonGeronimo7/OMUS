@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab controlled-action orchestration
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `89a78e1` and
+  reused `LabExperiment`, timing, differential, inference, physical verifier,
+  proof, authority, and TUI layers rather than adding a second evidence model.
+- Added the full controlled-action vocabulary, five safety classes, eight
+  initial action templates, canonical experiment plans, timing-derived bounded
+  windows, semantic negative controls, question-specific repeats, multi-
+  instrument selection, and information-gain choice with human-cost tie breaks.
+- The event-driven executor captures the existing canonical intervals, invokes
+  automatically selected CPI/polling verification, always runs the Differential
+  Analyzer, retains hypothesis lifecycle and negative evidence, records explicit
+  stop reasons, and recalculates the next safe experiment when ambiguity remains.
+- The Lab page now explains the current question, best experiment, why it was
+  selected, automatic work, the user's minimum physical action, strengthened or
+  rejected findings, and the next uncertainty.
+- Safety/privacy: no generic write primitive or authority transition was added;
+  bounded-engine actions need separate existing authority; plans and experiments
+  always report `write_authorized == false`; replay is deterministic, local,
+  selected-device scoped, and excludes evdev/keyboard/clipboard/screen history.
+- Validation: 122 focused Lab/protocol/TUI/measurement/authority/security tests
+  and 858 full-suite tests pass with the existing GLib warning; compileall and
+  diff checks pass. Physical validation remains pending. No install, push,
+  merge, tag, release, or hardware write occurred.
+- Next bounded milestone: state/effect/persistence verifier using the same plan,
+  experiment, timing, proof, and authority boundaries.
+
 ## 2026-09-18 — Discovery Lab protocol timing profiler
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `91cdbd2`; reused
