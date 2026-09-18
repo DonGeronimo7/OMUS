@@ -116,6 +116,32 @@ A successful calibrated run may persist:
 
 Volatile `/dev` paths are rejected from persisted profiles.
 
+## Native protocol knowledge and discovery repertoire
+
+Mouse Control's protocol knowledge has two deliberately different roles:
+
+1. **Runtime protocol adapters** may execute operations after exact identity,
+   responder ownership, operation semantics, and verification requirements are
+   satisfied. The current native adapters are dynamic Logitech HID++ 2 and the
+   exact-modeled Razer 90-byte RPC implementation.
+2. **Discovery repertoire entries** describe reusable family structure,
+   transports, report signatures, codecs, transaction facts, provenance, and
+   safety limits. They help classify observations and select the next useful
+   evidence; they do not automatically become runtime drivers.
+
+The current repertoire records HID++ 2 and Razer knowledge alongside sourced
+facts for ASUS ROG command-64, SteelSeries direct-command, Sinowealth/ODM
+configuration blobs, Attack Shark X11 feature reports, AJAZZ AJ-series feature
+reports, MCHOSE V3 block RPC, and a BITMOUSE-style `0x72` grammar. The source of
+each fact, its verification strength, its transport, and its write scope are
+declared in `protocol_repertoire.py`.
+
+This list is not a vendor compatibility table. Some entries have only passive
+structural or semantic discriminators; some intentionally set write scope to
+`NEVER`; exact-model entries still require the matching evidence before an
+operation can execute. A vendor ID or familiar packet shape alone is never
+support and never write authority.
+
 ## Universal backend contract
 
 Discovery is the one hardware-backend surface exposed to the rest of Mouse

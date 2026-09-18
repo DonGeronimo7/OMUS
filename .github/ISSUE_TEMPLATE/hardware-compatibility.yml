@@ -1,12 +1,21 @@
-name: Hardware compatibility
-description: Report a successful or unsuccessful Mouse Control test with a mouse model
-title: "[Hardware]: "
+name: New mouse / discovery result
+description: Share a successful or unsuccessful test of a mouse model
+title: "[Mouse]: "
 body:
   - type: markdown
     attributes:
       value: |
-        Successful reports are as valuable as failures. Do not include credentials,
-        usernames, home-directory paths, serial numbers, or unrelated private information.
+        Your mouse does not need to be on the compatibility list. Successful,
+        partial, and unsuccessful discovery results all help. Please run:
+
+        `mouse-control support --guided`
+
+        and, when possible:
+
+        `mouse-control discover --output mouse-control-discovery.json`
+
+        Attach the generated files after reviewing them. Do not include credentials,
+        serial numbers, input history, or private information you do not want to share.
   - type: input
     id: mouse
     attributes:
@@ -18,6 +27,7 @@ body:
     attributes:
       label: Connection type
       placeholder: "USB wired, 2.4 GHz receiver, Bluetooth, etc."
+    validations: {required: true}
   - type: input
     id: distribution
     attributes: {label: Distribution and version, placeholder: "Example: Fedora 44"}
@@ -27,7 +37,7 @@ body:
     attributes: {label: Desktop environment or compositor, placeholder: "Example: GNOME on Wayland"}
   - type: input
     id: version
-    attributes: {label: Mouse Control version, placeholder: "Example: 0.7.2"}
+    attributes: {label: Mouse Control version, placeholder: "Example: 0.9.5"}
     validations: {required: true}
   - type: dropdown
     id: install
@@ -47,13 +57,22 @@ body:
       label: What did you test?
       options:
         - {label: Device detected}
+        - {label: Guided Discovery completed}
+        - {label: Physical DPI button was detected}
         - {label: Setup completed}
         - {label: Button remapping works}
         - {label: Configuration persists after restart}
         - {label: DPI control works}
         - {label: DPI notification works, if applicable}
         - {label: Polling-rate configuration works, if applicable}
+        - {label: Mouse and mappings recover after reconnect}
         - {label: Background service works}
+  - type: textarea
+    id: recognition
+    attributes:
+      label: What did Mouse Control recognize?
+      description: "Copy the plain-language result shown in Hardware / Discovery. No protocol knowledge is required."
+      placeholder: "Example: device detected; DPI button observed; DPI write command not yet proven."
   - type: textarea
     id: details
     attributes:
@@ -61,8 +80,9 @@ body:
       placeholder: "Please mention whether normal mouse operation continued to work."
     validations: {required: true}
   - type: textarea
-    id: doctor
+    id: attachments
     attributes:
-      label: Sanitized mouse-control doctor --report output
-      description: "Review before submitting; remove anything you do not want to share."
-      render: text
+      label: Generated report files
+      description: "Drag the support report and discovery JSON into this box. Review both files before posting."
+      placeholder: "Drag files here, or explain why a report could not be created."
+    validations: {required: true}

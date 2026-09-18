@@ -4,25 +4,42 @@ Contributions are welcome, especially hardware compatibility reports. This
 project needs reports from mice that work perfectly as much as reports of
 failures: together they build an evidence-based compatibility database.
 
-## Report a bug or mouse result
+## Test a mouse
 
-Use the [Hardware compatibility template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml) for any mouse result, including a fully working setup. Use the bug-report template for reproducible application problems that are not primarily hardware compatibility reports.
+Use the [New mouse / discovery result template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml)
+for any mouse result, including a fully working setup. Unknown, obscure, OEM,
+rebrand, wireless, older, and unusual devices are especially useful.
 
-Before filing, run:
+Run the normal guided flow first:
 
 ```bash
-mouse-control doctor --report
+mouse-control
 ```
 
-Include the relevant output after reviewing it. The report is designed to omit
-usernames, home paths, serial numbers, cache contents, and unrelated USB
-devices, but please do not include credentials, private logs, or identifying
-information you do not want to make public.
+Select the mouse and open **Hardware / Discovery**. If guided discovery is
+offered, follow it; you do not need to understand HID or mouse protocols.
 
-For hardware reports, include the manufacturer/model, connection type,
-distribution, desktop environment or compositor when relevant, installation
-method, Mouse Control version, and what worked or failed. Successful reports
-are particularly valuable right now.
+Then create both shareable reports when possible:
+
+```bash
+mouse-control support --guided
+mouse-control discover --output mouse-control-discovery.json
+```
+
+The support command saves a text report in your home directory. The discovery
+command saves an allowlisted JSON artifact at the path you choose. These reports
+are designed to omit usernames, device paths, serial numbers, input history,
+cache contents, and unrelated USB devices. Review every file before posting and
+remove anything you do not want to share.
+
+Include the exact model, connection type, distribution, installation method,
+Mouse Control version, what discovery recognized, what worked or failed,
+whether DPI/polling changes were observed, and reconnect behavior. Do not spend
+time manually collecting identifiers already present in the generated reports.
+
+Use the bug-report template for reproducible application problems on an
+already-understood setup, and the feature-request template for product or
+workflow proposals.
 
 ## Pull requests
 

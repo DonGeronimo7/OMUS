@@ -1,5 +1,28 @@
 # AI handoff log
 
+## 2026-09-17 — GitHub discovery onboarding overhaul
+
+- Reframed the repository landing page as native Linux mouse configuration
+  backed by a multi-protocol discovery engine, with package installation,
+  direct TUI launch, and the unsupported-mouse testing path above the technical
+  architecture.
+- Distinguished direct runtime adapters (dynamic HID++ 2 and exact-model Razer
+  RPC) from the broader sourced discovery repertoire; repertoire recognition
+  is explicitly not presented as device support or write authority.
+- Documented the current human-readable support report and allowlisted
+  Automatic Discovery JSON workflow, then aligned contributor guidance and the
+  new-mouse issue form around attaching those artifacts. Added a concise feature
+  request form and more useful bug-environment fields.
+- Verified GitHub's published latest release as v0.9.5 with the documented RPM,
+  DEB, AppImage, wheel, and source asset names. Verified documented primary,
+  support, discovery, updater, and CPI commands against current CLI help.
+- Documentation checks: all issue-form YAML parsed; all local Markdown links in
+  changed documentation resolved; `git diff --check` passed.
+- Automated validation: `python3 -m compileall -q src tests` passed;
+  `PYTHONPATH=src pytest -q` passed 684 tests with one existing GLib deprecation
+  warning. No code or hardware behavior changed; no physical validation was
+  performed.
+
 ## 2026-09-17 — v0.9.5 macro and release gate
 
 - Starting point: `e0a1041` on `codex/persistent-discovery-fast-tui`, clean

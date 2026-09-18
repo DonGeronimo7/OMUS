@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a user-facing feature or workflow improvement
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For support or discovery results from a particular mouse, use the
+        **New mouse / discovery result** form. This form is for product and
+        workflow proposals.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      placeholder: "Describe the user need rather than only the proposed implementation."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Mouse Control to do?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: "Include relevant hardware and safety constraints, if any."

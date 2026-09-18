@@ -5,7 +5,10 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: "Please do not include credentials, usernames, home-directory paths, serial numbers, or unrelated private information."
+      value: |
+        Use **New mouse / discovery result** instead if the main question is
+        whether a model is supported. Please do not include credentials, serial
+        numbers, input history, or unrelated private information.
   - type: textarea
     id: happened
     attributes:
@@ -18,6 +21,18 @@ body:
       label: Steps to reproduce
     validations:
       required: true
+  - type: input
+    id: version
+    attributes:
+      label: Mouse Control version and installation method
+      placeholder: "Example: 0.9.5 RPM"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Linux distribution and desktop session
+      placeholder: "Example: Fedora 44, GNOME on Wayland"
   - type: textarea
     id: doctor
     attributes:
