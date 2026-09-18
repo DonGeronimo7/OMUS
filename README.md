@@ -6,7 +6,7 @@ Open-source Linux gaming mouse remapping and hardware discovery: map mouse
 buttons to keyboard keys, configure proven DPI and polling rates, and safely
 help expand support for new hardware.
 
-[![Current release: v0.9.3](https://img.shields.io/badge/current%20release-v0.9.3-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.3)
+[![Current release: v0.9.4](https://img.shields.io/badge/current%20release-v0.9.4-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.4)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
@@ -19,14 +19,14 @@ vendor-specific hardware control.
 
 Where a validated backend exists, Mouse Control also exposes DPI and
 polling/report-rate control. Native Logitech HID++ support is built in,
-OpenRazer is optional, and Automatic Discovery can safely gather evidence for
+exact-model native Razer support is built in, and Automatic Discovery can safely gather evidence for
 unknown hardware without guessing write commands.
 
-## Current release: v0.9.3
+## Current release: v0.9.4
 
-The current release is [v0.9.3](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.3).
+The current release is [v0.9.4](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.4).
 
-Mouse Control v0.9.3 promotes the validated Automatic Hardware Discovery
+Mouse Control v0.9.4 promotes the validated Automatic Hardware Discovery
 checkpoint: learned HID state is persisted with descriptor-backed semantic
 identity, rebound conservatively after reconnect, and exposed through the
 normal setup and runtime paths without guessing unknown-device writes.
@@ -47,6 +47,11 @@ sections for:
 - Polling
 - Service
 - Review / Save
+
+Running `mouse-control` without a command from an interactive terminal opens
+this same TUI immediately. Redirected or otherwise noninteractive setup is
+rejected with a clear error before curses starts; there is no legacy prompt
+wizard fallback.
 
 If the selected mouse already has proven hardware support, setup simply shows
 those capabilities and lets you configure them. If the mouse is unknown,
@@ -112,7 +117,7 @@ is already proven for the selected mouse.
 - Configures polling/report rate only through validated writable capabilities.
 - Uses native Logitech HID++ discovery for supported capabilities.
 - Uses independently PROVEN exact-model learned operations where available.
-- Uses optional OpenRazer integration for applicable Razer hardware.
+- Uses native, readback-verified control for explicitly modeled Razer hardware.
 - Falls back to read-only generic HID diagnostics plus evdev/uinput remapping.
 - Preserves DPI notifications, reconnect recovery, late receiver insertion,
   battery/tray behavior, and user-service controls from the v0.9.0 runtime.
@@ -122,19 +127,19 @@ and unrelated hardware features.
 
 ## Get Mouse Control
 
-Release page: [Mouse Control v0.9.3](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.3)
+Release page: [Mouse Control v0.9.4](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.4)
 
-- **Fedora / Nobara / RPM:** [mouse-control-0.9.3-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control-0.9.3-1.fc44.noarch.rpm)
-- **Debian / Ubuntu / Mint:** [mouse-control_0.9.3-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control_0.9.3-1_all.deb)
-- **Other distributions:** [Mouse-Control-0.9.3-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/Mouse-Control-0.9.3-x86_64.AppImage)
+- **Fedora / Nobara / RPM:** [mouse-control-0.9.4-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control-0.9.4-1.fc44.noarch.rpm)
+- **Debian / Ubuntu / Mint:** [mouse-control_0.9.4-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control_0.9.4-1_all.deb)
+- **Other distributions:** [Mouse-Control-0.9.4-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/Mouse-Control-0.9.4-x86_64.AppImage)
 - **Arch Linux:** included [`PKGBUILD`](PKGBUILD)
-- **Python wheel:** [mouse_control-0.9.3-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3-py3-none-any.whl)
-- **Source:** [mouse_control-0.9.3.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3.tar.gz)
+- **Python wheel:** [mouse_control-0.9.4-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4-py3-none-any.whl)
+- **Source:** [mouse_control-0.9.4.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4.tar.gz)
 
 ### Fedora, Nobara, and other RPM systems
 
 ```bash
-sudo dnf install ./mouse-control-0.9.3-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.9.4-1.fc44.noarch.rpm
 ```
 
 The RPM installs the Python/runtime dependencies, desktop launcher, icons, and
@@ -143,14 +148,14 @@ Mouse Control udev rules. It does not silently enable the background service.
 ### Debian, Ubuntu, Mint, and other DEB systems
 
 ```bash
-sudo apt install ./mouse-control_0.9.3-1_all.deb
+sudo apt install ./mouse-control_0.9.4-1_all.deb
 ```
 
 ### AppImage
 
 ```bash
-chmod +x Mouse-Control-0.9.3-x86_64.AppImage
-./Mouse-Control-0.9.3-x86_64.AppImage setup
+chmod +x Mouse-Control-0.9.4-x86_64.AppImage
+./Mouse-Control-0.9.4-x86_64.AppImage setup
 ```
 
 The AppImage bundles user-space application components but does not replace host
@@ -174,7 +179,7 @@ mouse-control update
 ```
 
 Use `mouse-control update --check` for a non-modifying check and
-`mouse-control update --yes` for a non-interactive update. v0.9.3 retains
+`mouse-control update --yes` for a non-interactive update. v0.9.4 retains
 visible interactive package-manager confirmation input instead of waiting for
 an unseen prompt.
 
@@ -228,6 +233,27 @@ mouse-control status
 ```
 
 `mouse-control run` remains the explicit foreground/debug command.
+
+## Measure physical CPI
+
+Mouse Control includes a vendor-neutral ruler calibration mode:
+
+```bash
+mouse-control cpi --help
+mouse-control cpi --distance-mm 50.8
+```
+
+It measures physical counts per inch and observed polling from raw Linux evdev
+motion without sending a vendor-protocol command. The guided session asks for
+repeated straight ruler passes, reports confidence and outliers, and can compare
+the result with an optional configured label using `--known-dpi`. Stop the Mouse
+Control service first if it currently owns the selected mouse, because CPI
+capture temporarily grabs that evdev stream exclusively.
+
+The same installed Python measurement API is used by Automatic Discovery,
+guided calibration, polling qualification, and write-promotion verification.
+Mouse Control intentionally does not install `mouse-dpi-tool`, which remains a
+separate libevdev command name.
 
 ## Buttons and configuration
 
@@ -317,8 +343,8 @@ Mouse Control starts safe and becomes more capable only when it has real
 evidence for your exact mouse:
 
 1. It recognizes the physical mouse and its Linux connections.
-2. It checks for a built-in, validated driver such as Logitech HID++ or an
-   optional integration such as OpenRazer.
+2. It checks for a built-in, validated implementation such as Logitech HID++
+   or exact-model native Razer RPC.
 3. If a feature is already proven for that exact model, setup offers it.
 4. Otherwise, it stays read-only, can offer Guided Discovery, and leaves
    ordinary remapping fully available.
@@ -336,7 +362,7 @@ The detailed evidence-based record is in
 | --- | --- | --- |
 | Logitech G305 | Fully tested reference | Button remapping, DPI, DPI notifications, and 1000/500/250/125 Hz polling have been tested on real hardware. |
 | Other Logitech HID++ mice | Promising, model-by-model | Mouse Control discovers the needed details live, but G305 results are not assumed to apply to another model. |
-| OpenRazer-compatible mice | Optional support | Availability depends on OpenRazer and each mouse's supported features; broader real-hardware testing is still welcome. |
+| Modeled Razer Viper V2/V3 variants | Native exact-model support | DPI, polling, firmware and applicable battery state use native RPC with readback; broader real-hardware testing is still welcome. |
 | Any other mouse | Safe fallback | Button remapping and read-only diagnostics can work even when DPI and polling controls are not yet proven. |
 
 ## Device permissions
@@ -379,12 +405,12 @@ setting path separate from the notification sent when the physical DPI button
 is pressed. This prevents one kind of hardware message from being mistaken for
 another.
 
-## Optional OpenRazer integration
+## Native Razer protocol support
 
-OpenRazer is optional. If it is unavailable, or your Razer mouse lacks a
-supported feature, Mouse Control still keeps normal remapping available. Install
-OpenRazer through your Linux distribution, then run Mouse Control as your normal
-desktop user.
+Mouse Control does not require the OpenRazer daemon, kernel module, D-Bus API,
+or Python client. OpenRazer remains protocol provenance only. Exact modeled
+devices use Mouse Control's native 90-byte RPC implementation; unknown Razer
+devices remain read-only and keep normal remapping available.
 
 ## What Mouse Control intentionally does not do
 
@@ -399,7 +425,7 @@ without risking a guessed hardware command.
 ## Safety and compatibility contract
 
 The complete v0.8.2 stability contract, plus the v0.9.0 runtime behavior and
-v0.9.1 TUI, remains the compatibility baseline for v0.9.3 and future releases.
+v0.9.1 TUI, remains the compatibility baseline for v0.9.4 and future releases.
 In particular, development must not regress:
 
 - ordinary evdev/uinput remapping;
@@ -423,9 +449,11 @@ PYTHONPATH=src pytest -q
 python -m compileall -q src tests
 ```
 
-The v0.9.3 release checkpoint passes 658 automated tests with one known GLib
-deprecation warning. Compile and whitespace checks, packaging, physical
-hardware smoke, and published-asset validation remain explicit release gates.
+The v0.9.4 release checkpoint passes 664 automated tests with one known GLib
+deprecation warning. Compile and whitespace checks, Python sdist/wheel, Fedora
+RPM (including `%check` and packaged CLI smoke), Debian package, and AppImage
+build/smoke validation pass. Final v0.9.4 G305 physical acceptance passed on
+the installed RPM; published-asset validation remains the final release gate.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions and hardware reports.
 See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for release-specific details.

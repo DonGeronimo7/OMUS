@@ -48,6 +48,22 @@ def test_rpm_packages_every_declared_console_script():
     assert packaged == scripts
 
 
+def test_primary_cli_exposes_cpi_without_claiming_libevdev_command_name():
+    scripts = _project()["scripts"]
+    assert "mouse-control" in scripts
+    assert "mouse-dpi-tool" not in scripts
+    assert "cpi" in _text("src/mouse_control/cli.py")
+    assert "mouse-control cpi --help" in _text("mouse-control.spec")
+
+
+def test_release_artifacts_smoke_test_primary_cpi_command():
+    if not (ROOT / ".github/workflows/release-artifacts.yml").exists():
+        return
+    workflow = _text(".github/workflows/release-artifacts.yml")
+    assert workflow.count("mouse-control cpi --help") >= 2
+    assert "AppImage cpi --help" in workflow
+
+
 def test_ci_and_release_workflow_are_version_independent():
     ci_path = ROOT / ".github/workflows/ci.yml"
     release_path = ROOT / ".github/workflows/release-artifacts.yml"

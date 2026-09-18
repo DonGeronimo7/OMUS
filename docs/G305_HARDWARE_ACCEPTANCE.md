@@ -1,8 +1,33 @@
 # Logitech G305 core hardware acceptance
 
 Run this checklist on the USB Logitech G305 Lightspeed receiver
-(`0003:046d:4074`) after installing v0.9.0 or a release candidate built from its release commit. These checks are
+(`0003:046d:4074`) after installing v0.9.4 or a release candidate built from its release commit. These checks are
 intentionally physical and are not claimed by the automated suite.
+
+## v0.9.4 release closure sequence
+
+For the final v0.9.4 gate, record the release-candidate commit and installed
+package version before testing. Then complete this exact sequence:
+
+1. Confirm normal startup selects the G305 Native HID adapter and retains the
+   configured DPI stages, polling rate, button remaps, and notifications.
+2. Slowly press the physical DPI button through one full configured cycle;
+   verify exactly one correct notification per press.
+3. Rapidly press through two full cycles; verify ordered one-for-one
+   notifications with no omissions or duplicates.
+4. Perform one software DPI write and verify canonical hardware readback equals
+   the requested value and no physical-button notification is fabricated.
+5. Unplug/reinsert the receiver twice. After each cycle, verify remapping and
+   Native HID return, with no reconnect-created popup, stale-generation event,
+   or duplicate mouse identity in the TUI/tray.
+6. Run `mouse-control restart`; verify remapping, DPI, polling, and notifications
+   all recover.
+7. Review `journalctl --user -u mouse-control.service --since "10 minutes ago"`
+   for repeated reconnect loops, stale-generation delivery, ambiguity, rollback,
+   or readback failures.
+
+Do not mark this gate physically validated from fixtures, prior-version results,
+or protocol reasoning. Record the operator's observed result for each step.
 
 ## Preparation
 

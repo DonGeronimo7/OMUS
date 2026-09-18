@@ -14,8 +14,10 @@ from mouse_control.native_razer import (
     RazerProtocolError,
     _FIRMWARE,
     _dpi_command,
+    _set_dpi_command,
+    _set_polling_command,
     decode_response,
-    encode_read_request,
+    encode_request,
     razer_checksum,
     read_native_razer_state,
 )
@@ -53,14 +55,19 @@ def reply(command: RazerCommand, args: bytes, status: int = 0x02) -> bytes:
     return bytes(packet)
 
 
-def test_read_command_rejects_write_direction_ids():
-    with pytest.raises(ValueError, match="write-direction"):
-        RazerCommand(0x04, 0x05, 0x07)
+def test_write_commands_are_exactly_encoded_with_checksum():
+    command = _set_dpi_command(1, 1600, 1600)
+    packet = encode_request(command, 0x1F)
+    assert packet[5:15] == bytes((7, 4, 5, 1, 6, 64, 6, 64, 0, 0))
+    assert packet[88] == razer_checksum(packet)
+
+    assert _set_polling_command(500, extended=False).args == (2,)
+    assert _set_polling_command(4000, extended=True).args == (1, 2)
 
 
 def test_encoded_request_is_90_bytes_and_checksum_valid():
     command = _dpi_command(0x01)
-    packet = encode_read_request(command, 0x1F)
+    packet = encode_request(command, 0x1F)
 
     assert len(packet) == 90
     assert packet[1] == 0x1F
@@ -201,7 +208,89 @@ def test_optional_semantic_read_failure_does_not_erase_other_labels():
     assert state.charging is True
 
 
-def test_native_session_exposes_no_public_setter_api():
+def test_native_session_exposes_only_protocol_transaction_api():
     public = {name for name in dir(HidrawRazerSession) if not name.startswith("_")}
     assert "query" in public
     assert not any(name.startswith("set") or name.startswith("write") for name in public)
+
+
+class StatefulSession(FakeSession):
+    def __init__(self, path, *, dpi=(1600, 1600), rate=1000, bad_dpi_readback=False,
+                 bad_rate_readback=False):
+        super().__init__(path, answers=verified_answers())
+        self.dpi = dpi
+        self.rate = rate
+        self.bad_dpi_readback = bad_dpi_readback
+        self.bad_rate_readback = bad_rate_readback
+
+    def query(self, command, transaction_id):
+        self.commands.append((command, transaction_id))
+        if (command.command_class, command.command_id) == (0x04, 0x05):
+            self.dpi = ((command.args[1] << 8) | command.args[2],
+                        (command.args[3] << 8) | command.args[4])
+            return bytes(command.args)
+        if (command.command_class, command.command_id) == (0x04, 0x85):
+            x, y = ((800, 800) if self.bad_dpi_readback else self.dpi)
+            return bytes((1, x >> 8, x & 0xFF, y >> 8, y & 0xFF, 0, 0))
+        if (command.command_class, command.command_id) == (0x00, 0x40):
+            self.rate = 8000 // command.args[1]
+            return bytes(command.args)
+        if (command.command_class, command.command_id) == (0x00, 0xC0):
+            rate = 500 if self.bad_rate_readback else self.rate
+            return bytes((0, 8000 // rate))
+        return super().query(command, transaction_id)
+
+
+def test_native_backend_writes_dpi_and_polling_with_exact_readback():
+    from mouse_control.hardware.native_razer import NativeRazerBackend
+
+    session = StatefulSession("/dev/hidraw9")
+    backend = NativeRazerBackend(
+        discovery=lambda _device: [hid("/dev/hidraw9")],
+        session_factory=lambda _path: session,
+    )
+    device = viper_v3_pro_wireless()
+    assert backend.supports_device(device)
+    assert backend.set_dpi(device, 3200).confirmed
+    assert backend.get_dpi(device) == (3200, 3200)
+    assert backend.set_polling_rate(device, 4000) == 4000
+    assert backend.get_polling_rate(device) == 4000
+    assert [command.args[0] for command, _ in session.commands
+            if (command.command_class, command.command_id) == (0, 0x40)] == [0, 1]
+    backend.close()
+    assert session.closed
+
+
+@pytest.mark.parametrize("kind", ["dpi", "polling"])
+def test_native_backend_rejects_readback_mismatch(kind):
+    from mouse_control.hardware import HardwareError
+    from mouse_control.hardware.native_razer import NativeRazerBackend
+
+    session = StatefulSession(
+        "/dev/hidraw9", bad_dpi_readback=kind == "dpi",
+        bad_rate_readback=kind == "polling",
+    )
+    backend = NativeRazerBackend(
+        discovery=lambda _device: [hid("/dev/hidraw9")],
+        session_factory=lambda _path: session,
+    )
+    device = viper_v3_pro_wireless()
+    with pytest.raises(HardwareError, match="verification failed"):
+        backend.set_dpi(device, 3200) if kind == "dpi" else backend.set_polling_rate(device, 4000)
+
+
+def test_native_backend_refuses_unknown_and_ambiguous_razer_devices():
+    from mouse_control.hardware import HardwareError
+    from mouse_control.hardware.native_razer import NativeRazerBackend
+
+    backend = NativeRazerBackend(discovery=lambda _device: [])
+    assert not backend.supports_device(viper_v3_pro_wireless(product=0xFFFF))
+
+    sessions = [StatefulSession("/dev/hidraw1"), StatefulSession("/dev/hidraw2")]
+    backend = NativeRazerBackend(
+        discovery=lambda _device: [hid("/dev/hidraw1"), hid("/dev/hidraw2")],
+        session_factory=lambda path: sessions[0] if str(path).endswith("1") else sessions[1],
+    )
+    with pytest.raises(HardwareError, match="multiple protocol responders"):
+        backend.supports_device(viper_v3_pro_wireless())
+    assert all(session.closed for session in sessions)

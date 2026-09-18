@@ -21,13 +21,12 @@ _DEFAULT_MAX_ADAPTIVE_PASSES = 5
 _CPI_OUTLIER_THRESHOLD = 0.05
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="mouse-control-sensor-calibrate",
-        description=(
-            "Measure current mouse CPI/DPI and polling from raw Linux evdev motion without "
-            "using a vendor protocol backend."
-        ),
+def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """Add the installed CPI interface to a Mouse Control argument parser."""
+
+    parser.description = (
+        "Measure current mouse CPI/DPI and polling from raw Linux evdev motion without "
+        "using a vendor protocol backend."
     )
     parser.add_argument("--device", type=int, metavar="N")
     parser.add_argument(
@@ -70,6 +69,13 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     return parser
+
+
+def _parser(*, prog: str = "mouse-control-sensor-calibrate") -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog=prog,
+    )
+    return configure_parser(parser)
 
 
 def _pick(index: int | None):
@@ -202,8 +208,9 @@ def _evaluate(results):
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+def run_calibration(args: argparse.Namespace) -> int:
+    """Run one parsed CPI session for CLI and discovery callers."""
+
     if args.distance_mm <= 0 or args.window <= 0 or args.passes <= 0:
         print("distance, capture window, and passes must be greater than zero", file=sys.stderr)
         return 2
@@ -346,6 +353,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print("Vendor protocol used for measurement: none")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_calibration(_parser().parse_args(argv))
 
 
 if __name__ == "__main__":

@@ -1,13 +1,56 @@
-# Mouse Control v0.9.3
+# Mouse Control v0.9.4
 
-## Automatic Hardware Discovery becomes materially functional
+## Pre-v1 discovery architecture milestone
 
-Mouse Control 0.9.3 promotes the validated Automatic Hardware Discovery
-checkpoint while preserving the mature v0.8.2 runtime contract and the current
-full-screen setup TUI. Discovery correlates one physical mouse across evdev and
-hidraw, parses its HID descriptor into stable report/field/member identities,
-collects contrastive evidence from real actions, and persists only semantics
-that meet the required evidence level.
+Mouse Control 0.9.4 establishes the final major discovery-architecture layer
+planned before v1 qualification work becomes primarily a matter of community
+evidence and protocol recipes. It adds bounded temporal dialogue assembly,
+operation-specific proof states, conservative experiment eligibility,
+dependent-field inference, and a deterministic privacy-conscious community
+report while preserving the mature v0.8.2/v0.9.3 runtime contract and the
+current full-screen setup TUI.
+
+The release path is now integrated rather than merely colocated: canonical
+trace evidence flows through temporal dialogue assembly, dependency inference,
+structural and semantic family recognition, operation-scoped proof, and a
+privacy-filtered community report. The automated BITMOUSE-style acceptance
+fixture demonstrates that complete chain while keeping recognition distinct
+from PROVEN runtime write authority.
+
+## Installed CPI measurement
+
+Physical ruler calibration is available from every installed artifact as
+`mouse-control cpi`. It measures CPI and observed polling directly from Linux
+evdev motion, performs repeated-pass consistency and outlier checks, and can
+compare against an optional configured DPI label without using that label in
+the calculation. Automatic Discovery and qualification flows call the same
+installed Python implementation directly; no source-tree script or subprocess
+coupling is required. Mouse Control does not install `mouse-dpi-tool`, avoiding
+a command-name conflict with libevdev.
+
+## Evidence fidelity and transaction safety
+
+- Canonical usbmon observations retain optional setup/data flags, interval,
+  start frame, transfer flags, descriptor count, source representation, header
+  availability, loss information, timebase, and completeness/truncation status.
+- Operation evidence independently records transport acceptance, protocol
+  response validity, readable-state change, physical effect, reconnect and
+  power-cycle persistence, failure side effects, and recovery evidence. Unknown
+  facts remain unknown rather than becoming false.
+- Failed mutating steps that may have changed device state are not automatically
+  resent. The transaction outcome carries retry, recovery, expected-disconnect,
+  and connection-generation facts so callers can inspect and recover first.
+
+## Semantic recognition and reports
+
+The passive BITMOUSE-style discriminator requires compatible descriptor shape
+plus the asymmetric `0x72` request/reply grammar, leading request checksum,
+target and sequence correlation, and declared semantic response length. Bytes
+after that declared length are excluded from evidence. Community evidence keeps
+safe descriptor/report structure, dialogue relationships, dependencies,
+candidate discriminators, connection generation, provenance IDs, and the next
+safe observation recipe while recursively redacting path- and identity-bearing
+material.
 
 For the physically validated G305 acceptance path, the teacher-free runtime can
 rebind the exact persisted descriptor member and recognize the configured DPI
@@ -52,7 +95,7 @@ claim.
 
 ## Compatibility
 
-The v0.9.3 release retains native HID++ production behavior, OpenRazer,
+The v0.9.4 release retains native HID++ production behavior, native exact-model Razer support,
 configured DPI stages and software cycling, polling safety policy, one popup per
 real transition, remapping and keyboard chords, reconnect and late insertion,
 configuration preservation, user-service behavior, and the v0.9.1 TUI flow.
@@ -69,14 +112,17 @@ The complete v0.8.2 stability and functionality contract remains the baseline.
 - G305 is a hardware validation target for both native HID++ production and
   learned acceptance; that evidence does not imply universal automatic support
   for every mouse.
+- BITMOUSE-style coverage in this release is source-derived automated semantic
+  evidence only. It does not provide a production runtime writer or hardware
+  qualification for that family.
 
 ## Downloads
 
-- [RPM: mouse-control-0.9.3-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control-0.9.3-1.fc44.noarch.rpm)
-- [DEB: mouse-control_0.9.3-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse-control_0.9.3-1_all.deb)
-- [AppImage: Mouse-Control-0.9.3-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/Mouse-Control-0.9.3-x86_64.AppImage)
-- [Wheel: mouse_control-0.9.3-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3-py3-none-any.whl)
-- [Source: mouse_control-0.9.3.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.3/mouse_control-0.9.3.tar.gz)
+- [RPM: mouse-control-0.9.4-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control-0.9.4-1.fc44.noarch.rpm)
+- [DEB: mouse-control_0.9.4-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control_0.9.4-1_all.deb)
+- [AppImage: Mouse-Control-0.9.4-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/Mouse-Control-0.9.4-x86_64.AppImage)
+- [Wheel: mouse_control-0.9.4-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4-py3-none-any.whl)
+- [Source: mouse_control-0.9.4.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4.tar.gz)
 
 ---
 # Mouse Control v0.9.1

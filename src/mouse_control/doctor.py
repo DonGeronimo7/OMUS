@@ -63,7 +63,6 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
     systemd = shutil.which("systemctl") is not None
     udev = shutil.which("udevadm") is not None or Path("/run/udev").exists()
     input_ok = bool(mice) and UINPUT_PATH.exists() and os.access(UINPUT_PATH, os.R_OK | os.W_OK)
-    razer_installed = importlib.util.find_spec("openrazer") is not None
     service_installed = service_path().is_file()
     service_running = is_service_active() if service_installed and systemd else False
     rule_paths = (Path("/usr/lib/udev/rules.d/71-mouse-control-uaccess.rules"),
@@ -82,7 +81,7 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
         _status("input permissions", "PASS" if input_ok else "WARNING",
                 "usable" if input_ok else "no readable mouse and writable /dev/uinput combination"),
         _status("Native HID", "PASS", "protocol drivers enabled"),
-        _status("OpenRazer", "OPTIONAL", "installed" if razer_installed else "not installed"),
+        _status("Native Razer", "PASS", "exact-model protocol driver enabled"),
         _status("mouse-control user service", "PASS" if service_running else ("WARNING" if service_installed else "MISSING"),
                 "running" if service_running else ("stopped" if service_installed else "not installed")),
         _status("Mouse Control udev rule", "PASS" if any(path.is_file() for path in rule_paths) else "MISSING"),

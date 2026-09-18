@@ -58,32 +58,35 @@ def _choices(_existing):
     return SetupChoices(mappings={"BTN_LEFT": "passthrough"})
 
 
-def test_installed_entrypoint_routes_interactive_setup_to_tui(monkeypatch):
-    monkeypatch.setattr(app.sys, "stdin", Tty())
-    monkeypatch.setattr(app.sys, "stdout", Tty())
-    with patch.object(app, "run_tui_setup_wizard", return_value=23) as tui, \
-         patch.object(app, "_LEGACY_SETUP", return_value=99) as legacy:
-        assert app.run_setup_wizard() == 23
+def test_interactive_setup_routes_to_tui(monkeypatch):
+    monkeypatch.setattr(cli.sys, "stdin", Tty())
+    monkeypatch.setattr(cli.sys, "stdout", Tty())
+    with patch.object(setup_entry, "run_tui_setup_wizard", return_value=23) as tui:
+        assert cli.run_setup_wizard() == 23
     tui.assert_called_once_with()
-    legacy.assert_not_called()
 
 
-def test_installed_entrypoint_preserves_non_tty_legacy_compatibility(monkeypatch):
-    monkeypatch.setattr(app.sys, "stdin", NotTty())
-    monkeypatch.setattr(app.sys, "stdout", NotTty())
-    with patch.object(app, "run_tui_setup_wizard", return_value=23) as tui, \
-         patch.object(app, "_LEGACY_SETUP", return_value=7) as legacy:
-        assert app.run_setup_wizard() == 7
-    legacy.assert_called_once_with()
+def test_noninteractive_setup_rejects_before_importing_curses(monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys, "stdin", NotTty())
+    monkeypatch.setattr(cli.sys, "stdout", NotTty())
+    with patch.object(setup_entry, "run_tui_setup_wizard") as tui:
+        assert cli.run_setup_wizard() == 2
     tui.assert_not_called()
+    assert "requires an interactive terminal" in capsys.readouterr().err
 
 
-def test_app_main_scopes_cli_setup_override():
-    original = cli.run_setup_wizard
+def test_installed_entrypoint_delegates_without_setup_override():
     with patch.object(cli, "main", return_value=0) as delegated:
         assert app.main(["setup"]) == 0
-        assert cli.run_setup_wizard is original
     delegated.assert_called_once_with(["setup"])
+
+
+def test_explicit_setup_command_routes_to_tui(monkeypatch):
+    monkeypatch.setattr(cli.sys, "stdin", Tty())
+    monkeypatch.setattr(cli.sys, "stdout", Tty())
+    with patch.object(setup_entry, "run_tui_setup_wizard", return_value=31) as tui:
+        assert cli.main(["setup"]) == 31
+    tui.assert_called_once_with()
 
 
 def test_tui_setup_success_reuses_existing_commit_and_service_flow(tmp_path):

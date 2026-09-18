@@ -9,13 +9,68 @@ field encodes the demonstrated semantic value.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Sequence
 
 from .protocol_grammar import CodecKind, CodecSpec
+from .integrity_inference import IntegrityHypothesis, infer_integrity
 
 
 class TransactionInferenceError(ValueError):
     """Successful demonstrations do not support one safe explainable grammar."""
+
+
+class FieldRole(str, Enum):
+    INVARIANT = "invariant"
+    ECHO = "echo"
+    COUNTER = "counter"
+    LENGTH = "length"
+    STATUS = "status"
+
+
+@dataclass(frozen=True)
+class FieldRoleHypothesis:
+    role: FieldRole
+    offset: int
+    related_offset: int | None = None
+    confidence: str = "candidate"
+    reason: str = ""
+
+
+def infer_field_roles(
+    requests: Sequence[bytes], replies: Sequence[bytes]
+) -> tuple[FieldRoleHypothesis, ...]:
+    """Classify repeatable byte roles without assigning write authority.
+
+    Results are deliberately hypotheses: shared values can be coincidental.
+    Three aligned request/reply observations are required, and ambiguous bytes
+    may receive multiple candidate roles for later contrastive experiments.
+    """
+
+    if len(requests) != len(replies) or len(requests) < 3:
+        return ()
+    try:
+        request_width = _aligned(requests, "role requests")
+        reply_width = _aligned(replies, "role replies")
+    except TransactionInferenceError:
+        return ()
+    result: list[FieldRoleHypothesis] = []
+    request_columns = [tuple(frame[i] for frame in requests) for i in range(request_width)]
+    reply_columns = [tuple(frame[i] for frame in replies) for i in range(reply_width)]
+    for offset, values in enumerate(request_columns):
+        if len(set(values)) == 1:
+            result.append(FieldRoleHypothesis(FieldRole.INVARIANT, offset, reason="request byte is stable"))
+        if tuple((before + 1) & 0xFF for before in values[:-1]) == values[1:]:
+            result.append(FieldRoleHypothesis(FieldRole.COUNTER, offset, confidence="correlated", reason="increments modulo 256"))
+        if all(value in {request_width, request_width - offset - 1} for value in values):
+            result.append(FieldRoleHypothesis(FieldRole.LENGTH, offset, reason="matches a stable frame/payload length"))
+        for reply_offset, reply_values in enumerate(reply_columns):
+            if len(set(values)) > 1 and values == reply_values:
+                result.append(FieldRoleHypothesis(FieldRole.ECHO, offset, reply_offset, "correlated", "varying request byte is echoed"))
+    for offset, values in enumerate(reply_columns):
+        if len(set(values)) == 1 and values[0] in {0x00, 0x01, 0x02, 0x03, 0xFF}:
+            result.append(FieldRoleHypothesis(FieldRole.STATUS, offset, confidence="candidate", reason="stable common status value"))
+    return tuple(result)
 
 
 @dataclass(frozen=True)
@@ -87,6 +142,7 @@ class InferredTransactionGrammar:
     read_field: SemanticField
     demonstrated_values: tuple[int, ...]
     demonstration_count: int
+    write_integrity: IntegrityHypothesis | None = None
 
     @property
     def codec_agrees(self) -> bool:
@@ -176,6 +232,7 @@ def _pattern(
     packets: Sequence[bytes],
     *,
     wildcard_span: tuple[int, int] | None = None,
+    integrity_span: tuple[int, int] | None = None,
     require_constant_elsewhere: bool,
     label: str,
 ) -> FramePattern:
@@ -187,7 +244,8 @@ def _pattern(
     result: list[int | None] = []
     for offset in range(width):
         values = {packet[offset] for packet in packets}
-        if start <= offset < end:
+        integrity_start, integrity_width = integrity_span or (-1, 0)
+        if start <= offset < end or integrity_start <= offset < integrity_start + integrity_width:
             result.append(None)
             continue
         if len(values) == 1:
@@ -236,9 +294,20 @@ def infer_transaction_grammar(
         read_replies, semantic_values, label="read reply"
     )
 
+    integrity_candidates = infer_integrity(write_requests)
+    usable_integrity = tuple(
+        item for item in integrity_candidates
+        if not (write_field.offset < item.offset + item.width
+                and item.offset < write_field.offset + write_field.width)
+    )
+    if len(usable_integrity) > 1:
+        raise TransactionInferenceError("write request integrity scheme is ambiguous")
+    write_integrity = usable_integrity[0] if usable_integrity else None
     write_request = _pattern(
         write_requests,
         wildcard_span=(write_field.offset, write_field.width),
+        integrity_span=((write_integrity.offset, write_integrity.width)
+                        if write_integrity else None),
         require_constant_elsewhere=True,
         label="write request",
     )
@@ -268,6 +337,7 @@ def infer_transaction_grammar(
         read_field=read_field,
         demonstrated_values=tuple(sorted(semantic_values)),
         demonstration_count=len(samples),
+        write_integrity=write_integrity,
     )
     if not grammar.codec_agrees:
         raise TransactionInferenceError(

@@ -1,6 +1,79 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — v0.9.4 integrated release-candidate closure
+
+- Canonical usbmon evidence now retains optional extended binary-header fields
+  and capture-quality/completeness facts through deterministic JSONL replay.
+- Operation proof retains its existing state ladder while orthogonal tri-state
+  evidence records acceptance, response validity, readable/physical effects,
+  persistence, failure side effects, and recovery. Mutating failures with a
+  possible side effect cannot be blindly resent.
+- One automated BITMOUSE-style fixture now exercises canonical observation,
+  temporal dialogue, dependency inference, structural plus semantic recognition,
+  operation-scoped proof, and privacy-filtered community reporting end to end.
+  Declared semantic length excludes stale HID tail bytes, and RECOGNIZED remains
+  write-disabled.
+- Automated validation passes 664 tests with the existing GLib warning;
+  compileall, diff validation, sdist/wheel, Fedora RPM `%check` and CLI smoke,
+  Debian package build, and AppImage version/help smoke pass.
+- The v0.9.4 G305 physical acceptance sequence passed on the installed Fedora
+  RPM. Published release artifacts remain the final release gate; no tag or
+  release existed when this status was recorded.
+
+## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
+
+- Protocol-neutral temporal dialogue assembly now retains physical/source/
+  channel/report/generation identity while distinguishing delayed replies,
+  busy/poll flows, tagged and grammar-separated overlap, echoes, unsolicited
+  events, physical actions, reconnect invalidation, and stale responses.
+- Operation-scoped proof states now distinguish observation, recognition,
+  decoding, hypothesis, experiment eligibility/execution, verification,
+  PROVEN authority, conflict, and revocation. Experiment eligibility is a
+  separate descriptive authority and cannot grant runtime write permission.
+- Dependent-field inference retains alternative literal/duplicate/byte-order/
+  scale/affine/lookup/stage explanations; unexplained changing bytes prevent
+  promotion.
+- `mouse-control discover --output FILE` and
+  `mouse-control-discover --community-report FILE` generate deterministic,
+  allowlisted JSON reports without device paths, serials, usernames, or input
+  history. Reports include proof state, protocol candidates, scoped conflicts,
+  safety status, trajectory metrics, and requested next evidence.
+- Generic discovery remains read-only. No new HID writer, runtime promotion,
+  or desired-state mutation was added. Razer protocol implementation remains
+  automated-test evidence only pending physical qualification.
+
+## 2026-09-17 — HID intelligence consolidation and native Razer runtime
+
+- The descriptor engine now preserves Delimiter alternate usage sets, handles
+  Array selectors/nulls/multi-byte values correctly, treats Buffered Bytes as
+  opaque blobs, and exposes units, physical values, wire positions, collection
+  paths, report direction, and stable member identity through one decoder.
+- Standard HID usage interpretation and evdev correlations were expanded while
+  vendor-defined usages remain opaque.
+- Exact modeled Razer Viper V2/V3 variants now use a native 90-byte RPC backend
+  for DPI, polling, firmware, battery, and charging, with DPI/polling readback.
+  OpenRazer remains provenance only; its runtime adapter/dependency was removed.
+- Protocol-neutral repeated-frame role inference, bounded checksum/CRC
+  inference, contrastive controls, and information-gain experiment selection
+  feed Automatic Discovery without granting write authority.
+- The complete production-module/repertoire disposition is recorded in
+  `docs/CODE_HEALTH_AUDIT.md`.
+- Automated validation: 637 tests passed with the existing GLib deprecation
+  warning; compileall, diff validation, and sdist/wheel build passed. Native
+  Razer physical hardware validation remains pending.
+
 Last updated: 2026-09-17
+
+## TUI-only interactive setup
+
+The full-screen setup TUI is the sole supported interactive setup experience.
+Both `mouse-control` in a terminal and `mouse-control setup` route directly to
+the same TUI transaction, as do retained home-screen setup choices. Redirected
+or programmatic CLI setup is rejected before curses is imported or invoked;
+it never falls back to the retired line-oriented prompt wizard. The legacy
+routing alias, prompt flow, action menus, and setup-only compatibility tests
+have been removed. Runtime/configuration APIs remain available independently
+for noninteractive operation.
 
 ## v0.9.3 release preparation
 
@@ -8,7 +81,7 @@ The accepted Automatic Discovery checkpoint is
 `2995cbed24f9cef30ce5e94bfc7c29555e438639`. It includes descriptor-backed
 semantic persistence and exact-member rebinding, teacher-free read-only DPI
 recognition, generation-aware RESYNC/LIVE handling, and independently PROVEN
-exact-model learned transactions. Native HID++, OpenRazer, remapping, polling,
+exact-model learned transactions. Native HID++, native Razer RPC, remapping, polling,
 notifications, reconnect, service behavior, configuration compatibility, and
 the current full-screen TUI remain separate established paths under the v0.8.2
 compatibility baseline.
@@ -225,9 +298,10 @@ BatteryState and refresh together.
 Extended Adjustable DPI (`0x2202`) is discoverable but independent-axis packet
 handling is likewise deferred.
 
-OpenRazer remains available behind the common backend contract. Unknown or
-ambiguous hardware falls back to Generic HID diagnostics and ordinary evdev
-remapping without guessed capabilities or writes.
+OpenRazer is protocol provenance only, not a runtime dependency or backend.
+Exact modeled Razer devices use Mouse Control's native RPC implementation;
+unknown or ambiguous hardware falls back to Generic HID diagnostics and
+ordinary evdev remapping without guessed capabilities or writes.
 
 Backends now return confirmed DPI state where live readback is available.
 Legacy setters without readback remain compatible, while `DpiCycler` records
@@ -327,3 +401,39 @@ after a Generic fallback and DPI event/notification recovery after promotion.
 `python3 -m compileall -q src tests` and `git diff --check` pass. Physical
 receiver-reinsert validation on the G305 remains pending; no physical recovery
 claim is made from the fixtures alone.
+
+## 2026-09-17 v0.9.4 CPI packaging gate
+
+Physical CPI measurement is a first-class installed command at
+`mouse-control cpi`; the compatibility executable
+`mouse-control-sensor-calibrate` remains available. Discovery and calibration
+share packaged `mouse_control` modules directly, with no repository-relative
+helper, shell-out, or `mouse-dpi-tool` executable.
+
+Automated validation passes 664 tests with one existing GLib deprecation
+warning; compileall and whitespace checks pass. The wheel installed in an
+isolated virtual environment, Fedora RPM `%check`, an installed Debian package,
+and the AppImage all pass `mouse-control cpi --help`. The wheel and sdist
+contain both calibration modules and no `mouse-dpi-tool` artifact.
+
+These packaging checks did not themselves establish physical validation. The
+separate installed-RPM G305 acceptance below supplies that evidence.
+
+## 2026-09-17 v0.9.4 installed-RPM G305 acceptance
+
+The installed `mouse-control-0.9.4-1.fc44.noarch` package selected the exact
+G305 `046d:4074` through Automatic Discovery's Native HID adapter. Setup and
+restart retained stages `1000/1500/2000/2500/3000`, 1000 Hz polling,
+notifications, and configured remaps.
+
+Operator-observed physical validation passed: one slow five-stage DPI cycle,
+two rapid cycles with all ten ordered one-for-one popups, a setup-driven
+software write to 1000 with canonical readback and no fabricated physical-event
+popup, two receiver unplug/reinsert cycles, remap recovery, battery/tray
+recovery, no reconnect-created popup or duplicate identity, and a final service
+restart with input, remaps, DPI notifications, and battery reporting intact.
+
+The journal showed bounded provisional rebinds followed by Native HID recovery,
+not repeated reconnect loops or stale-generation delivery. One first-cycle
+learned-adapter candidate refused an undemonstrated 1000-DPI write as designed;
+the supervisor then promoted Native HID and reconciled 1000 successfully.

@@ -6,7 +6,9 @@ hardware write.
 """
 
 from .models import (
+    CaptureQuality,
     CaptureSource,
+    CompletenessStatus,
     TransactionAnomaly,
     UrbEventType,
     UsbDirection,
@@ -20,6 +22,8 @@ from .hid_enrichment import HidTraceEnrichment
 
 __all__ = [
     "CaptureSource",
+    "CaptureQuality",
+    "CompletenessStatus",
     "TransactionAnomaly",
     "UrbEventType",
     "UsbDirection",

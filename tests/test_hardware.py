@@ -1,7 +1,6 @@
 """Hardware tests use no daemon, input device, or real writes."""
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-import sys
 
 import pytest
 
@@ -13,22 +12,10 @@ from mouse_control.hardware.capabilities import (HardwareCapabilities,
 from mouse_control.hardware.discovery_backend import DiscoveryBackend
 from mouse_control.hardware.generic import GenericBackend
 from mouse_control.hardware.native_hid import NativeHidBackend
-from mouse_control.hardware.openrazer import OpenRazerBackend
 
 G305 = MouseDevice("G305", "/dev/input/test", vendor=0x046d, product=0x4074,
                    bustype=3)
-RAZER = MouseDevice("Razer", "/dev/input/test", vendor=0x1532, product=0x0099)
-
-
-def razer_device(features=("dpi", "poll_rate", "supported_poll_rates"), **kwargs):
-    return SimpleNamespace(_vid=0x1532, _pid=0x0099, type="mouse", name="Razer mouse",
-                           has=lambda feature: feature in features, dpi=(800, 800),
-                           max_dpi=20000, available_dpi=[400, 800, 1600],
-                           poll_rate=500, supported_poll_rates=[125, 500, 1000], **kwargs)
-
-
-def razer_backend(*devices):
-    return OpenRazerBackend(lambda: SimpleNamespace(devices=list(devices)))
+RAZER = MouseDevice("Razer", "/dev/input/test", vendor=0x1532, product=0x00C1)
 
 
 def test_registry_always_returns_discovery_and_binds_first_proven_adapter():
@@ -248,26 +235,6 @@ def test_runtime_device_resolution_rejects_reused_path_and_ambiguity():
         assert cli._resolve_runtime_device(configured) == configured
 
 
-def test_razer_adapter_remains_available_through_discovery():
-    adapter = razer_backend(razer_device())
-    backend = get_backend(RAZER, [lambda: adapter])
-    assert isinstance(backend, DiscoveryBackend)
-    assert backend._protocol_backend is adapter
-    assert backend.get_device_name(RAZER) == "Razer mouse"
-    assert backend.get_dpi(RAZER) == (800, 800)
-    backend.set_dpi(RAZER, 1500)
-    assert adapter._devices[RAZER].dpi == (1500, 1500)
-
-
-def test_ambiguous_razer_identity_refuses_adapter_and_keeps_safe_discovery():
-    adapter = razer_backend(razer_device(), razer_device())
-    backend = get_backend(RAZER, [lambda: adapter])
-    assert isinstance(backend, DiscoveryBackend)
-    assert backend._protocol_backend is None
-    with pytest.raises(HardwareError):
-        backend.set_dpi(RAZER, 800)
-
-
 def test_generic_compatibility_alias_is_discovery():
     backend = GenericBackend()
     assert isinstance(backend, DiscoveryBackend)
@@ -280,36 +247,7 @@ def test_generic_compatibility_alias_is_discovery():
         backend.set_dpi(G305, 800)
 
 
-def test_openrazer_rejects_unreported_values_and_rates():
-    target = razer_device(("dpi", "available_dpi", "poll_rate", "supported_poll_rates"))
-    backend = razer_backend(target)
-    backend.set_dpi(RAZER, 800)
-    assert target.dpi == (800, 0)
-    with pytest.raises(HardwareError):
-        backend.set_dpi(RAZER, 1500)
-    with pytest.raises(HardwareError):
-        backend.set_polling_rate(RAZER, 8000)
-
-
-def test_openrazer_writes_return_hardware_confirmed_readback():
-    target = razer_device()
-    backend = razer_backend(target)
-    state = backend.set_dpi(RAZER, 1600)
-    assert state.confirmed and state.display_value == 1600
-    assert backend.set_polling_rate(RAZER, 1000) == 1000
-
-
-def test_openrazer_close_releases_manager_and_cached_device():
-    manager = SimpleNamespace(devices=[razer_device()], close=Mock())
-    backend = OpenRazerBackend(lambda: manager)
-    assert backend.supports_device(RAZER)
-    backend.close()
-    manager.close.assert_called_once()
-    assert backend._manager is None and backend._devices == {}
-
-
-@pytest.mark.parametrize("unavailable", [False, True])
-def test_startup_remaps_despite_hardware_failure(unavailable, caplog):
+def test_startup_remaps_despite_hardware_failure(caplog):
     backend = Mock(spec=HardwareBackend)
     backend.name = "Test"
     backend.supports_dpi.side_effect = HardwareError("disconnected")
@@ -320,13 +258,8 @@ def test_startup_remaps_despite_hardware_failure(unavailable, caplog):
     with patch.object(cli, "load_config", return_value=config), \
          patch.object(cli, "get_mouse_devices", return_value=[RAZER]), \
          patch.object(cli, "MouseRemapper") as remapper:
-        if unavailable:
-            with patch.dict(sys.modules, {"openrazer": None, "openrazer.client": None}), \
-                 patch("mouse_control.hardware.registry.PROTOCOL_ADAPTER_FACTORIES", (OpenRazerBackend,)):
-                assert cli.run_from_config() == 0
-        else:
-            with patch.object(cli, "get_backend", return_value=backend):
-                assert cli.run_from_config() == 0
-            backend.set_polling_rate.assert_called_once_with(RAZER, 1000)
+        with patch.object(cli, "get_backend", return_value=backend):
+            assert cli.run_from_config() == 0
+        backend.set_polling_rate.assert_called_once_with(RAZER, 1000)
         remapper.return_value.run.assert_called_once()
-    assert "disconnected" in caplog.text or "OpenRazer" in caplog.text
+    assert "disconnected" in caplog.text

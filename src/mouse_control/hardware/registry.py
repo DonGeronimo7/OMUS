@@ -8,12 +8,10 @@ from collections.abc import Callable, Iterable
 from .base import HardwareBackend
 from .discovery_backend import DiscoveryBackend
 from .native_hid import NativeHidBackend
-from .openrazer import OpenRazerBackend
+from .native_razer import NativeRazerBackend
 from ..discovery import MouseDevice
 
-PROTOCOL_ADAPTER_FACTORIES = (NativeHidBackend, OpenRazerBackend)
-# Compatibility for code importing the former registry constant.
-BACKEND_FACTORIES = PROTOCOL_ADAPTER_FACTORIES
+PROTOCOL_ADAPTER_FACTORIES = (NativeHidBackend, NativeRazerBackend)
 
 
 def get_backend(

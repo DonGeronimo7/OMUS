@@ -1,7 +1,9 @@
 """Golden coverage for descriptor schema, bit decoding and HID semantics."""
 import pytest
 from mouse_control.hid_descriptor import parse_report_descriptor, HidCollectionType
-from mouse_control.hid_report import decode_input_report, extract_bits
+from mouse_control.hid_report import (
+    decode_feature_report, decode_input_report, decode_output_report, extract_bits,
+)
 from mouse_control.hid_semantics import HidSemanticClass, interpret_field, correlate_evdev
 from mouse_control.hid_behavior import profile_reports, HidBehaviorClass
 from mouse_control.event_correlation import TimedEvdevEvent
@@ -94,3 +96,73 @@ def test_field_level_action_correlation_uses_stable_descriptor_identity():
     assert len(candidates)==1
     assert candidates[0].field_id.startswith("HID-F")
     assert candidates[0].values==(0,1)
+
+
+def test_local_delimiter_preserves_alternate_usage_sets_and_diagnoses_malformed_sets():
+    descriptor = parse_report_descriptor(bytes.fromhex(
+        "05 01 09 02 A1 01 09 30 A9 01 09 31 A9 00 15 00 25 64 75 08 95 01 81 02 C0"
+    ))
+    field = descriptor.fields[0]
+    assert field.usages == ((1, 0x30),)
+    assert field.usage_sets == (((1, 0x30),), ((1, 0x31),))
+    assert not descriptor.diagnostics
+
+    malformed = parse_report_descriptor(bytes.fromhex(
+        "05 01 09 30 A9 01 A9 01 75 08 95 01 81 02"
+    ))
+    assert {item.code for item in malformed.diagnostics} == {
+        "nested-delimiter", "unclosed-delimiter"
+    }
+
+
+def test_buffered_bytes_remain_one_opaque_blob():
+    descriptor = parse_report_descriptor(bytes.fromhex(
+        "06 00 FF 09 01 75 08 95 04 82 00 01"
+    ))
+    decoded = decode_input_report(descriptor, b"\x10\x20\x30\x40")
+    assert len(decoded.values) == 1
+    value = decoded.values[0]
+    assert value.raw_bytes == b"\x10\x20\x30\x40"
+    assert value.logical_value is None
+    assert value.vendor_defined
+    assert value.bit_width == 32
+
+
+def test_canonical_decoder_handles_output_feature_and_wire_metadata():
+    descriptor = parse_report_descriptor(bytes.fromhex(
+        "05 08 09 01 85 03 15 00 25 01 75 01 95 01 91 02 "
+        "75 07 95 01 91 01 06 00 FF 09 02 75 08 95 01 B1 02"
+    ))
+    output = decode_output_report(descriptor, b"\x03\x01")
+    feature = decode_feature_report(descriptor, b"\x03\x7F")
+    assert output.values[0].wire_bit_offset == 8
+    assert output.values[0].wire_byte_offset == 1
+    assert output.report_type == "output"
+    assert feature.report_type == "feature"
+    assert feature.values[0].raw_value == 0x7F
+    assert feature.values[0].vendor_defined
+
+
+def test_physical_units_are_normalized_without_losing_raw_value():
+    descriptor = parse_report_descriptor(bytes.fromhex(
+        "05 01 09 30 15 00 25 64 35 00 45 0A 55 0F 65 11 75 08 95 01 81 02"
+    ))
+    value = decode_input_report(descriptor, b"\x32").values[0]
+    assert value.raw_value == 50
+    assert value.logical_value == 50
+    assert value.physical_value is not None
+    assert value.physical_value.value == pytest.approx(0.5)
+    assert value.physical_value.unit_system == "si-linear"
+    assert value.physical_value.dimensions == (("length", 1),)
+
+
+def test_multibyte_array_selector_honors_null_state_and_is_not_positional():
+    descriptor = parse_report_descriptor(bytes.fromhex(
+        "05 09 19 01 29 03 15 01 25 03 75 10 95 01 81 40"
+    ))
+    selected = decode_input_report(descriptor, b"\x02\x00").values[0]
+    null = decode_input_report(descriptor, b"\x04\x00").values[0]
+    assert selected.usage.usage == 2
+    assert selected.member_index is None
+    assert null.usage is None
+    assert null.null_selection

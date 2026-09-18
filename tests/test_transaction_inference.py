@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 from mouse_control.protocol_grammar import CodecKind
 from mouse_control.transaction_inference import (
+    FieldRole,
     demonstration_from_trace,
+    infer_field_roles,
     infer_transaction_grammar,
 )
 
@@ -47,3 +49,26 @@ def test_write_variation_outside_semantic_field_is_rejected():
 
     with pytest.raises(TransactionInferenceError):
         infer_transaction_grammar(tuple(demos))
+
+
+def test_repeated_transactions_classify_counter_echo_length_and_status_candidates():
+    requests = (
+        bytes((0x10, 0x01, 0x04, 0xAA)),
+        bytes((0x10, 0x02, 0x04, 0xAA)),
+        bytes((0x10, 0x03, 0x04, 0xAA)),
+    )
+    replies = (
+        bytes((0x00, 0x01, 0x55)),
+        bytes((0x00, 0x02, 0x55)),
+        bytes((0x00, 0x03, 0x55)),
+    )
+    roles = infer_field_roles(requests, replies)
+    assert any(item.role is FieldRole.COUNTER and item.offset == 1 for item in roles)
+    assert any(item.role is FieldRole.ECHO and item.offset == 1 and item.related_offset == 1 for item in roles)
+    assert any(item.role is FieldRole.LENGTH and item.offset == 2 for item in roles)
+    assert any(item.role is FieldRole.STATUS and item.offset == 0 for item in roles)
+
+
+def test_field_role_inference_requires_three_aligned_pairs():
+    assert infer_field_roles((b"\x01", b"\x02"), (b"\x01", b"\x02")) == ()
+    assert infer_field_roles((b"\x01",) * 3, (b"\x00", b"\x00")) == ()

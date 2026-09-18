@@ -17,7 +17,9 @@ from typing import Iterator, Protocol
 
 from ..discovery_models import PhysicalDevice
 from .models import (
+    CaptureQuality,
     CaptureSource,
+    CompletenessStatus,
     UrbEventType,
     UsbDirection,
     UsbObservation,
@@ -156,6 +158,21 @@ def normalize_usbmon_record(
         captured_length=record.captured_length,
         payload=record.payload,
         physical_device_fingerprint=selection.physical_device_fingerprint,
+        setup_flag=record.setup_flag,
+        data_flag=record.data_flag,
+        interval=record.interval,
+        start_frame=record.start_frame,
+        transfer_flags=record.transfer_flags,
+        descriptor_count=record.descriptor_count,
+        capture_quality=CaptureQuality(
+            source_representation="linux_usbmon_binary_extended",
+            full_binary_header_available=True,
+            completeness=(
+                CompletenessStatus.TRUNCATED
+                if record.captured_length < record.declared_length
+                else CompletenessStatus.COMPLETE
+            ),
+        ),
     )
 
 

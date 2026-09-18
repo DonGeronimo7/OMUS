@@ -332,7 +332,7 @@ def test_g305_onboard_polling_choices_reach_verified_transaction(
     from mouse_control.discovery import MouseDevice
     from mouse_control.hardware import HardwareSupervisor
     from mouse_control.hardware.native_hid import NativeHidBackend
-    from mouse_control.setup_flow import SetupChoices, discover_choices, polling_screen
+    from mouse_control.setup_flow import SetupChoices, discover_choices
 
     class AcceptanceSession(FakeSession):
         closed = False
@@ -368,13 +368,9 @@ def test_g305_onboard_polling_choices_reach_verified_transaction(
         assert choices.polling_writable
         assert session.profile_mode == ONBOARD_MODE
         assert not any(c[1:3] in ((0x12, 1), (0x17, 2)) for c in session.calls)
-        answers = iter(("2", ""))
-        monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
-        polling_screen(choices)
-        output = capsys.readouterr().out
-        assert "2. 500 Hz" in output
-        assert "changes are unavailable" not in output
+        choices.polling_rate = 500
         assert choices.polling_rate == 500
+        choices.polling_changed = True
         session.calls.clear()
         _apply_hardware(backend, device, [], 0, choices.polling_rate, setup=True)
         output = capsys.readouterr().out

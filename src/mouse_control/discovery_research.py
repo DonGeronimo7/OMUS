@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Iterable
 
 from .learned_operations import LearnedOperationState
+from .information_gain import ExperimentChoice, ExperimentHypothesis, choose_experiment
 from .protocol_grammar import SemanticBehavior, WriteScope
 
 
@@ -52,6 +53,7 @@ class DiscoveryResearchPlan:
     unknown_protocol: bool
     deeper_learning_recommended: bool
     reason: str
+    next_experiment: ExperimentChoice | None = None
 
     @property
     def reversible_probe_available(self) -> bool:
@@ -69,6 +71,33 @@ def _candidate_transports(repertoire_candidates: Iterable[object]) -> tuple[str,
     return tuple(sorted(transports))
 
 
+def _next_repertoire_experiment(repertoire_candidates: Iterable[object]) -> ExperimentChoice | None:
+    """Choose the read-only transport observation that best splits candidates."""
+
+    candidates = tuple(repertoire_candidates)
+    transports = sorted({
+        getattr(transport, "value", str(transport))
+        for candidate in candidates
+        for transport in getattr(getattr(candidate, "family", None), "transports", ())
+    })
+    hypotheses = tuple(
+        ExperimentHypothesis(
+            name=getattr(candidate.family, "name", repr(candidate.family)),
+            weight=max(1.0, float(getattr(candidate, "score", 1))),
+            predicted_outcomes={
+                f"observe:{transport}": transport in {
+                    getattr(item, "value", str(item))
+                    for item in getattr(candidate.family, "transports", ())
+                }
+                for transport in transports
+            },
+        )
+        for candidate in candidates
+        if getattr(candidate, "family", None) is not None
+    )
+    return choose_experiment(hypotheses)
+
+
 def build_discovery_research_plan(
     result,
     repertoire_candidates,
@@ -82,7 +111,9 @@ def build_discovery_research_plan(
     an auditable orchestration decision consumed by setup.
     """
     protocol_known = result.protocol is not None
+    repertoire_candidates = tuple(repertoire_candidates)
     transports = _candidate_transports(repertoire_candidates)
+    next_experiment = _next_repertoire_experiment(repertoire_candidates)
 
     def capability_proven(name: str) -> bool:
         capability = result.capabilities.get(name)
@@ -113,6 +144,7 @@ def build_discovery_research_plan(
             unknown_protocol=False,
             deeper_learning_recommended=False,
             reason="A proven protocol implementation is already bound; do not substitute speculative generic learning.",
+            next_experiment=None,
         )
 
     dpi_status = ResearchStatus.PROVEN if capability_proven("dpi") else ResearchStatus.NO_EVIDENCE
@@ -196,4 +228,5 @@ def build_discovery_research_plan(
         unknown_protocol=True,
         deeper_learning_recommended=deeper,
         reason=reason,
+        next_experiment=next_experiment if deeper else None,
     )

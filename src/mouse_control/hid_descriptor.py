@@ -78,6 +78,7 @@ class HidFieldDefinition:
     flags: int
     usage_pages: tuple[int, ...] = ()
     usages: tuple[tuple[int, int], ...] = ()
+    usage_sets: tuple[tuple[tuple[int, int], ...], ...] = ()
     logical_minimum: int | None = None
     logical_maximum: int | None = None
     physical_minimum: int | None = None
@@ -177,11 +178,15 @@ class _Global:
 @dataclass
 class _Local:
     usages: list[tuple[int,int]]
+    alternate_usage_sets: list[list[tuple[int,int]]]
+    delimiter_open: bool = False
+    alternate_usage_minimum: tuple[int,int]|None = None
+    alternate_usage_maximum: tuple[int,int]|None = None
     usage_minimum: tuple[int,int]|None=None; usage_maximum: tuple[int,int]|None=None
     designator_index: int|None=None; designator_minimum: int|None=None; designator_maximum: int|None=None
     string_index: int|None=None; string_minimum: int|None=None; string_maximum: int|None=None
     @classmethod
-    def empty(cls): return cls([])
+    def empty(cls): return cls([], [])
 
 
 def _u(data: bytes) -> int: return int.from_bytes(data,"little") if data else 0
@@ -189,8 +194,7 @@ def _s(data: bytes) -> int: return int.from_bytes(data,"little",signed=True) if 
 def _usage(value:int,page:int,size:int): return ((value>>16)&0xffff,value&0xffff) if size==4 else (page,value)
 
 
-def _expand(local:_Local, diagnostics:list[HidDescriptorDiagnostic], offset:int):
-    result=list(local.usages); low,high=local.usage_minimum,local.usage_maximum
+def _expand_range(result, low, high, diagnostics, offset):
     if (low is None)!=(high is None):
         diagnostics.append(HidDescriptorDiagnostic(HidDiagnosticSeverity.WARNING,"incomplete-usage-range","usage range has one bound",offset))
     elif low and high:
@@ -200,6 +204,17 @@ def _expand(local:_Local, diagnostics:list[HidDescriptorDiagnostic], offset:int)
         else:
             diagnostics.append(HidDescriptorDiagnostic(HidDiagnosticSeverity.ERROR,"unbounded-usage-range","usage range is too large",offset)); result.extend((low,high))
     return tuple(dict.fromkeys(result))
+
+
+def _usage_sets(local:_Local, diagnostics:list[HidDescriptorDiagnostic], offset:int):
+    primary = _expand_range(list(local.usages), local.usage_minimum, local.usage_maximum,
+                            diagnostics, offset)
+    result = [primary]
+    for index, alternate in enumerate(local.alternate_usage_sets):
+        low = local.alternate_usage_minimum if index == len(local.alternate_usage_sets)-1 else None
+        high = local.alternate_usage_maximum if index == len(local.alternate_usage_sets)-1 else None
+        result.append(_expand_range(list(alternate), low, high, diagnostics, offset))
+    return tuple(result)
 
 
 def _containing(collections, path, kind):
@@ -246,15 +261,32 @@ def parse_report_descriptor(raw: bytes) -> ParsedHidDescriptor:
             continue
         if item_type==2:
             split=_usage(value,state.usage_page,size)
-            if tag==0: local.usages.append(split)
-            elif tag==1: local.usage_minimum=split
-            elif tag==2: local.usage_maximum=split
+            if tag==0:
+                (local.alternate_usage_sets[-1] if local.delimiter_open else local.usages).append(split)
+            elif tag==1:
+                if local.delimiter_open: local.alternate_usage_minimum=split
+                else: local.usage_minimum=split
+            elif tag==2:
+                if local.delimiter_open: local.alternate_usage_maximum=split
+                else: local.usage_maximum=split
             elif tag==3: local.designator_index=value
             elif tag==4: local.designator_minimum=value
             elif tag==5: local.designator_maximum=value
             elif tag==7: local.string_index=value
             elif tag==8: local.string_minimum=value
             elif tag==9: local.string_maximum=value
+            elif tag==10:
+                if value==1:
+                    if local.delimiter_open:
+                        diag(HidDiagnosticSeverity.ERROR,"nested-delimiter","nested Local Delimiter is invalid",where)
+                    else:
+                        local.delimiter_open=True; local.alternate_usage_sets.append([])
+                elif value==0:
+                    if not local.delimiter_open:
+                        diag(HidDiagnosticSeverity.ERROR,"delimiter-close-without-open","Local Delimiter close has no open set",where)
+                    local.delimiter_open=False
+                else:
+                    diag(HidDiagnosticSeverity.ERROR,"invalid-delimiter-value",f"invalid Local Delimiter value {value}",where)
             continue
         if item_type==3: diag(HidDiagnosticSeverity.INFO,"reserved-item","reserved item ignored",where); continue
         if tag==10:
@@ -273,9 +305,12 @@ def parse_report_descriptor(raw: bytes) -> ParsedHidDescriptor:
                 diag(HidDiagnosticSeverity.FATAL,"unreasonable-report-size","report field exceeds safe limits",where); local=_Local.empty(); continue
             if state.logical_minimum is not None and state.logical_maximum is not None and state.logical_minimum>state.logical_maximum:
                 diag(HidDiagnosticSeverity.ERROR,"invalid-logical-range","logical minimum exceeds maximum",where)
-            uses=_expand(local,diagnostics,where); field_pages={state.usage_page,*(p for p,_ in uses)}; pages.setdefault(key,set()).update(field_pages); field_index=indexes.get(key,0)
+            if local.delimiter_open:
+                diag(HidDiagnosticSeverity.ERROR,"unclosed-delimiter","Local Delimiter set was not closed before Main item",where)
+            usage_sets=_usage_sets(local,diagnostics,where); uses=usage_sets[0]
+            field_pages={state.usage_page,*(p for usage_set in usage_sets for p,_ in usage_set)}; pages.setdefault(key,set()).update(field_pages); field_index=indexes.get(key,0)
             fields.append(HidFieldDefinition(state.report_id,report_type,lengths.get(key,0),state.report_size,state.report_count,value,
-                tuple(sorted(field_pages)),uses,state.logical_minimum,state.logical_maximum,state.physical_minimum,state.physical_maximum,
+                tuple(sorted(field_pages)),uses,usage_sets,state.logical_minimum,state.logical_maximum,state.physical_minimum,state.physical_maximum,
                 state.unit,state.unit_exponent,local.usage_minimum,local.usage_maximum,local.designator_index,local.designator_minimum,
                 local.designator_maximum,local.string_index,local.string_minimum,local.string_maximum,tuple(path),
                 _containing(collections,path,HidCollectionType.APPLICATION),_containing(collections,path,HidCollectionType.PHYSICAL),

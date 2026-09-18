@@ -1,5 +1,69 @@
 # AI handoff log
 
+## 2026-09-17 — v0.9.4 integration and software release gates
+
+- Starting checkpoint `49a2f1571a011ebe166d9d8a3be045b1b4f9399d` was clean and exactly matched the requested discovery foundation.
+- Integrated loss-aware usbmon provenance, structured operation evidence,
+  failure-side-effect/retry safety, passive semantic recognition, and the full
+  canonical-to-community-report evidence path without adding runtime write authority.
+- The synthetic BITMOUSE-style fixture is source-derived automated evidence;
+  it trims stale reply tails and remains RECOGNIZED/read-only, not hardware-qualified.
+- Validation: 660 tests passed (one existing GLib warning); compileall and diff
+  checks passed; sdist/wheel, Fedora RPM `%check` plus packaged CLI smoke,
+  Debian package, and AppImage version/help smoke passed.
+- Architectural checkpoint: `9c79cf5`. Final G305 physical acceptance,
+  release-document checkpoint, remote push, tag, CI, and published assets remain pending.
+
+## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
+
+- Baseline: `codex/tui-only-setup` at `cad809d` with a clean working tree.
+- Added a bounded temporal dialogue model, operation-specific proof lifecycle,
+  separate experiment eligibility authority, multi-candidate dependent-field
+  inference, scoped conflict provenance, and deterministic community reports.
+- Added `mouse-control discover --output FILE` and the advanced discovery
+  CLI's `--community-report FILE`; destinations are created exclusively and
+  generic unknown-device discovery remains read-only.
+- Validation: focused discovery/regression suite passed 112 tests; full suite
+  passed 651 tests with the existing GLib warning; compileall, diff whitespace,
+  and sdist/wheel build passed.
+- Version metadata advanced to 0.9.4. No push, merge, tag, release,
+  installation, or physical hardware validation was performed.
+
+## 2026-09-17 — HID intelligence and native Razer consolidation
+
+- Baseline: branch `codex/tui-only-setup`, TUI cleanup commit `e327932`.
+- Removed the OpenRazer runtime backend/dependency and replaced its supported
+  Mouse-Control operations with an exact-model native Razer backend. DPI and
+  polling writes require an exact VID:PID, exactly one responding interface,
+  fixed protocol facts, and canonical readback. Firmware and applicable
+  battery/charging reads remain independent capabilities.
+- Consolidated descriptor-backed input/output/feature decoding with correct
+  Variable/Array, Delimiter, Buffered Bytes, unit/physical-range, collection,
+  report identity, and wire-position semantics. Expanded standard HID usages
+  and evdev mappings without interpreting vendor-defined payloads.
+- Added protocol-neutral repeated-frame field-role inference, bounded XOR/SUM/
+  selected CRC inference, and information-gain-ranked read-only experiment
+  planning. Existing contrastive learning supplies repeated guided actions and
+  negative controls; none of these structural results grants write authority.
+- Audited every production module, package entry point, retained research CLI,
+  hardware backend, and repertoire family in `docs/CODE_HEALTH_AUDIT.md`.
+- Validation: focused suites passed; full suite `637 passed` with one existing
+  GLib warning; `compileall`, `git diff --check`, and
+  `python3 -m build --no-isolation` passed. No physical Razer validation was
+  performed. No push, merge, tag, release, or installation was performed.
+
+## 2026-09-17 — TUI-only setup routing
+
+- Removed the `_LEGACY_SETUP`/TTY fallback and the superseded line-oriented
+  setup implementation, prompt screens, action menus, and stale tests.
+- Interactive `mouse-control`, explicit `mouse-control setup`, and home-screen
+  setup routes now select the same full-screen TUI transaction.
+- Noninteractive setup exits before curses is invoked and does not resurrect
+  an old UI. Configuration/runtime APIs remain separate for automation.
+- Focused setup/entry/native-HID suite passed 103 tests. Full validation passed
+  626 tests with one existing GLib deprecation warning; compileall and diff
+  whitespace checks passed.
+
 ## 2026-09-17 — v0.9.3 installed production and reconnect acceptance
 
 - The locally built Fedora 44 RPM upgraded the installed package from 0.9.1 to
@@ -182,6 +246,60 @@
 - Safety: unknown HID remains read-only. No speculative generic HID write path
   was added; write authority remains protocol-backed or exact-model PROVEN.
 - Physical validation: pending on the G305 after installing/running this branch.
+
+## 2026-09-17 — v0.9.4 CPI packaging gate
+
+- Request: CPI measurement must ship as a supported installed capability in
+  every v0.9.4 artifact before final G305 acceptance and release closure.
+- Starting commit: `11d2d31` on `codex/tui-only-setup`. Final commit is the
+  commit containing this entry.
+- Implementation: registered `mouse-control cpi` on the primary CLI and
+  refactored the existing calibration CLI to share one parser configuration
+  and execution function. The existing namespaced executable remains
+  compatible. Discovery continues to import packaged modules directly.
+- Packaging: release CI now installs the wheel and Debian package and smokes
+  their primary CPI command; RPM `%check` and the AppImage smoke do the same.
+  No `mouse-dpi-tool` command or artifact is introduced.
+- Validation: focused CPI/release/terminal tests passed 29; full suite passed
+  664 with one existing GLib warning; compileall and `git diff --check` passed.
+  Wheel and sdist built and contained both calibration modules. An isolated
+  wheel install, Fedora RPM `%check`, installed Debian package, and AppImage
+  each passed `mouse-control cpi --help`.
+- Validation level: automated/package only. No physical CPI measurement or
+  new write authority is claimed. The command reads evdev motion and performs
+  no HID feature/output writes.
+- Remaining gate: install the matching RPM and complete every operator-observed
+  step in `docs/G305_HARDWARE_ACCEPTANCE.md`. Do not tag or publish until that
+  physical gate and the final clean-tree release gate pass.
+
+## 2026-09-17 — v0.9.4 G305 physical release gate
+
+- Installed artifact: `mouse-control-0.9.4-1.fc44.noarch` built from the CPI
+  checkpoint. `mouse-control cpi --help` resolved from installed packaged
+  modules. The existing `/usr/bin/mouse-dpi-tool` is owned by Fedora's
+  `libevdev-utils`; Mouse Control did not package or replace it.
+- Startup: doctor passed permissions and service checks and detected exact G305
+  identity `046d:4074`. Runtime selected Automatic Discovery's Native HID
+  adapter and retained configured DPI stages, 1000 Hz polling, notifications,
+  and remaps.
+- Physical DPI events: the operator observed the complete slow sequence
+  `1000,1500,2000,2500,3000` and two rapid complete cycles, with every popup
+  ordered and no omissions or duplicates.
+- Software write: installed setup applied and verified 1000 DPI by canonical
+  hardware readback. Configuration and restart retained the value, and the
+  journal contained no fabricated physical-button notification for the write.
+- Lifecycle: two receiver unplug/reinsert cycles restored pointer/buttons,
+  configured remaps, Native HID, DPI notifications, and battery/tray state.
+  Reconnect itself created no popup and no duplicate device/tray identity.
+  Battery disappeared during incomplete enumeration on the first cycle and
+  returned on the monitor's next refresh after Native HID promotion.
+- Final restart: the operator confirmed input, remaps, DPI notification, and
+  battery behavior recovered without issue. Journal review found bounded
+  generation changes and no repeated reconnect loop, stale-generation event,
+  duplicate notification, rollback failure, or unresolved readback failure.
+- Validation level: physically validated on this attached Logitech G305 plus
+  the separately recorded automated/package gates. This evidence does not grant
+  write authority to any other model.
 
 ## 2026-09-15 — G305 polling acceptance runtime mismatch
 

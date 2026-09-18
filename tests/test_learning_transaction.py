@@ -198,3 +198,64 @@ def test_transaction_prerequisite_is_enforced():
     context = TransactionContext(completed={"dpi-config"})
     engine.run(spec, adapter, authorization=auth, context=context)
     assert "lighting" in context.completed
+
+
+def test_failed_mutating_step_with_possible_side_effect_is_not_resent():
+    class MutatingAdapter(Adapter):
+        def execute(self, step, context):
+            self.calls += 1
+            return StepResult(
+                status="retry", side_effect_possible=True, retry_safe=False,
+                recovery_required=True, expected_disconnect=True, resulting_generation=8,
+            )
+
+    adapter = MutatingAdapter()
+    context = TransactionContext()
+    spec = TransactionSpec(
+        "reset-and-apply",
+        steps=(TransactionStep(
+            "reset", transport=TransportKind.HID_FEATURE_SET, retries=3,
+        ),),
+        safety=SafetyClass.REVERSIBLE,
+    )
+
+    with pytest.raises(TransactionError, match="cannot be resent until state is inspected"):
+        TransactionEngine(sleep=lambda _seconds: None).run(
+            spec, adapter,
+            authorization=TransactionAuthorization(reversible_writes=True),
+            context=context,
+        )
+    assert adapter.calls == 1
+    assert context.outcomes[0].side_effect_possible is True
+    assert context.outcomes[0].retry_safe is False
+    assert context.outcomes[0].expected_disconnect is True
+    assert context.outcomes[0].resulting_generation == 8
+
+
+def test_retryable_exception_with_possible_side_effect_is_not_resent():
+    class FailingAdapter(Adapter):
+        def execute(self, step, context):
+            self.calls += 1
+            raise RetryableTransactionError(
+                "timeout after send", side_effect_possible=True,
+                retry_safe=False, recovery_required=True,
+            )
+
+    adapter = FailingAdapter()
+    context = TransactionContext()
+    spec = TransactionSpec(
+        "write", steps=(TransactionStep(
+            "send", transport=TransportKind.HID_FEATURE_SET, retries=2,
+        ),), safety=SafetyClass.REVERSIBLE,
+    )
+    with pytest.raises(TransactionError, match="cannot be resent"):
+        TransactionEngine().run(
+            spec, adapter,
+            authorization=TransactionAuthorization(reversible_writes=True),
+            context=context,
+        )
+    assert adapter.calls == 1
+    assert context.outcomes == [
+        context.outcomes[0]
+    ]
+    assert context.outcomes[0].recovery_required is True

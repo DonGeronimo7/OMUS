@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.9.4 — 2026-09-17
+
+### Pre-v1 discovery architecture foundation
+
+- Package physical CPI/polling measurement as the first-class
+  `mouse-control cpi` command while retaining the shared internal API used by
+  Automatic Discovery. Do not install or replace libevdev's `mouse-dpi-tool`.
+
+- Add bounded temporal dialogue assembly for delayed replies, busy/poll flows,
+  overlapping transactions, unsolicited physical events, reconnect generation
+  changes, stale replies, echoes, and unresolved ambiguity.
+- Add operation-scoped proof states and an experiment-eligibility model that is
+  deliberately separate from runtime PROVEN write authority.
+- Preserve full optional usbmon extended-header and capture-quality provenance
+  through canonical JSONL serialization and replay without treating unavailable
+  fields as zero.
+- Record transport, protocol-response, readable-state, physical-effect,
+  persistence, failure-side-effect, and recovery evidence as independent
+  tri-state operation facts while retaining the existing proof ladder.
+- Prevent blind retries after a failed mutating transaction when a side effect
+  may have occurred; require state inspection/recovery before resend.
+- Infer literal, duplicated, byte-swapped, scaled, affine, lookup, and stage
+  dependencies while blocking promotion when changing bytes remain unexplained.
+- Generate deterministic privacy-conscious community discovery reports with
+  protocol candidates, operation proof states, conflicts, safety status,
+  progress metrics, and exact next evidence.
+- Connect canonical observations, temporal dialogue, dependency inference,
+  semantic recognition, operation proof, and privacy-filtered community evidence
+  in one automated end-to-end path.
+- Add a passive BITMOUSE-style semantic discriminator for asymmetric `0x72`
+  frames, target/sequence correlation, declared semantic reply length, and stale
+  tail exclusion. Recognition remains write-disabled.
+- Preserve read-only generic discovery and all established v0.8.2/v0.9.3
+  remapping, HID++, Razer, reconnect, notification, and write-safety paths.
+
 ## 0.9.3 — 2026-09-17
 
 ### Descriptor-backed Automatic Hardware Discovery

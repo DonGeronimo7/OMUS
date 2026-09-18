@@ -1,7 +1,7 @@
 """Declarative protocol grammar used by automatic hardware discovery.
 
 The grammar describes *how* a mouse protocol is shaped without coupling that
-shape to a particular runtime backend. Known backends (HID++, OpenRazer,
+shape to a particular runtime backend. Known implementations (HID++, Razer,
 etc.) can act as high-confidence teachers, while unknown devices can be
 classified against the same vocabulary without receiving speculative writes.
 

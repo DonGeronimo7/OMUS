@@ -4,7 +4,7 @@ import struct
 import pytest
 
 from mouse_control.discovery_models import PhysicalDevice
-from mouse_control.trace.models import UrbEventType, UsbDirection, UsbTransferType
+from mouse_control.trace.models import CompletenessStatus, UrbEventType, UsbDirection, UsbTransferType
 from mouse_control.trace.usbmon import (
     MAX_CAPTURE_BYTES,
     USBMON_HEADER_SIZE,
@@ -31,11 +31,18 @@ def record_bytes(
     setup_flag: bytes = b"\x00",
     setup: bytes = b"\x21\x09\x05\x03\x01\x00\x04\x00",
     payload: bytes = b"data",
+    declared_length: int | None = None,
+    data_flag: bytes = b"\x00",
+    interval: int = 0,
+    start_frame: int = 0,
+    transfer_flags: int = 0,
+    descriptor_count: int = 0,
 ) -> tuple[bytes, bytes]:
     header = HEADER.pack(
         urb_id, event[0], transfer, endpoint, device, bus,
-        setup_flag, b"\x00", 10, 250, 0, len(payload), len(payload), setup,
-        0, 0, 0, 0,
+        setup_flag, data_flag, 10, 250, 0,
+        len(payload) if declared_length is None else declared_length,
+        len(payload), setup, interval, start_frame, transfer_flags, descriptor_count,
     )
     assert len(header) == USBMON_HEADER_SIZE
     return header, payload
@@ -61,6 +68,27 @@ def test_binary_usbmon_control_record_preserves_setup_transport_and_payload() ->
     assert observation.setup.value == 0x0305
     assert observation.payload == b"data"
     assert observation.timestamp_ns == 10_000_250_000
+
+
+def test_binary_usbmon_nonzero_extended_metadata_and_truncation_survive_normalization() -> None:
+    header, payload = record_bytes(
+        setup_flag=b"\x01", data_flag=b"\x02", payload=b"ab",
+        declared_length=9, interval=7, start_frame=123,
+        transfer_flags=0xA0000011, descriptor_count=4,
+    )
+    observation = normalize_usbmon_record(
+        parse_usbmon_record(header, payload), capture_id="capture", sequence=0,
+        selection=UsbmonDeviceSelection(3, 7, "fingerprint"),
+    )
+
+    assert observation is not None
+    assert (observation.setup_flag, observation.data_flag) == (1, 2)
+    assert (observation.interval, observation.start_frame) == (7, 123)
+    assert observation.transfer_flags == 0xA0000011
+    assert observation.descriptor_count == 4
+    assert observation.capture_quality is not None
+    assert observation.capture_quality.full_binary_header_available is True
+    assert observation.capture_quality.completeness is CompletenessStatus.TRUNCATED
 
 
 def test_binary_usbmon_filter_rejects_unselected_device() -> None:
