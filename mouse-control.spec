@@ -1,9 +1,9 @@
 Name:           mouse-control
-Version:        0.9.6
-Release:        2%{?dist}
+Version:        0.9.7
+Release:        1%{?dist}
 Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
-%global python_version 0.9.6.post2
+%global python_version 0.9.7.post1
 Source0:        mouse_control-%{python_version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
@@ -81,6 +81,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 %changelog
+* Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.7-1
+- Fix strict incremental-RPM asset selection across packaging version formats.
+- Reduce cold imports, reuse immutable HID knowledge, and remove idle UI polling.
+- Add repeatable timing and retained-memory performance validation.
+
 * Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.6-2
 - Restore the prior service state after every unsaved setup exit.
 - Reuse exact-device discovery evidence when established users configure a mouse.

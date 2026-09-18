@@ -1,6 +1,6 @@
 pkgname=mouse-control
-pkgver=0.9.6
-pkgrel=2
+pkgver=0.9.7
+pkgrel=1
 pkgdesc='Linux mouse remapping with Automatic Discovery and validated hardware control'
 arch=('any')
 url='https://github.com/DonGeronimo7/mouse-control'

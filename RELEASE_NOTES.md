@@ -1,3 +1,50 @@
+# Mouse Control v0.9.7-1
+
+Measured performance and updater-correctness release. It preserves Mouse
+Control's behavior and hardware authority model while removing avoidable Python
+startup, HID parsing/decoding, and idle UI work.
+
+## Correct incremental RPM updates
+
+- The release model now explicitly separates the GitHub/display tag, Python
+  PEP 440 version, RPM Version and Release, distribution suffix, and architecture.
+- The direct fallback accepts exactly one safe, version-exact, architecture-
+  compatible RPM such as `mouse-control-0.9.7-1.fc44.noarch.rpm`.
+- Official repository validation, DNF-first behavior, SHA-256 verification, DNF
+  package ownership, and verified post-install version checks remain mandatory.
+- Regression coverage includes the published `0.9.6` to `0.9.6-2` failure and
+  verifies that the immediately previous updater recognizes this release name.
+
+## Measured Python performance
+
+- Cold `mouse_control.app` import fell from 113.328 ms to 16.527 ms (-85.4%).
+- Immutable descriptor reuse reduced repeated parse work from 0.0209 ms to
+  0.000150 ms (-99.3%).
+- Cached descriptor field layouts reduced representative 1,000-report decode
+  from 66.552 ms to 28.196 ms (-57.6%).
+- Snapshot reuse reduced forced Rediscover from 0.577 ms to 0.407 ms (-29.4%).
+- Event-driven UI queues reduced idle notifier CPU from 1.031 ms/s to 0.016
+  ms/s and voluntary context switches from 20/s to 1/s in the same probe.
+- Reconnect, Rediscover, and setup enter/exit retained-memory checks remain
+  bounded across 1,000 post-warmup cycles.
+
+## Safety and compatibility
+
+Known devices still use exact physical identity and persisted PROVEN evidence;
+explicit Rediscover still executes the complete discovery path. No hardware
+write authority, generic-HID read-only boundary, updater validation, feature,
+configuration behavior, or v0.8.2 compatibility requirement was removed.
+
+## Downloads
+
+- RPM: `mouse-control-0.9.7-1.fc44.noarch.rpm`
+- DEB: `mouse-control_0.9.7-1_all.deb`
+- AppImage: `Mouse-Control-0.9.7-1-x86_64.AppImage`
+- Wheel: `mouse_control-0.9.7.post1-py3-none-any.whl`
+- Source: `mouse_control-0.9.7.post1.tar.gz`
+- Integrity manifest: `SHA256SUMS`
+
+---
 # Mouse Control v0.9.6-2
 
 Small lifecycle bug-fix revision on top of v0.9.6.

@@ -1,3 +1,11 @@
+mouse-control (0.9.7-1) unstable; urgency=medium
+
+  * Fix strict incremental-RPM update compatibility.
+  * Reduce Python startup, HID decode, discovery, and idle notification work.
+  * Add repeatable timing and retained-memory benchmarks.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Fri, 18 Sep 2026 12:00:00 -0400
+
 mouse-control (0.9.6-2) unstable; urgency=medium
 
   * Restore the prior service state after every unsaved setup exit.

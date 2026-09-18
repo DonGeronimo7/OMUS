@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.9.7-1 — 2026-09-18
+
+### Correct incremental updates
+
+- Model the GitHub tag/display version, PEP 440 version, RPM Version, RPM
+  Release, distribution suffix, and architecture as distinct release fields.
+- Match exactly one architecture-compatible RPM while retaining official-origin,
+  safe-name, SHA-256, DNF ownership, and post-install version verification.
+- Freeze the immediately previous updater's matcher against the next generated
+  RPM name, including the real `0.9.6` to `0.9.6-2` failure shape.
+
+### Measured Python performance
+
+- Defer command-specific discovery, calibration, promotion, updater, and runtime
+  imports until the corresponding command is selected.
+- Reuse exact immutable HID descriptor snapshots and bounded parsed descriptor
+  and field-layout caches without persisting live device paths.
+- Replace desktop notification and battery-tray timer polling with event-driven
+  cross-thread wakeups while preserving ordered independent notifications.
+- Add repeatable timing, milestone, and retained-memory measurements for known
+  devices, Rediscover, HID decode, reconnect, and setup lifecycle paths.
+
+### Compatibility and safety
+
+- Keep the canonical full-screen TUI as the only normal interactive UI path.
+- Preserve full v0.8.2 behavior, exact physical binding, PROVEN-only writes,
+  generic-HID read-only policy, and independent capability failure.
+
 ## 0.9.6-2 — 2026-09-18
 
 ### Lifecycle bug fixes
