@@ -489,6 +489,9 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
     app.section_index = SECTIONS.index(SetupSection.HARDWARE)
     app.discovery_complete = True
     app.discovery_result = SimpleNamespace(device=SimpleNamespace())
+    app.discovery_engine = SimpleNamespace(repertoire_candidates=(
+        SimpleNamespace(family=SimpleNamespace(name="lamzu-aurora-feature64")),
+    ))
     app.row_cursor = 1
     assert app.handle_key("ENTER").kind is ActionKind.NONE
     assert app.section is SetupSection.LAB
@@ -497,6 +500,9 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
     assert any("Current question:" in row.text for row in rows)
     assert any("Best experiment:" in row.text for row in rows)
     assert any("Your part:" in row.text for row in rows)
+    assert any("Known protocol family candidate: LAMZU Aurora" in row.text for row in rows)
+    assert any("Exact hardware proof: incomplete" in row.text for row in rows)
+    assert any("Writes: disabled pending verification" in row.text for row in rows)
     assert app.handle_key("ENTER").kind is ActionKind.RUN_DISCOVERY_LAB
 
     analysis = SimpleNamespace(

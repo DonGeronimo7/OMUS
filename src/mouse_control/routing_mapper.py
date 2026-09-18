@@ -31,6 +31,7 @@ from .discovery_lab import (
     analyze_differential_experiment,
 )
 from .lab_orchestrator import ACTION_TEMPLATES, plan_next_experiment
+from .lamzu_aurora import AuroraRoutedIdentity, receiver_identity_ambiguity
 
 
 def _id(prefix: str, *parts: object) -> str:
@@ -39,6 +40,58 @@ def _id(prefix: str, *parts: object) -> str:
 
 def _route_node_id(route: RouteEndpoint) -> str:
     return _id("route", route.identity)
+
+
+def aurora_routed_identity_evidence(
+    experiment: LabExperiment,
+    identity: AuroraRoutedIdentity,
+    *,
+    source_route: RouteEndpoint,
+    source_observation_ids: tuple[str, ...],
+    receiver_usb_pid: int | None = None,
+) -> RoutingEvidence:
+    """Adapt one observed Aurora identity reply into conservative route evidence.
+
+    The identity strengthens a route candidate but never proves that the USB
+    receiver owns the state or that the routed identity is a writable child.
+    """
+
+    ambiguity_text = (
+        receiver_identity_ambiguity(receiver_usb_pid, identity.product_id)
+        if receiver_usb_pid is not None else None
+    )
+    ambiguity = (ambiguity_text,) if ambiguity_text else ()
+    return RoutingEvidence(
+        evidence_id=_id(
+            "aurora-routed-identity", identity.vendor_id, identity.product_id,
+            source_observation_ids,
+        ),
+        experiment_id=experiment.experiment_id,
+        physical_device_context=experiment.physical_device_context,
+        connection_generation=experiment.connection_generation,
+        receiver_identity=(
+            f"usb:{identity.vendor_id:04x}:"
+            f"{receiver_usb_pid:04x}" if receiver_usb_pid is not None else None
+        ),
+        child_identity_candidate=f"{identity.vendor_id:04x}:{identity.product_id:04x}",
+        source_route=source_route,
+        destination_route=None,
+        internal_target=0x01,
+        route_tag="lamzu-aurora:routed-identity:target-01",
+        source_observation_ids=source_observation_ids,
+        relationship=RoutingRelationship.ROUTE_OWNERSHIP,
+        status=(
+            RoutingStatus.AMBIGUOUS_ROUTE if ambiguity
+            else RoutingStatus.CANDIDATE_ROUTE
+        ),
+        confidence="vendor-structure-plus-observed-reply",
+        proof_state=ProofState.HYPOTHESIZED,
+        ambiguity=ambiguity,
+        reason=(
+            "observed routed VID/PID reply strengthens a child candidate; "
+            "routing ownership still requires independent mapper evidence"
+        ),
+    )
 
 
 def _dialogue_route(observation) -> RouteEndpoint:

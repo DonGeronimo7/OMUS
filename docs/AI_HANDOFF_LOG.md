@@ -1,5 +1,42 @@
 # AI handoff log
 
+## 2026-09-18 — LAMZU Aurora first-class protocol-family knowledge
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `7698607` and
+  consumed the supplied Aurora 1.0.32 research package as vendor evidence, not
+  physical proof.
+- Added reusable declarative vocabulary for sourced frame grammars, operations,
+  async events, model identities, state dependencies, status/timing policies,
+  and dangerous-operation knowledge. Existing repertoire families retain their
+  behavior.
+- Added modern `lamzu-aurora-feature64` and separate legacy
+  `lamzu-legacy-report8` families. Modern knowledge covers alignment/status,
+  Thorn identities, the full command/event repertoire, sensor/LOD/Angle Tune,
+  Rapid Trigger, Scroll Bhop, Competition→20K dependency, and routed identity.
+  Legacy knowledge covers report 8 framing/checksum, battery/profile/version,
+  flash grammar/layout, and forbidden reset/pairing/update operations.
+- Input Report 4 battery state projects into existing pushed-state and Power
+  Investigator evidence. Routed identity projects into candidate/ambiguous
+  Routing Mapper evidence; `0032` and `002e` remain unresolved. Known DFU
+  identities are filtered from mouse selection and refused by Discovery.
+- The Lab page reports the LAMZU family candidate, vendor knowledge, incomplete
+  exact-hardware proof, and disabled writes. No separate vendor UI or capture
+  stack was added.
+- Safety: every Aurora operation is non-automatic, both families use
+  `WriteScope.NEVER`, and the explicit dangerous-operation denylist contains no
+  planner action or executor. No HID/Feature write, device probe, install,
+  network activity, push, merge, tag, or release occurred.
+- Automated validation: focused Lab/discovery/protocol/TUI/security suite
+  `278 passed`; full suite `934 passed, 1 warning` (the existing GLib
+  deprecation warning); `python3 -m compileall -q src tests` passed; and
+  `git diff --check` passed.
+- Physical Thorn V2 validation remains pending: descriptors, response layout,
+  routed identity, sensor code, all read semantics, DPI/polling/battery physical
+  correlation, persistence, and each independently promoted setter must be
+  verified on the exact device.
+- Next bounded v1 milestone: vendor capture importer, preserving the same
+  local-only replay, exact-identity, proof, routing, and no-write boundaries.
+
 ## 2026-09-18 — Discovery Lab battery/charging/power-state investigator
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `c408b80` and

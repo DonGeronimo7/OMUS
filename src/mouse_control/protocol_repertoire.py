@@ -19,6 +19,7 @@ from typing import Iterable, Mapping
 from .discovery_models import DeviceNode, PhysicalDevice
 from .hid_descriptor import ParsedHidDescriptor
 from .logical_record import LogicalRecord, RecordCompleteness, RecordIntegrity
+from .lamzu_aurora import LAMZU_AURORA_FAMILIES
 from .protocol_codec import ProtocolCodecError, decode_value
 from .protocol_grammar import (
     BurstRecognitionRecipe,
@@ -221,6 +222,7 @@ def _source(
 # classification but remain write-disabled until mouse-control proves them on
 # hardware or a modern upstream verification justifies promotion.
 DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
+    *LAMZU_AURORA_FAMILIES,
     ProtocolFamily(
         name="bitmouse-72",
         revision="semantic-frame-v1",
@@ -1256,6 +1258,14 @@ def _discriminator_matches(
             if end > len(frame):
                 return False
             return _field(frame, discriminator.offset, discriminator.width) == (sum(frame[discriminator.start:end]) & 0xFF)
+        if discriminator.kind is DiscriminatorKind.SUM8_TOTAL_EQUALS:
+            end = len(frame) if discriminator.end is None else discriminator.end
+            if end > len(frame) or discriminator.expected is None:
+                return False
+            return (
+                _field(frame, discriminator.offset, discriminator.width)
+                + sum(frame[discriminator.start:end])
+            ) & 0xFF == discriminator.expected
         if discriminator.kind is DiscriminatorKind.DECLARED_LENGTH:
             if discriminator.other_side is None:
                 return False

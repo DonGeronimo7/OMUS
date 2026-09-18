@@ -1,5 +1,42 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — LAMZU Aurora protocol-family knowledge milestone
+
+- Automatic Discovery now treats current LAMZU/Aurora as a declarative family:
+  64-byte Feature Report 0 control framing, sibling Input Report 4 events,
+  vendor-observed 0/1 response alignment, status/poll/resend bounds, command
+  recipes, model catalog, dependencies, and explicit provenance. The separate
+  VID `3554` report-8/16-byte/checksum/flash-layout generation remains a distinct
+  family and cannot collide with the modern grammar.
+- Thorn, Thorn V2, and 54H20 wired/wireless/receiver identities are retained as
+  vendor-declared model knowledge. USB receiver `0032` and routed/internal
+  identity `002e` remain separate and ambiguous until physical routing evidence
+  resolves them. Known mouse/receiver DFU identities are filtered from normal
+  selection and refused again at the Discovery boundary.
+- Vendor operations cover global state, battery, profile, sleep/debounce,
+  polling, DPI/XY, LOD, sensor model, Angle Tune/snapping, Motion Sync, ripple,
+  performance/20K, indicators, buttons, macros, Rapid Trigger, Scroll Bhop, and
+  routed identity. They are descriptive encoders/decoders only. No operation is
+  eligible for an automatic hardware request and both families use
+  `WriteScope.NEVER`.
+- Sensor codes 1/2/4, fine LOD, signed Angle Tune, BE16 fields, independent
+  Rapid Trigger buttons, Scroll Bhop modes/windows, and the Competition→20K
+  dependency are represented from vendor evidence. Catalog 50K/5-stage/8K
+  claims remain unverified rather than becoming capabilities.
+- Input Report 4 events project into the existing pushed-state model. Battery
+  percent/charging events feed the existing Power Investigator, preserving raw
+  100% while charging, freshness, stale-read replacement, route evidence, and
+  contradictions. Routed VID/PID replies create only candidate/ambiguous
+  Routing Mapper evidence and never prove ownership.
+- Factory/profile reset, identity/descriptor writes, pairing, DFU, erase,
+  firmware control, arbitrary targets, and unknown commands are explicit
+  `DO_NOT_PROBE` knowledge. Aurora vendor facts cannot authorize writes or
+  bypass per-operation exact-hardware proof.
+- Validation at this checkpoint: the focused Lab/discovery/protocol/TUI/security
+  suite passed `278` tests; the full suite passed `934` tests with one existing
+  GLib deprecation warning; `compileall` and `git diff --check` passed. Physical
+  validation remains `UNVERIFIED — NEEDS PHYSICAL TEST`.
+
 ## 2026-09-18 — Discovery Lab battery/charging/power-state milestone
 
 - `LabExperiment` now retains canonical power evidence with raw and decoded

@@ -1000,6 +1000,21 @@ class SetupController:
                 DisplayRow("Selected-device capture is local, bounded, and read-only."),
                 DisplayRow(f"Current question: {plan.purpose}"),
             ]
+            repertoire = tuple(
+                getattr(self.discovery_engine, "repertoire_candidates", ())
+                if self.discovery_engine is not None else ()
+            )
+            lamzu = next((
+                item for item in repertoire
+                if item.family.name == "lamzu-aurora-feature64"
+            ), None)
+            if lamzu is not None:
+                rows.extend((
+                    DisplayRow("Known protocol family candidate: LAMZU Aurora"),
+                    DisplayRow("Vendor protocol knowledge: available"),
+                    DisplayRow("Exact hardware proof: incomplete"),
+                    DisplayRow("Writes: disabled pending verification"),
+                ))
             if plan.selected_action is not None:
                 rows.extend([
                     DisplayRow(f"Best experiment: {plan.selected_action.label}"),

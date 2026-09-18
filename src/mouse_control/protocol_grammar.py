@@ -26,6 +26,8 @@ class SourceTrust(str, Enum):
     """How strongly an upstream protocol fact has been verified."""
 
     REFERENCE = "reference"
+    VENDOR_DECLARED = "vendor_declared"
+    VENDOR_IMPLEMENTED = "vendor_implemented"
     MAINTAINED = "maintained"
     HARDWARE_VERIFIED = "hardware_verified"
     LOCAL_PROVEN = "local_proven"
@@ -103,6 +105,15 @@ class SemanticBehavior(str, Enum):
     MOTION_SYNC = "motion_sync"
     RIPPLE_CONTROL = "ripple_control"
     SLEEP_TIMEOUT = "sleep_timeout"
+    SENSOR_MODEL = "sensor_model"
+    CONNECTION_STATE = "connection_state"
+    PERFORMANCE_SELECTOR = "performance_selector"
+    TRACKING_20K = "tracking_20k"
+    ANGLE_TUNE = "angle_tune"
+    RAPID_TRIGGER_LEFT = "rapid_trigger_left"
+    RAPID_TRIGGER_RIGHT = "rapid_trigger_right"
+    SCROLL_BHOP_MODE = "scroll_bhop_mode"
+    SCROLL_BHOP_WINDOW_MS = "scroll_bhop_window_ms"
 
 
 class EvidenceCategory(str, Enum):
@@ -131,6 +142,7 @@ class DiscriminatorKind(str, Enum):
     SUM8_EQUALS = "sum8_equals"
     DECLARED_LENGTH = "declared_length"
     REPORT_ID_PAIR = "report_id_pair"
+    SUM8_TOTAL_EQUALS = "sum8_total_equals"
 
 
 @dataclass(frozen=True)
@@ -438,6 +450,157 @@ class SessionGrammar:
 
 
 @dataclass(frozen=True)
+class ProtocolFrameGrammar:
+    """Declarative fixed-frame layout; descriptive and never an I/O primitive."""
+
+    name: str
+    report_type: str
+    report_id: int
+    size: int
+    status_offset: int | None = None
+    reserved_offset: int | None = None
+    target_offset: int | None = None
+    length_offset: int | None = None
+    page_offset: int | None = None
+    command_offset: int | None = None
+    payload_offset: int = 0
+    response_alignment_offsets: tuple[int, ...] = (0,)
+    checksum: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name or self.report_type not in {"input", "output", "feature"}:
+            raise ValueError("frame grammar requires a name and supported report type")
+        if not 0 <= self.report_id <= 0xFF or self.size <= 0:
+            raise ValueError("frame report ID and size are invalid")
+        offsets = (
+            self.status_offset, self.reserved_offset, self.target_offset,
+            self.length_offset, self.page_offset, self.command_offset,
+            self.payload_offset,
+        )
+        if any(value is not None and value < 0 for value in offsets):
+            raise ValueError("frame offsets cannot be negative")
+        if not self.response_alignment_offsets or any(
+            value not in (0, 1) for value in self.response_alignment_offsets
+        ):
+            raise ValueError("response alignment offsets must be the observed 0/1 forms")
+
+
+@dataclass(frozen=True)
+class ProtocolOperation:
+    """Sourced command knowledge, independent from runtime write authority."""
+
+    name: str
+    page: int
+    target: int
+    request_length: int
+    read_command: int | None = None
+    write_command: int | None = None
+    safety: SafetyClass = SafetyClass.UNKNOWN
+    payload_fields: tuple[str, ...] = ()
+    prerequisite: tuple[str, ...] = ()
+    vendor_evidence: str = ""
+    automatic_experiment_allowed: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.name or min(self.page, self.target, self.request_length) < 0:
+            raise ValueError("protocol operation identity and numeric fields are invalid")
+        commands = tuple(
+            value for value in (self.read_command, self.write_command)
+            if value is not None
+        )
+        if not commands or any(not 0 <= value <= 0xFF for value in commands):
+            raise ValueError("protocol operation requires valid read or write command")
+        if self.safety is SafetyClass.DANGEROUS and self.automatic_experiment_allowed:
+            raise ValueError("dangerous operations cannot be automatic experiments")
+        if self.automatic_experiment_allowed and self.read_command is None:
+            raise ValueError("automatic operation eligibility applies only to a known read side")
+
+
+@dataclass(frozen=True)
+class AsyncEventRecipe:
+    name: str
+    event_id: int
+    report_id: int
+    marker: int
+    bindings: tuple[FieldBinding, ...]
+    action: str = "decode"
+
+    def __post_init__(self) -> None:
+        if not self.name or any(
+            not 0 <= value <= 0xFF
+            for value in (self.event_id, self.report_id, self.marker)
+        ):
+            raise ValueError("async event identity is invalid")
+        if self.action not in {"decode", "reread"}:
+            raise ValueError("async event action must be decode or reread")
+
+
+class DeviceIdentityRole(str, Enum):
+    MOUSE = "mouse"
+    RECEIVER = "receiver"
+    INTERNAL_RECEIVER = "internal_receiver"
+    BOOTLOADER = "bootloader"
+
+
+@dataclass(frozen=True)
+class DeviceIdentityRecord:
+    model: str
+    vendor_id: int
+    product_id: int
+    connection: str
+    role: DeviceIdentityRole
+    capabilities: tuple[tuple[str, object], ...] = ()
+    vendor_evidence: str = "vendor_declared"
+    notes: str = ""
+
+    @property
+    def configurable(self) -> bool:
+        return self.role is not DeviceIdentityRole.BOOTLOADER
+
+
+@dataclass(frozen=True)
+class StateDependencyRule:
+    prerequisite: str
+    dependent: str
+    required_value: object
+    disable_dependent_when_unmet: bool = False
+    restrictions: tuple[str, ...] = ()
+    vendor_evidence: str = "vendor_implemented"
+
+
+@dataclass(frozen=True)
+class DangerousOperation:
+    name: str
+    reason: str
+    command: int | None = None
+    page: int | None = None
+    target: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name or not self.reason:
+            raise ValueError("dangerous-operation knowledge requires name and reason")
+
+
+@dataclass(frozen=True)
+class StatusTimingPolicy:
+    completed_statuses: tuple[int, ...]
+    poll_below: int | None = None
+    resend_above: int | None = None
+    maximum_receive_polls: int = 0
+    maximum_resends: int = 0
+    delay_priors_ms: tuple[int, ...] = ()
+    evidence_note: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.completed_statuses:
+            raise ValueError("status policy requires a terminal status")
+        if self.maximum_receive_polls < 0 or self.maximum_resends < 0:
+            raise ValueError("status-policy bounds cannot be negative")
+        if any(value <= 0 for value in self.delay_priors_ms):
+            raise ValueError("timing priors must be positive")
+
+
+@dataclass(frozen=True)
 class ProtocolFamily:
     """Reusable protocol-family knowledge.
 
@@ -460,6 +623,13 @@ class ProtocolFamily:
     burst_recognition: BurstRecognitionRecipe | None = None
     pushed_state_recognition: PushedStateRecognitionRecipe | None = None
     logical_record_recognition: LogicalRecordRecognitionRecipe | None = None
+    frame_grammars: tuple[ProtocolFrameGrammar, ...] = ()
+    operations: tuple[ProtocolOperation, ...] = ()
+    async_events: tuple[AsyncEventRecipe, ...] = ()
+    models: tuple[DeviceIdentityRecord, ...] = ()
+    dependencies: tuple[StateDependencyRule, ...] = ()
+    dangerous_operations: tuple[DangerousOperation, ...] = ()
+    status_timing: StatusTimingPolicy | None = None
     write_scope: WriteScope = WriteScope.NEVER
     identity_required: bool = False
     minimum_match_score: int = 4
@@ -469,9 +639,11 @@ class ProtocolFamily:
     def strongest_trust(self) -> SourceTrust:
         order = {
             SourceTrust.REFERENCE: 0,
-            SourceTrust.MAINTAINED: 1,
-            SourceTrust.HARDWARE_VERIFIED: 2,
-            SourceTrust.LOCAL_PROVEN: 3,
+            SourceTrust.VENDOR_DECLARED: 1,
+            SourceTrust.VENDOR_IMPLEMENTED: 2,
+            SourceTrust.MAINTAINED: 3,
+            SourceTrust.HARDWARE_VERIFIED: 4,
+            SourceTrust.LOCAL_PROVEN: 5,
         }
         if not self.sources:
             return SourceTrust.REFERENCE

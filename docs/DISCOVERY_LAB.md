@@ -264,6 +264,41 @@ may remain pending for evidence gathered during normal future use. The Lab TUI
 shows the useful interpretation, cadence, contradictions, passive follow-up,
 and next bounded experiment without packet detail.
 
+## LAMZU Aurora family knowledge
+
+The repertoire contains two explicitly separate LAMZU families. The modern
+family uses a 64-byte Feature Report 0 control grammar plus Input Report 4
+asynchronous events. The legacy VID `3554` family uses report 8, a 16-byte
+packet, its sourced checksum relation, and separate flash-layout semantics.
+Neither family is a runtime backend and neither grants write authority.
+
+Modern response normalization accepts the two vendor-observed command
+alignments before semantic matching. Status `a1` and the vendor-observed `02`
+are terminal evidence; lower/pending and higher/resend statuses map into the
+existing busy/poll temporal vocabulary with explicit bounds. The 15/20/30/100
+ms values remain vendor timing priors and are never substituted for measured
+Protocol Timing Profiler evidence.
+
+The catalog retains Thorn, Thorn V2, and 54H20 identities and capabilities as
+`VENDOR_DECLARED`. It does not call a matching product physically proven.
+Bootloader identities are excluded before normal selection and refused at the
+Discovery entry point. Receiver USB PID `0032` and routed/internal PID `002e`
+remain unresolved identity layers.
+
+Input Report 4 recipes cover DPI, profile reread, battery/charging, connection,
+LOD, polling, and joint performance state. They project into existing
+`PushedStateRecord` evidence rather than creating a notification subsystem.
+Battery events therefore use the ordinary Power Investigator, and observed
+routed identity replies use candidate-level Routing Mapper evidence.
+
+All vendor-described commands—including Rapid Trigger and Scroll Bhop—are data
+records and pure deterministic codecs. Current-family Feature requests are not
+eligible automatic experiments because even a read requires an unverified
+outgoing Feature transaction. Both families remain `WriteScope.NEVER`.
+Factory/profile reset, identity/descriptor mutation, pairing, DFU, flash erase,
+firmware control, arbitrary target enumeration, and unknown command probing are
+explicitly non-experimentable.
+
 ## Safety and privacy
 
 - Capture is restricted to the physical mouse selected by Automatic Discovery.
