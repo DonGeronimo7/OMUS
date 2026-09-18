@@ -1,12 +1,13 @@
 """Shared hardware lifecycle and reconnect reconciliation regressions."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware import (DesiredHardwareState, HardwareBackend,
                                     HardwareSupervisor)
-from mouse_control.hardware.generic import GenericBackend
 from mouse_control.hardware.capabilities import BatteryState, DpiState
+from mouse_control.hardware.discovery_backend import DiscoveryBackend
 from mouse_control.remapper import DpiCycler
 
 
@@ -143,32 +144,67 @@ def test_rebind_updates_device_identity_used_by_existing_consumers():
     assert not supervisor.discovery_pending
 
 
-def test_reconnect_promotes_native_after_temporary_generic_fallback():
-    """Incomplete hotplug discovery must not make Generic permanently sticky."""
-    native_before, native_after = backend(), backend()
-    fallback = GenericBackend()
-    fallback.close = MagicMock()
-    duplicate_fallback = GenericBackend()
-    duplicate_fallback.close = MagicMock()
-    replacements = iter((fallback, duplicate_fallback, native_after))
-    supervisor = HardwareSupervisor(
-        native_before, G305, lambda _device: next(replacements))
+def discovery_backend(kind, *, name="Native HID"):
+    target = DiscoveryBackend(protocol_factories=())
+    target.close = MagicMock()
+    if kind == "native":
+        target._protocol_backend = SimpleNamespace(name=name)
+    elif kind == "learned":
+        target._learned_operation = object()
+    return target
 
-    assert supervisor.rebind(0)
-    assert supervisor.current_backend is fallback
-    assert supervisor.discovery_pending
+
+def test_reconnect_waits_for_previous_native_during_asynchronous_member_arrival():
+    """Partial enumeration must not reconcile through a weaker learned writer."""
+    native_before = discovery_backend("native")
+    native_after = discovery_backend("native")
+    learned_candidates = [discovery_backend("learned") for _ in range(3)]
+    for candidate in learned_candidates:
+        candidate.supports_dpi = MagicMock(return_value=True)
+        candidate.set_dpi = MagicMock()
+    native_after.supports_dpi_stages = MagicMock(return_value=False)
+    native_after.supports_dpi = MagicMock(return_value=True)
+    native_after.set_dpi = MagicMock(return_value=DpiState(1000, confirmed=True))
+    native_after.get_dpi = MagicMock(return_value=1000)
+    replacements = iter((*learned_candidates, native_after))
+    supervisor = HardwareSupervisor(
+        native_before,
+        G305,
+        lambda _device: next(replacements),
+        DesiredHardwareState(active_dpi=1000),
+    )
+
+    for candidate in learned_candidates:
+        assert not supervisor.rebind(0, force=True)
+        assert supervisor.current_backend is native_before
+        candidate.set_dpi.assert_not_called()
+        candidate.close.assert_called_once()
+        assert supervisor.generation == 0
+
+    assert supervisor.rebind(0, force=True)
+    assert supervisor.current_backend is native_after
     assert supervisor.generation == 1
+    assert not supervisor.discovery_pending
+    native_after.set_dpi.assert_called_once_with(G305, 1000)
     native_before.close.assert_called_once()
 
-    # A settling probe that finds only Generic does not replace the live
-    # fallback or advance its generation.
-    assert not supervisor.rebind(1)
-    assert supervisor.current_backend is fallback
-    assert supervisor.generation == 1
-    duplicate_fallback.close.assert_called_once()
 
-    assert supervisor.rebind(1)
-    assert supervisor.current_backend is native_after
+def test_reconnect_preserves_proven_learned_affinity_until_learned_members_return():
+    learned_before = discovery_backend("learned")
+    topology_only = discovery_backend("plain")
+    learned_after = discovery_backend("learned")
+    replacements = iter((topology_only, learned_after))
+    supervisor = HardwareSupervisor(
+        learned_before, G305, lambda _device: next(replacements))
+
+    assert not supervisor.rebind(0, force=True)
+    assert supervisor.current_backend is learned_before
+    assert supervisor.discovery_pending
+    assert supervisor.generation == 0
+    topology_only.close.assert_called_once()
+
+    assert supervisor.rebind(0, force=True)
+    assert supervisor.current_backend is learned_after
     assert not supervisor.discovery_pending
-    assert supervisor.generation == 2
-    fallback.close.assert_called_once()
+    assert supervisor.generation == 1
+    learned_before.close.assert_called_once()

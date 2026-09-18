@@ -1,5 +1,28 @@
 # AI handoff log
 
+## 2026-09-17 — Reconnect affinity and additive Vim navigation
+
+- Physical pre-fix evidence: a G305 previously using Native HID rebound through
+  topology-only and PROVEN learned candidates across generations 1–4, producing
+  safe rejected 1000-DPI reconciliation attempts, before Native HID returned at
+  generation 5. Persistent discovery itself did not rerun, and post-recovery
+  DPI cycling/notifications worked.
+- Root cause: `HardwareSupervisor.rebind()` reconciled and promoted each newly
+  constructed candidate before considering the strength of the backend that
+  had been valid before disconnect. Partial composite-interface enumeration
+  therefore became observable backend churn.
+- The supervisor now retains Discovery-adapter affinity and rejects/closes a
+  weaker temporary candidate before reconciliation. Three simulated learned
+  candidates followed by the same native adapter produce one final generation
+  and no learned DPI write attempt. Learned-device affinity has separate
+  regression coverage. Compatibility backends outside the universal Discovery
+  surface retain their prior replacement behavior.
+- Added shared TUI aliases: `j/k` down/up, `h/l` back/activate, and `g/G`
+  first/last, plus Home/End translation. Existing key behavior remains covered.
+- Focused lifecycle, learned-safety, notification, remapper, DPI-cycle, and TUI
+  suite passed 133 tests. Full suite passed 672 tests with the existing GLib
+  warning. No new physical reconnect test was performed after the correction.
+
 ## 2026-09-17 — Persistent discovery and responsive TUI fast path
 
 - Baseline `v0.9.4` (`97c391f`) repeated comprehensive passive discovery while

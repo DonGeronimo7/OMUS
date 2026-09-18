@@ -43,6 +43,7 @@ class HardwareSupervisor(HardwareBackend):
         self.desired = desired
         self._device_resolver = device_resolver or (lambda selected: selected)
         self._has_preferred_backend = self._backend_has_proven_adapter(backend)
+        self._preferred_adapter = self._adapter_affinity(backend)
         self._discovery_pending = bool(discovery_pending and not self._has_preferred_backend)
         self._lock = threading.RLock()
         self._generation = 0
@@ -55,6 +56,36 @@ class HardwareSupervisor(HardwareBackend):
                 backend.protocol_adapter_name is not None
                 or backend.has_proven_learned_adapter
             )
+        return True
+
+    @staticmethod
+    def _adapter_affinity(backend: HardwareBackend) -> tuple[int, str | None]:
+        """Return reconnect preference without granting hardware authority.
+
+        Native protocol adapters outrank independently PROVEN learned adapters,
+        which outrank a topology-only Discovery backend. The token preserves
+        the exact previously selected native implementation while composite
+        interfaces are arriving asynchronously.
+        """
+        if not isinstance(backend, DiscoveryBackend):
+            # Compatibility backends predate the universal Discovery surface;
+            # retain their established replacement behavior.
+            return (0, None)
+        if backend.protocol_adapter_name is not None:
+            return (2, backend.protocol_adapter_name)
+        if backend.has_proven_learned_adapter:
+            return (1, "proven-learned")
+        return (0, None)
+
+    def _preserves_adapter_affinity(self, replacement: HardwareBackend) -> bool:
+        preferred_rank, preferred_token = self._preferred_adapter
+        replacement_rank, replacement_token = self._adapter_affinity(replacement)
+        if preferred_rank == 0:
+            return True
+        if replacement_rank < preferred_rank:
+            return False
+        if preferred_rank == 2 and replacement_rank == 2:
+            return replacement_token == preferred_token
         return True
 
     @staticmethod
@@ -234,6 +265,19 @@ class HardwareSupervisor(HardwareBackend):
             try:
                 resolved_device = self._device_resolver(self.device)
                 replacement = self._backend_factory(resolved_device)
+                if not self._preserves_adapter_affinity(replacement):
+                    close = getattr(replacement, "close", None)
+                    if close:
+                        close()
+                    self.device = resolved_device
+                    self._discovery_pending = True
+                    LOG.debug(
+                        "Waiting for previously selected hardware adapter %s; "
+                        "temporary candidate was %s",
+                        self._preferred_adapter,
+                        self._adapter_affinity(replacement),
+                    )
+                    return False
                 self._reconcile_backend(replacement, resolved_device)
                 prepare_rebind = getattr(replacement, "prepare_observer_rebind", None)
                 if callable(prepare_rebind):
@@ -261,6 +305,9 @@ class HardwareSupervisor(HardwareBackend):
             if replacement_preferred:
                 self._has_preferred_backend = True
                 self._discovery_pending = False
+                replacement_affinity = self._adapter_affinity(replacement)
+                if replacement_affinity[0] > self._preferred_adapter[0]:
+                    self._preferred_adapter = replacement_affinity
             elif self._has_preferred_backend:
                 self._discovery_pending = True
             self._generation += 1

@@ -592,6 +592,24 @@ class SetupController:
 
     def handle_key(self, key: str) -> ControllerAction:
         key = key.upper()
+        if key == "FIRST":
+            if self.section is SetupSection.DEVICE:
+                self.device_cursor = 0
+                self.row_cursor = 0
+            else:
+                self.row_cursor = 0
+            return ControllerAction()
+        if key == "LAST":
+            if self.section is SetupSection.DEVICE:
+                self.device_cursor = len(self.devices) - 1
+                self.row_cursor = self.device_cursor
+            else:
+                self.row_cursor = self.row_count() - 1
+            return ControllerAction()
+        if key == "VIM_LEFT":
+            key = "BACK"
+        elif key == "VIM_RIGHT":
+            key = "ENTER"
         if key == "UP":
             if self.section is SetupSection.DEVICE:
                 self.device_cursor = (self.device_cursor - 1) % len(self.devices)

@@ -1,5 +1,25 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — Reconnect adapter affinity and Vim navigation
+
+- `HardwareSupervisor` now remembers the strongest accepted universal
+  Discovery adapter: exact native protocol adapters outrank PROVEN learned
+  adapters, which outrank topology-only bindings. During reconnect, weaker
+  partial-enumeration candidates are closed before desired-state reconciliation
+  and do not advance the generation.
+- A previously native device therefore remains on its disconnected generation
+  while composite members settle, then replaces it directly with the same
+  native adapter. A previously learned device similarly waits for its learned
+  members. No write-authority, discovery, identity, or generation-isolation
+  rule was weakened.
+- The shared setup input translation/controller path now adds `j/k`, `h/l`, and
+  `g/G` aliases while preserving arrows, Enter, Escape, Back, Quit, Help, Home,
+  and End. First/last movement uses the controller's selectable-row count.
+- Automated validation passes 672 tests with the existing GLib warning.
+  Physical confirmation of the reduced G305 reconnect generation count remains
+  pending; the pre-fix five-generation trace and eventual Native HID recovery
+  were supplied by the operator.
+
 ## 2026-09-17 — Persistent discovery fast path and semantic progress
 
 - Normal backend startup now rebuilds the current physical/member graph directly;

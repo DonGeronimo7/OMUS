@@ -6,6 +6,7 @@ from mouse_control.discovery import MouseDevice
 from mouse_control.guided_discovery import GuidedDiscoveryOutcome, GuidedDpiLearningOutcome
 from mouse_control.setup_flow import SetupChoices
 from mouse_control.setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
+from mouse_control.setup_tui_curses import CursesSetupApp
 
 
 MOUSE1 = MouseDevice("Mouse One", "/dev/input/one", vendor=1, product=1, phys="usb-1")
@@ -125,6 +126,44 @@ def test_normal_navigation_reuses_session_without_hardware_queries():
         assert app.handle_key(key).kind is ActionKind.NONE
 
     assert calls == baseline
+
+
+def test_vim_key_translation_is_additive_to_existing_navigation():
+    import curses
+
+    assert CursesSetupApp._symbolic_key(curses.KEY_DOWN) == "DOWN"
+    assert CursesSetupApp._symbolic_key(curses.KEY_UP) == "UP"
+    assert CursesSetupApp._symbolic_key(curses.KEY_LEFT) == "LEFT"
+    assert CursesSetupApp._symbolic_key(curses.KEY_RIGHT) == "RIGHT"
+    assert CursesSetupApp._symbolic_key(curses.KEY_HOME) == "FIRST"
+    assert CursesSetupApp._symbolic_key(curses.KEY_END) == "LAST"
+    assert CursesSetupApp._symbolic_key(10) == "ENTER"
+    assert CursesSetupApp._symbolic_key(27) == "ESC"
+    assert CursesSetupApp._symbolic_key(ord("j")) == "DOWN"
+    assert CursesSetupApp._symbolic_key(ord("k")) == "UP"
+    assert CursesSetupApp._symbolic_key(ord("h")) == "VIM_LEFT"
+    assert CursesSetupApp._symbolic_key(ord("l")) == "VIM_RIGHT"
+    assert CursesSetupApp._symbolic_key(ord("g")) == "FIRST"
+    assert CursesSetupApp._symbolic_key(ord("G")) == "LAST"
+
+
+def test_vim_first_last_and_activation_reuse_controller_actions():
+    app, _ = controller()
+    app.handle_key("LAST")
+    assert app.device_cursor == len(app.devices) - 1
+    app.handle_key("FIRST")
+    assert app.device_cursor == 0
+
+    enter_app, _ = controller()
+    vim_app, _ = controller()
+    enter_action = enter_app.handle_key("ENTER")
+    vim_action = vim_app.handle_key("VIM_RIGHT")
+    assert vim_app.section == enter_app.section
+    assert vim_action.kind is enter_action.kind
+
+    enter_app.handle_key("BACK")
+    vim_app.handle_key("VIM_LEFT")
+    assert vim_app.section == enter_app.section
 
 
 def test_dpi_edit_is_verified_before_state_changes():

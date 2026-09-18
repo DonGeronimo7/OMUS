@@ -307,7 +307,7 @@ class CursesSetupApp:
 
         status = self.controller.status or self.controller.notice
         self._put(stdscr, height - 2, 1, f" {status} ", width - 2, self._accent)
-        footer = " Enter Select/Edit   ↑↓ Navigate   ←→ Sections   b Back   q Quit   ? Help "
+        footer = " Enter/l Select  ↑↓/jk Move  ←→ Sections  h Back  g/G Ends  q Quit  ? Help "
         self._put(stdscr, height - 1, 0, footer, width, self._highlight)
         stdscr.refresh()
 
@@ -353,7 +353,10 @@ class CursesSetupApp:
             "Setup help",
             [
                 "↑ / ↓  navigate the current panel",
+                "j / k  navigate down / up",
                 "← / →  switch setup sections",
+                "h / l  back / activate the current selection",
+                "g / G  jump to the first / last selectable item",
                 "Enter  select, edit, or continue",
                 "b / Esc  go back",
                 "q  cancel setup (confirmation required)",
@@ -931,6 +934,14 @@ class CursesSetupApp:
             curses.KEY_DOWN: "DOWN",
             curses.KEY_LEFT: "LEFT",
             curses.KEY_RIGHT: "RIGHT",
+            curses.KEY_HOME: "FIRST",
+            curses.KEY_END: "LAST",
+            ord("j"): "DOWN",
+            ord("k"): "UP",
+            ord("h"): "VIM_LEFT",
+            ord("l"): "VIM_RIGHT",
+            ord("g"): "FIRST",
+            ord("G"): "LAST",
             10: "ENTER",
             13: "ENTER",
             curses.KEY_ENTER: "ENTER",
