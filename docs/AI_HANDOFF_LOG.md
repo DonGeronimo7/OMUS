@@ -1,5 +1,21 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.6-2 publication and CI fixture follow-up
+
+- Product commit `05979b8` was fast-forwarded to `main`, tagged
+  `v0.9.6-2`, and published through release-artifact run `35320372190`.
+  Python 3.12/3.13/3.14, Fedora RPM, Debian, AppImage, wheel/sdist, packaged
+  CLI smokes, the exact published asset set, and checksum generation passed.
+- The parallel ordinary CI run built the RPM, passed its 710-test `%check`, and
+  passed packaged CLI smokes, but its final metadata assertion compared RPM
+  `VERSION` (`0.9.6`) with the combined project version (`0.9.6-2`). The CI-only
+  follow-up now derives and checks RPM Version and Release independently and
+  adds a release-metadata regression assertion. Product code and release assets
+  are unchanged; the published tag remains at `05979b8`.
+- Physical G305 evidence remains as recorded below. Remap behavior and popup
+  appearance still require human observation and are not claimed by this
+  follow-up.
+
 ## 2026-09-18 — v0.9.6-2 incremental lifecycle patch candidate
 
 - Starting point: clean `9c76d3b` on `main`; work performed on
@@ -29,9 +45,7 @@
   HID++2 matching, capability validation, and evidence persistence; the service
   was then restored active. Remap and popup appearance require human observation
   and remain pending.
-- Release publication remains gated on commit/push, main integration, tag
-  `v0.9.6-2`, authoritative CI artifacts/security checks, checksum verification,
-  and published-asset inspection.
+- This candidate was subsequently published as recorded in the entry above.
 
 ## 2026-09-18 — v0.9.6 release-wrap software and physical gates
 

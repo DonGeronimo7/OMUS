@@ -1,6 +1,6 @@
 # Mouse Control Project Status
 
-## 2026-09-18 — v0.9.6-2 lifecycle patch candidate
+## 2026-09-18 — v0.9.6-2 lifecycle patch released
 
 - Unsaved setup sessions now restore and verify a previously active service
   after cancellation, interruption, setup failure, or hardware rollback
@@ -16,13 +16,16 @@
   run, service, diagnostics, research, update, and rediscovery commands remain
   unchanged.
 - Automated validation passes 710 tests locally and in Fedora RPM `%check`.
-  Wheel/sdist, isolated wheel CLI/CPI smokes, and Fedora 44 RPM build/CLI smokes
-  pass. Local Debian/AppImage builds and Bandit/pip-audit are unavailable and
-  remain authoritative CI gates.
+  The authoritative release workflow passed Python 3.12/3.13/3.14, wheel/sdist,
+  Debian, Fedora 44 RPM, AppImage, packaged CLI smokes, exact-asset publication,
+  and checksum generation. A follow-up CI-only correction verifies incremental
+  RPM Version and Release fields separately; it does not move the release tag.
 - Live G305 acceptance confirmed cache reuse in setup, cancel-without-save
   service restoration, Native HID/1000-DPI/DPI-watcher recovery, explicit full
   Rediscover, and final active service state. Human observation of remaps and
   popup appearance remains pending and is not inferred from logs.
+- Release `v0.9.6-2` was published from product commit `05979b8` with the five
+  expected install/source artifacts plus `SHA256SUMS`.
 
 ## 2026-09-18 — v0.9.6 security hardening candidate
 

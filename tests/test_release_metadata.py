@@ -96,6 +96,10 @@ def test_ci_and_release_workflow_are_version_independent():
     assert f"mouse-control-{version}" not in release
     assert "pyproject.toml" in ci
     assert "pyproject.toml" in release
+    assert "base_version=${release_version%-*}" in ci
+    assert "package_release=${release_version##*-}" in ci
+    assert "'%{VERSION}'" in ci and '"$base_version"' in ci
+    assert "'%{RELEASE}'" in ci and '"$package_release"' in ci
     assert "permissions:\n  contents: read" in release
     assert "needs: [test, python, deb, rpm, appimage]" in release
     assert "permissions:\n      contents: write" in release
