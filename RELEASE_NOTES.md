@@ -4,6 +4,21 @@ Measured performance and updater-correctness release. It preserves Mouse
 Control's behavior and hardware authority model while removing avoidable Python
 startup, HID parsing/decoding, and idle UI work.
 
+## Reliable foreground TUI lifecycle
+
+- Foreground graphical and terminal sessions are externally supervised by a
+  transient systemd user unit. A previously active background runtime is
+  suspended while the canonical TUI owns the device and restored after Save,
+  unsaved cancel, SIGTERM, or terminal disappearance.
+- The persisted service preference remains distinct from temporary suspension;
+  saving an explicit disable choice suppresses restoration as intended.
+- The desktop entry launches the packaged `mouse-control-launcher`. It uses a
+  valid user-configured terminal, an existing `xdg-terminal-exec`, or a
+  dynamically discovered terminal emulator with the appropriate invocation.
+  No terminal emulator or terminal-launch utility is a new package dependency.
+- No alternate setup interface was added: graphical, terminal, AppImage, and
+  source launches continue to use the same canonical full-screen TUI.
+
 ## Correct incremental RPM updates
 
 - The release model now explicitly separates the GitHub/display tag, Python

@@ -2,6 +2,17 @@
 
 ## 0.9.7-1 — 2026-09-18
 
+### Foreground-session lifecycle
+
+- Supervise the canonical foreground TUI with a transient systemd user unit so
+  a previously active background runtime is restored after Save, unsaved
+  cancel, SIGTERM, and terminal disappearance.
+- Keep persistent service enable/disable preference separate from temporary
+  foreground suspension.
+- Launch graphical sessions through the packaged `mouse-control-launcher`,
+  selecting an existing terminal dynamically without adding a mandatory
+  terminal emulator or `xdg-terminal-exec` dependency.
+
 ### Correct incremental updates
 
 - Model the GitHub tag/display version, PEP 440 version, RPM Version, RPM
