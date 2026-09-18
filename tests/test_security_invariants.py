@@ -68,6 +68,9 @@ def test_appimage_downloads_are_verified_before_extract_or_execute():
     build = (ROOT / "packaging/appimage/build-appimage.sh").read_text(encoding="utf-8")
     assert "PY_RUNTIME_SHA256=" in build
     assert build.index("sha256sum --check --strict") < build.index("tar -xzf")
+    assert "AppDir/usr/python/bin/$script" in build
+    assert "-name '*.pyc'" in build and "-name '*.pyo'" in build
+    assert "-name __pycache__ -empty -delete" in build
     release_path = ROOT / ".github/workflows/release-artifacts.yml"
     if not release_path.exists():
         return

@@ -49,7 +49,9 @@ def test_rpm_packages_every_declared_console_script():
 
 
 def test_provenance_record_is_shipped_with_each_release_format():
-    assert _project()["license-files"] == ["LICENSE", "CREDITS.md"]
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        setuptools = tomllib.load(handle)["tool"]["setuptools"]
+    assert setuptools["license-files"] == ["LICENSE", "CREDITS.md"]
     assert "CREDITS.md" in _text("MANIFEST.in")
     assert "%doc README.md CHANGELOG.md CREDITS.md" in _text("mouse-control.spec")
     assert "CREDITS.md" in _text("PKGBUILD")

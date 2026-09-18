@@ -44,6 +44,23 @@ CC=gcc "$bundled_python" -m pip install \
   --no-compile \
   .
 
+# The AppImage enters Mouse Control through usr/bin/mouse-control below.  Drop
+# pip's redundant entry points, whose build-time shebangs refer to the AppDir's
+# temporary absolute path, and remove bytecode shipped by the portable runtime.
+for script in \
+  mouse-control \
+  mouse-control-discover \
+  mouse-control-discovery-monitor \
+  mouse-control-polling-promote \
+  mouse-control-sensor-calibrate \
+  mouse-control-write-promote \
+  mouse-control-write-trace
+do
+  rm -f "AppDir/usr/python/bin/$script"
+done
+find AppDir -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+find AppDir -type d -name __pycache__ -empty -delete
+
 cat > AppDir/usr/bin/mouse-control <<'EOF'
 #!/bin/sh
 appdir=${APPDIR:-}

@@ -10,8 +10,7 @@ authors = [
     {name = "Marc-A. Geronimo"}
 ]
 readme = "README.md"
-license = "GPL-3.0-or-later"
-license-files = ["LICENSE", "CREDITS.md"]
+license = {text = "GPL-3.0-or-later"}
 requires-python = ">=3.12"
 dependencies = [
     "dbus-next>=0.2.3",
@@ -30,6 +29,9 @@ mouse-control-polling-promote = "mouse_control.polling_promotion_cli:main"
 
 [tool.setuptools.package-data]
 mouse_control = ["udev/*.rules"]
+
+[tool.setuptools]
+license-files = ["LICENSE", "CREDITS.md"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

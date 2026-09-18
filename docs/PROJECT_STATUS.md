@@ -20,9 +20,16 @@
   backdoor, telemetry, credential access, or exfiltration behavior.
 - Automated validation passes 700 tests. Bandit reports 0 medium/high and 52
   manually reviewed low findings; pip-audit reports no known vulnerabilities.
-  Wheel/sdist and Fedora RPM `%check`/CLI smokes pass. Debian tooling is absent;
-  AppDir build passes but AppImageKit cannot emit the final wrapper headlessly.
-  No new physical hardware validation was performed.
+  Wheel/sdist, Fedora RPM `%check`/CLI smokes, Ubuntu 24.04 DEB build/install,
+  and final AppImage build/version/help/CPI smokes pass. Debian's distro
+  setuptools compatibility and AppImage cache/build-path cleanup were the only
+  release-wrap corrections.
+- The installed Fedora 44 v0.9.6 RPM passed physical G305 acceptance: exact
+  Native HID binding, remapping/passthrough, ordered slow/rapid DPI popups, two
+  receiver reconnect cycles, and a service restart recovered without false
+  startup/reconnect notifications, stuck input, retry flooding, or service
+  restart. Full DPI-watcher recovery after receiver insertion remained bounded
+  but took roughly 18–25 seconds.
 
 ## 2026-09-17 — v0.9.5 macro and release candidate
 

@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.6 release-wrap software and physical gates
+
+- Ubuntu 24.04 exposed a release-blocking Debian build incompatibility: its
+  no-isolation setuptools rejected the newer PEP 639 license keys. The metadata
+  now uses the compatible setuptools form while retaining the same GPL
+  identifier and shipping `LICENSE` plus `CREDITS.md` in wheel/sdist/package
+  outputs.
+- The final AppImage was built through the pinned, SHA-verified AppImageKit and
+  portable CPython inputs. Its payload now removes runtime bytecode/cache files
+  and redundant pip-generated project launchers containing the temporary AppDir
+  path. Version/help/CPI smokes and extraction inspection pass.
+- Automated validation after the corrections: full source and Fedora RPM
+  `%check` suites each passed 700 tests; the focused security/hardware suite
+  passed 215; DEB build/install and CLI/CPI smokes passed; AppImage smokes
+  passed; compileall, diff check, workflow YAML/action-pin validation, and
+  artifact scans passed. pip-audit found no known vulnerabilities. Bandit 1.9.4
+  found 0 high/medium and 44 reviewed low findings in `src`.
+- The Fedora 44 `mouse-control-0.9.6-1.fc44.noarch` candidate preserved the
+  existing configuration and selected exact G305 `046d:4074` through the Native
+  HID adapter. Operator-observed remapping/passthrough, two ordered DPI cycles,
+  two receiver reconnect cycles, and a service restart passed with no false
+  startup/reconnect popup or stuck input. The journal showed bounded reconnect
+  recovery, no stale notification, retry flood, or service restart.
+- Remaining gate at this checkpoint: push the release commit, run and inspect
+  authoritative CI artifacts, merge through the established release path, and
+  verify the published tag, five assets, `SHA256SUMS`, and updater lookup.
+
 ## 2026-09-18 — v0.9.6 security hardening release candidate
 
 - Started from clean `be03fad` on `codex/github-discovery-onboarding`; created
