@@ -14,10 +14,12 @@ Run the permanent representative suite with:
 PYTHONPATH=src python3 benchmarks/run_performance.py --rounds 500 --json
 ```
 
-The suite reports medians plus minimum/maximum observations. It uses controlled
-in-memory device topology and read-only HID fixtures so CI can detect large
-regressions without touching hardware. Absolute timings are host-specific;
-comparisons must use the same host, Python build, fixture, and round count.
+The suite reports medians plus minimum/maximum observations and retained-memory
+growth after repeated reconnect, Rediscover, and setup enter/exit cycles. It
+uses controlled in-memory device topology and read-only HID fixtures so CI can
+detect large regressions without touching hardware. Absolute timings are
+host-specific; comparisons must use the same host, Python build, fixture, and
+round count.
 
 The opt-in `PerformanceRecorder` exposes these runtime milestones without
 changing production behavior when no recorder is active:
@@ -85,3 +87,29 @@ explanation.
 | Cached descriptor field identities/layout | Single HID decode | 0.0652 ms | 0.0281 ms | -0.0371 ms | -56.9% | Immutable descriptor/field facts only; packet semantics and authority unchanged |
 | Cached descriptor field identities/layout | 1,000 HID decodes | 66.552 ms | 28.196 ms | -38.356 ms | -57.6% | Same decoded values and diagnostics; no write path involved |
 | Snapshot plus parsed-knowledge reuse | Explicit Rediscover | 0.577 ms | 0.407 ms | -0.170 ms | -29.4% | Forced discovery still executes descriptor, protocol, observation, and validation phases |
+| Event-driven notification wakeup | Idle notifier process CPU / second | 1.031 ms | 0.016 ms | -1.015 ms | -98.4% | Cross-thread queue tests preserve ordered delivery and prohibit timer sleeps |
+| Event-driven notification wakeup | Idle voluntary context switches / second | 20 | 1 | -19 | -95.0% | Remaining switch is the measurement thread's one-second sleep |
+
+## Resident-runtime and memory audit — 2026-09-18
+
+The desktop DPI notifier and battery tray previously polled their queues every
+50 ms and 100 ms. They now use a cross-thread event/future handoff and remain
+fully dormant until a state transition arrives. The DPI/battery supervision
+cadences remain unchanged because they are hardware lifecycle or deliberately
+slow battery sampling intervals, not UI queue polling. Hidraw and evdev waits
+remain kernel-blocking readiness waits with bounded shutdown/disconnect checks.
+
+With 1,000 post-warmup cycles under `tracemalloc`, reconnect recovery retained
+120 bytes (1,944-byte peak growth), forced Rediscover retained 6,037 bytes
+(185,821-byte peak growth), and setup controller enter/exit retained 32 bytes
+(13,816-byte peak growth). The nearly identical Rediscover retention observed
+at 200 cycles (5,769 bytes) and 1,000 cycles demonstrates bounded cache/runtime
+state rather than per-cycle accumulation. Descriptor and field caches remain
+explicitly bounded at 128 entries.
+
+The setup UI already has the required structural boundary: `SetupController`
+owns state and hardware orchestration, while `setup_tui_curses` is a rendering
+adapter. The two existing UI surfaces have distinct purposes (interactive setup
+and the small status/battery surface), so merging them would increase coupling
+without eliminating measured work. No broad async rewrite or speculative module
+split was justified by the profiles.

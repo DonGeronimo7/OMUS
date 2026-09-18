@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import time
 
@@ -92,6 +93,17 @@ def test_tray_validates_visible_percentage():
         except ValueError: pass
         else: assert False
     finally: tray.close()
+
+
+def test_tray_close_leaves_recovery_queue_restartable():
+    tray = StatusNotifierTray()
+    old_queue = tray._queue
+    tray.close()
+    assert tray._queue is not old_queue
+    tray._queue.put(None)
+    assert asyncio.run(tray._queue.get()) is None
+    tray._queue.task_done()
+    tray.close()
 
 
 def test_tooltip_uses_device_name_live_percentage_and_status():

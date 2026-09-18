@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import queue
 import threading
 
+from .async_wake_queue import AsyncWakeQueue
 from .hardware import BatteryState, HardwareBackend
 
 LOG = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ class StatusNotifierTray:
 
     def __init__(self) -> None:
         self.visible_percentage: int | None = None
-        self._queue: queue.Queue[tuple[str, BatteryState] | None] = queue.Queue()
+        self._queue: AsyncWakeQueue[tuple[str, BatteryState] | None] = AsyncWakeQueue()
         self._thread: threading.Thread | None = None
 
     def update(self, state: BatteryState, device_name: str) -> None:
@@ -225,7 +225,8 @@ class StatusNotifierTray:
                                if item_id not in new_properties]
                     self.ItemsPropertiesUpdated(updated, removed)
                     self.LayoutUpdated(self.revision, 0)
-            initial = self._queue.get()
+            initial = await self._queue.get()
+            self._queue.task_done()
             if initial is None:
                 return
             initial_device_name, initial_state = initial
@@ -244,12 +245,13 @@ class StatusNotifierTray:
             except Exception as exc:
                 LOG.info("Battery tray watcher unavailable: %s", exc)
             while True:
-                try: value = self._queue.get_nowait()
-                except queue.Empty:
-                    await asyncio.sleep(.1); continue
-                if value is None: return
-                device_name, state = value
-                service.set_state(device_name, state, menu)
+                value = await self._queue.get()
+                try:
+                    if value is None: return
+                    device_name, state = value
+                    service.set_state(device_name, state, menu)
+                finally:
+                    self._queue.task_done()
         except Exception as exc:
             LOG.warning("Battery tray unavailable: %s", exc)
         finally:
@@ -262,6 +264,11 @@ class StatusNotifierTray:
         if self._thread and self._thread.is_alive():
             self._queue.put(None)
             self._thread.join(timeout=1)
+        self._queue.close()
+        # A temporarily unavailable battery removes the tray and may later
+        # recover.  Leave the object restartable with a fresh queue.
+        self._queue = AsyncWakeQueue()
+        self._thread = None
 
 
 class BatteryMonitorSupervisor:

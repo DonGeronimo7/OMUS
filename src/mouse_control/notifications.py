@@ -1,8 +1,10 @@
 """Optional DPI monitoring and Freedesktop desktop notifications."""
 from __future__ import annotations
-import asyncio, logging, queue, threading
+import asyncio, logging, threading
 from enum import Enum, auto
 from typing import Protocol
+
+from .async_wake_queue import AsyncWakeQueue
 
 LOG = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ class FreedesktopNotifier:
     """Send independent short-lived OSDs; DBus failures never affect HID."""
     _CONNECT = object()
     def __init__(self) -> None:
-        self._queue: queue.Queue[object] = queue.Queue(); self._thread = None
+        self._queue: AsyncWakeQueue[object] = AsyncWakeQueue(); self._thread = None
         self._start_lock = threading.Lock(); self._ready = threading.Event()
     @staticmethod
     def _body(dpi):
@@ -38,9 +40,7 @@ class FreedesktopNotifier:
         bus = None
         try:
             while True:
-                try: request = self._queue.get_nowait()
-                except queue.Empty:
-                    await asyncio.sleep(.05); continue
+                request = await self._queue.get()
                 try:
                     if request is None: return
                     if bus is None: bus = await self._connect(); self._ready.set()
@@ -66,7 +66,9 @@ class FreedesktopNotifier:
     def notify_dpi(self, dpi): self.start(); self._queue.put(dpi)
     def wait_idle(self): self._queue.join()
     def close(self):
-        if self._thread and self._thread.is_alive(): self._queue.put(None); self._thread.join(timeout=1)
+        if self._thread and self._thread.is_alive():
+            self._queue.put(None); self._thread.join(timeout=1)
+        self._queue.close()
 
 class DpiMonitor:
     def __init__(self, backend, device, notifier=None, interval=1., shutdown_event=None):

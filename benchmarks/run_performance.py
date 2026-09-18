@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tracemalloc
 
 from mouse_control.config import load_config
 from mouse_control.device_profiles import DeviceProfileStore
@@ -46,6 +47,14 @@ class Benchmark:
     maximum_ns: int
 
 
+@dataclass(frozen=True, slots=True)
+class MemoryStability:
+    name: str
+    cycles: int
+    retained_bytes: int
+    peak_growth_bytes: int
+
+
 def _measure(name: str, operation, rounds: int, warmups: int = 5) -> Benchmark:
     for _ in range(warmups):
         operation()
@@ -61,6 +70,20 @@ def _measure(name: str, operation, rounds: int, warmups: int = 5) -> Benchmark:
     return Benchmark(
         name, rounds, int(statistics.median(values)), min(values), max(values)
     )
+
+
+def _measure_memory(name: str, operation, cycles: int, warmups: int = 25) -> MemoryStability:
+    for _ in range(warmups):
+        operation()
+    gc.collect()
+    tracemalloc.start()
+    before, _ = tracemalloc.get_traced_memory()
+    for _ in range(cycles):
+        operation()
+    gc.collect()
+    after, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    return MemoryStability(name, cycles, after - before, max(0, peak - before))
 
 
 def _subprocess(command: str) -> None:
@@ -210,12 +233,9 @@ def run(rounds: int) -> dict[str, object]:
         ]
 
         backend = _Backend()
-        replacements = []
-
         def reconnect() -> None:
             nonlocal backend
             replacement = _Backend()
-            replacements.append(replacement)
             supervisor = HardwareSupervisor(
                 backend, mouse, lambda _device: replacement,
                 DesiredHardwareState(active_dpi=800),
@@ -224,6 +244,26 @@ def run(rounds: int) -> dict[str, object]:
             backend = replacement
 
         benchmarks.append(_measure("reconnect_recovery", reconnect, rounds))
+
+        def setup_enter_exit() -> None:
+            controller = SetupController(
+                [mouse], {}, choices_factory=_choices,
+                backend_factory=lambda _device: _SetupBackend(),
+                known_device_loader=lambda _device: None,
+            )
+            controller.restore_temporary_state()
+            controller.backend.close()
+
+        stability_cycles = max(200, rounds)
+        memory_stability = [
+            _measure_memory("reconnect_recovery", reconnect, stability_cycles),
+            _measure_memory(
+                "explicit_rediscover",
+                lambda: rediscover.discover(mouse, force=True),
+                stability_cycles,
+            ),
+            _measure_memory("setup_enter_exit", setup_enter_exit, stability_cycles),
+        ]
 
         trace = PerformanceRecorder()
         with trace.activate():
@@ -242,6 +282,7 @@ def run(rounds: int) -> dict[str, object]:
         "python": sys.version.split()[0],
         "rounds": rounds,
         "benchmarks": [asdict(item) for item in benchmarks],
+        "memory_stability": [asdict(item) for item in memory_stability],
         "known_device_milestones_ns": known_milestones,
         "rediscover_milestones_ns": rediscover_milestones,
     }
