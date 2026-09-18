@@ -1,5 +1,24 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — v0.9.4 integrated release-candidate closure
+
+- Canonical usbmon evidence now retains optional extended binary-header fields
+  and capture-quality/completeness facts through deterministic JSONL replay.
+- Operation proof retains its existing state ladder while orthogonal tri-state
+  evidence records acceptance, response validity, readable/physical effects,
+  persistence, failure side effects, and recovery. Mutating failures with a
+  possible side effect cannot be blindly resent.
+- One automated BITMOUSE-style fixture now exercises canonical observation,
+  temporal dialogue, dependency inference, structural plus semantic recognition,
+  operation-scoped proof, and privacy-filtered community reporting end to end.
+  Declared semantic length excludes stale HID tail bytes, and RECOGNIZED remains
+  write-disabled.
+- Automated validation passes 660 tests with the existing GLib warning;
+  compileall, diff validation, sdist/wheel, Fedora RPM `%check` and CLI smoke,
+  Debian package build, and AppImage version/help smoke pass.
+- The v0.9.4 G305 physical acceptance sequence and published release artifacts
+  remain release gates. No tag or release has been created.
+
 ## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
 
 - Protocol-neutral temporal dialogue assembly now retains physical/source/

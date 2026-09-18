@@ -10,6 +10,37 @@ dependent-field inference, and a deterministic privacy-conscious community
 report while preserving the mature v0.8.2/v0.9.3 runtime contract and the
 current full-screen setup TUI.
 
+The release path is now integrated rather than merely colocated: canonical
+trace evidence flows through temporal dialogue assembly, dependency inference,
+structural and semantic family recognition, operation-scoped proof, and a
+privacy-filtered community report. The automated BITMOUSE-style acceptance
+fixture demonstrates that complete chain while keeping recognition distinct
+from PROVEN runtime write authority.
+
+## Evidence fidelity and transaction safety
+
+- Canonical usbmon observations retain optional setup/data flags, interval,
+  start frame, transfer flags, descriptor count, source representation, header
+  availability, loss information, timebase, and completeness/truncation status.
+- Operation evidence independently records transport acceptance, protocol
+  response validity, readable-state change, physical effect, reconnect and
+  power-cycle persistence, failure side effects, and recovery evidence. Unknown
+  facts remain unknown rather than becoming false.
+- Failed mutating steps that may have changed device state are not automatically
+  resent. The transaction outcome carries retry, recovery, expected-disconnect,
+  and connection-generation facts so callers can inspect and recover first.
+
+## Semantic recognition and reports
+
+The passive BITMOUSE-style discriminator requires compatible descriptor shape
+plus the asymmetric `0x72` request/reply grammar, leading request checksum,
+target and sequence correlation, and declared semantic response length. Bytes
+after that declared length are excluded from evidence. Community evidence keeps
+safe descriptor/report structure, dialogue relationships, dependencies,
+candidate discriminators, connection generation, provenance IDs, and the next
+safe observation recipe while recursively redacting path- and identity-bearing
+material.
+
 For the physically validated G305 acceptance path, the teacher-free runtime can
 rebind the exact persisted descriptor member and recognize the configured DPI
 cycle `800 → 1500 → 2000 → 2500 → 3000 → 800`. Those confirmed read-side states
@@ -70,6 +101,9 @@ The complete v0.8.2 stability and functionality contract remains the baseline.
 - G305 is a hardware validation target for both native HID++ production and
   learned acceptance; that evidence does not imply universal automatic support
   for every mouse.
+- BITMOUSE-style coverage in this release is source-derived automated semantic
+  evidence only. It does not provide a production runtime writer or hardware
+  qualification for that family.
 
 ## Downloads
 

@@ -1,5 +1,19 @@
 # AI handoff log
 
+## 2026-09-17 — v0.9.4 integration and software release gates
+
+- Starting checkpoint `49a2f1571a011ebe166d9d8a3be045b1b4f9399d` was clean and exactly matched the requested discovery foundation.
+- Integrated loss-aware usbmon provenance, structured operation evidence,
+  failure-side-effect/retry safety, passive semantic recognition, and the full
+  canonical-to-community-report evidence path without adding runtime write authority.
+- The synthetic BITMOUSE-style fixture is source-derived automated evidence;
+  it trims stale reply tails and remains RECOGNIZED/read-only, not hardware-qualified.
+- Validation: 660 tests passed (one existing GLib warning); compileall and diff
+  checks passed; sdist/wheel, Fedora RPM `%check` plus packaged CLI smoke,
+  Debian package, and AppImage version/help smoke passed.
+- Architectural checkpoint: `9c79cf5`. Final G305 physical acceptance,
+  release-document checkpoint, remote push, tag, CI, and published assets remain pending.
+
 ## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
 
 - Baseline: `codex/tui-only-setup` at `cad809d` with a clean working tree.
