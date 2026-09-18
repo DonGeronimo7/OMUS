@@ -11,13 +11,17 @@ from .hid_descriptor import ParsedHidDescriptor
 from .proof_state import OperationEvidence, OperationProof, ProofState
 from .protocol_repertoire import (
     FamilyCandidate,
+    OpenSetRecognition,
+    RecognitionStatus,
     SemanticExchange,
     SemanticFamilyRecognition,
     match_repertoire,
     recognize_family_semantics,
+    recognize_open_set,
 )
 from .temporal_dialogue import (
     DialogueAssembler, DialogueKind, DialogueObservation, DialogueRecord, Direction,
+    PushedStateRecord,
 )
 from .trace.models import UsbDirection, UsbObservation
 
@@ -75,6 +79,54 @@ class IntegratedDiscoveryResult:
             "connection_generation": self.connection_generation,
             "next_safe_observation_recipe_id": self.next_safe_observation_recipe_id,
         }
+
+
+@dataclass(frozen=True)
+class IntegratedPushedStateResult:
+    records: tuple[PushedStateRecord, ...]
+    recognition: OpenSetRecognition
+    proof: OperationProof
+    evidence_source_ids: tuple[str, ...]
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+def integrate_pushed_state_observations(
+    records: Sequence[PushedStateRecord],
+    *,
+    family_name: str,
+    physical: PhysicalDevice,
+    descriptors: Mapping[DeviceNode, ParsedHidDescriptor],
+) -> IntegratedPushedStateResult:
+    """Join passive asynchronous state evidence to open-set recognition."""
+
+    retained = tuple(records)
+    recognition = recognize_open_set(
+        physical,
+        descriptors,
+        pushed_states={family_name: retained},
+    )
+    sources = tuple(
+        f"{record.observation.source_id}:{record.observation.sequence}"
+        for record in retained
+    )
+    proof = OperationProof(
+        "read.asynchronous_protocol_state",
+        (
+            ProofState.RECOGNIZED
+            if recognition.status is RecognitionStatus.RECOGNIZED
+            else ProofState.OBSERVED
+        ),
+        (
+            ("passive pushed-state discriminator",)
+            if recognition.status is RecognitionStatus.RECOGNIZED
+            else ("asynchronous state observation",)
+        ),
+        OperationEvidence(evidence_source_ids=sources),
+    )
+    return IntegratedPushedStateResult(retained, recognition, proof, sources)
 
 
 def _dialogue_observation(item: UsbObservation, *, generation: int) -> DialogueObservation:

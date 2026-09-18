@@ -1,5 +1,30 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — asynchronous pushed-state recognition milestone
+
+- The generation-aware temporal assembler now represents meaningful state that
+  has no request owner. Records retain exact stream identity, semantic state
+  identity, decoded opaque state, freshness/reasons, periodic position, optional
+  subtype/transform proof, controlled-action correlation, and optional observed
+  read-side nudge association.
+- Freshness is explicit (`FRESH`, `STALE`, `UNKNOWN_FRESHNESS`). Successful
+  immediate reads start unknown; a later disagreeing accepted push demotes the
+  old read to stale. Periodic cadence, a bounded nudge, monotonic counters, and
+  controlled-action transitions can establish fresh evidence. Old-generation
+  pushes are retained as rejected stale evidence and cannot update current state.
+- The repertoire now recognizes MCHOSE Realtek/L7-style Input report `0x13`,
+  subtype `0x1D`, and actually verified XOR-FF source/result pairs through the
+  generic pushed-state recipe. It remains distinct from MCHOSE V3,
+  `WriteScope.NEVER`, semantic-offset agnostic, and has no nudge executor,
+  setter, capability, or runtime write path.
+- The benchmark grows from 11 to 18 cases: 8 recognized, 8 candidates, 1
+  unknown, and 1 ambiguous. Fixture-only coverage is 44.4%, abstention 50%,
+  ambiguity 5.6%, recognized precision/known-case recall 100%, and unknown/
+  collision false recognition 0%; no broader 90% claim is made.
+- Focused protocol/discovery validation passes 81 tests; the complete suite
+  passes 818 with the existing GLib warning. No physical validation, hardware
+  write, write-authority change, install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — bounded response-burst recognition milestone
 
 - The existing temporal assembler now supports one trigger followed by zero or

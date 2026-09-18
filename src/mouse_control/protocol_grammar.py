@@ -223,6 +223,30 @@ class BurstRecognitionRecipe:
 
 
 @dataclass(frozen=True)
+class PushedStateRecognitionRecipe:
+    """Passive requirements for periodic or nudged asynchronous state."""
+
+    namespace: str
+    report_id: int | None
+    subtype: int | None = None
+    payload_transform: str | None = None
+    minimum_records: int = 1
+    maximum_records: int = 64
+    require_temporal_freshness: bool = True
+    minimum_independent_categories: int = 3
+
+    def __post_init__(self) -> None:
+        if not self.namespace:
+            raise ValueError("pushed-state recognition requires a namespace")
+        if self.minimum_records <= 0:
+            raise ValueError("minimum_records must be positive")
+        if self.maximum_records < self.minimum_records:
+            raise ValueError("maximum_records cannot be below minimum_records")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
+@dataclass(frozen=True)
 class ProtocolSource:
     """Auditable provenance for protocol knowledge."""
 
@@ -407,6 +431,7 @@ class ProtocolFamily:
     sessions: tuple[SessionGrammar, ...] = ()
     recognition: RecognitionRecipe | None = None
     burst_recognition: BurstRecognitionRecipe | None = None
+    pushed_state_recognition: PushedStateRecognitionRecipe | None = None
     write_scope: WriteScope = WriteScope.NEVER
     identity_required: bool = False
     minimum_match_score: int = 4

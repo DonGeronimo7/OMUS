@@ -10,7 +10,7 @@ from mouse_control.protocol_repertoire import (
 )
 from mouse_control.temporal_dialogue import (
     BurstDialogueSpec, BurstDialogueResult, DialogueAssembler,
-    DialogueObservation, Direction,
+    DialogueObservation, Direction, PushedStateSpec, StateFreshness,
 )
 
 
@@ -105,6 +105,81 @@ def _unknown_burst() -> BurstDialogueResult:
     return assembler.advance_time(14_000_000)[0]
 
 
+def _async_observation(
+    sequence: int, timestamp_ms: int, encoded: int, *, generation: int = 1,
+    namespace: str = "mchose.realtek.state",
+) -> DialogueObservation:
+    return DialogueObservation(
+        "async-fixture", "async-physical", "realtek-input", "hid", Direction.IN,
+        namespace, 0x13, generation, timestamp_ms * 1_000_000, sequence,
+        bytes((0x1D, encoded)), grammar="async-state",
+    )
+
+
+def _async_spec(*, namespace: str = "mchose.realtek.state") -> PushedStateSpec:
+    return PushedStateSpec(
+        namespace, 0x13, "async-state", channel_id="realtek-input",
+        periodic_max_gap_ms=100, nudge_window_ms=50,
+        nudge_namespace="feature-nudge", nudge_report_id=0x05,
+        nudge_channel_id="realtek-feature",
+    )
+
+
+def _async_records(mode: str):
+    assembler = DialogueAssembler()
+    subtype = 0x1C if mode == "wrong-subtype" else 0x1D
+    wrong_transform = mode == "wrong-transform"
+    namespace = "unknown.async.state" if mode == "unknown" else "mchose.realtek.state"
+    spec = _async_spec(namespace=namespace)
+
+    if mode in {"nudge", "stale-read"}:
+        nudge = DialogueObservation(
+            "async-fixture", "async-physical", "realtek-feature", "hid",
+            Direction.OUT, "feature-nudge", 0x05, 1, 0, 1, b"nudge",
+            grammar="nudge",
+        )
+        assembler.begin_state_nudge(nudge, spec)
+    if mode == "old-generation":
+        assembler.advance_generation("async-physical", 2)
+
+    observations = ((2, 20, 0xFE),) if mode in {
+        "nudge", "stale-read", "old-generation", "unknown",
+    } else ((1, 0, 0xFE), (2, 40, 0xFD))
+    records = []
+    for sequence, timestamp, encoded in observations:
+        transformed = bytes((encoded ^ (0x00 if wrong_transform else 0xFF),))
+        record = assembler.observe_pushed_state(
+            _async_observation(
+                sequence, timestamp, encoded,
+                generation=1, namespace=namespace,
+            ),
+            spec,
+            semantic_state_id="opaque-device-state",
+            decoded_state=transformed,
+            subtype=subtype,
+            transform="xor_ff",
+            transform_source=bytes((encoded,)),
+            transformed_payload=transformed,
+        )
+        assert record is not None
+        records.append(record)
+
+    if mode == "stale-read":
+        immediate = assembler.state_read_evidence(
+            DialogueObservation(
+                "async-fixture", "async-physical", "realtek-feature", "hid",
+                Direction.IN, "feature", 0x05, 1, 1_000_000, 3, b"old",
+                grammar="feature-read",
+            ),
+            semantic_state_id="opaque-device-state", decoded_state=b"\x00",
+        )
+        stale, fresh = assembler.prefer_later_pushed_state(immediate, records[0])
+        assert stale.freshness is StateFreshness.STALE
+        assert fresh.freshness is StateFreshness.FRESH
+        records[0] = fresh
+    return tuple(records)
+
+
 def test_research_ingestion_corpus_reports_open_set_metrics_without_writes() -> None:
     bitmouse = _node(vendor=0xDEAD, product=0xBEEF)
     bitmouse_descriptors = {bitmouse: _descriptor(
@@ -179,6 +254,21 @@ def test_research_ingestion_corpus_reports_open_set_metrics_without_writes() -> 
         bursts={"finalmouse-ulx-bounded-telemetry": (_unknown_burst(),)},
     )
 
+    mchose = _node(vendor=0x3554, product=0xF58A)
+    mchose_descriptors = {mchose: _descriptor(
+        HidReportDefinition(0x13, "input", 16, (0xFF00,)),
+    )}
+    async_decisions = {
+        mode: recognize_open_set(
+            _physical(mchose), mchose_descriptors,
+            pushed_states={"mchose-realtek-l7-pushed-state": _async_records(mode)},
+        )
+        for mode in (
+            "periodic", "nudge", "stale-read", "wrong-subtype",
+            "wrong-transform", "old-generation", "unknown",
+        )
+    }
+
     observations = (
         BenchmarkObservation(
             "bitmouse-valid-identity-blinded", RecognitionStatus.RECOGNIZED,
@@ -212,17 +302,45 @@ def test_research_ingestion_corpus_reports_open_set_metrics_without_writes() -> 
             "unknown-multi-response", RecognitionStatus.CANDIDATE,
             unknown_burst_decision,
         ),
+        BenchmarkObservation(
+            "mchose-periodic-unsolicited", RecognitionStatus.RECOGNIZED,
+            async_decisions["periodic"], "mchose-realtek-l7-pushed-state",
+        ),
+        BenchmarkObservation(
+            "mchose-nudge-delayed-push", RecognitionStatus.RECOGNIZED,
+            async_decisions["nudge"], "mchose-realtek-l7-pushed-state",
+        ),
+        BenchmarkObservation(
+            "mchose-stale-read-fresh-push", RecognitionStatus.RECOGNIZED,
+            async_decisions["stale-read"], "mchose-realtek-l7-pushed-state",
+        ),
+        BenchmarkObservation(
+            "mchose-wrong-subtype", RecognitionStatus.CANDIDATE,
+            async_decisions["wrong-subtype"],
+        ),
+        BenchmarkObservation(
+            "mchose-wrong-transform", RecognitionStatus.CANDIDATE,
+            async_decisions["wrong-transform"],
+        ),
+        BenchmarkObservation(
+            "mchose-old-generation", RecognitionStatus.CANDIDATE,
+            async_decisions["old-generation"],
+        ),
+        BenchmarkObservation(
+            "unknown-asynchronous-protocol", RecognitionStatus.CANDIDATE,
+            async_decisions["unknown"],
+        ),
     )
     metrics = score_benchmark(observations)
 
-    assert metrics.cases == 11
+    assert metrics.cases == 18
     assert metrics.exact_outcome_accuracy == 1.0
     assert metrics.recognized_family_precision == 1.0
     assert metrics.known_family_acquisition_recall == 1.0
     assert metrics.unknown_family_false_recognition == 0.0
     assert metrics.structural_collision_false_recognition == 0.0
-    assert metrics.coverage == 5 / 11
-    assert metrics.abstention == 5 / 11
-    assert metrics.ambiguity == 1 / 11
+    assert metrics.coverage == 8 / 18
+    assert metrics.abstention == 9 / 18
+    assert metrics.ambiguity == 1 / 18
     assert metrics.identity_blinded_correct == 1
     assert all(not item.decision.write_authorized for item in observations)

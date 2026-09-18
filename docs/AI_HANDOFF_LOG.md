@@ -1,5 +1,30 @@
 # AI handoff log
 
+## 2026-09-18 — generic asynchronous pushed-state discovery
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `db66379` and
+  reused the current dialogue/generation/open-set architecture. Pushed state is
+  a generic request-independent record, not a MCHOSE-specific subsystem.
+- Added explicit fresh/stale/unknown freshness authority, periodic grouping,
+  bounded read-side nudge association, monotonic-counter and controlled-action
+  evidence, stale immediate-read supersession, and old-generation rejection.
+  A nudge is only an observed eligibility/correlation fact; no command executor
+  or write permission was added.
+- Added recognition-only MCHOSE Realtek/L7 facts: Input report 13, subtype 1D,
+  verified XOR-FF source/result transformation, periodic unsolicited delivery,
+  optional nudge-delayed delivery, and possible stale Feature buffers. Unknown
+  offsets and semantics remain opaque; the family is `WriteScope.NEVER` and is
+  explicitly separate from MCHOSE V3.
+- Extended the retained benchmark from 11 to 18 cases with periodic, nudged,
+  stale-read/fresh-push, subtype, transform, generation, and unknown-async
+  fixtures. Outcomes: 8 recognized, 8 candidate, 1 unknown, 1 ambiguous.
+- Validation: 81 focused protocol/discovery tests and 818 complete-suite tests
+  passed with the existing GLib warning; compileall and diff checks passed. No
+  runtime writer, physical test, installation, push, merge, tag, or release.
+- The current research corpus has no remaining asynchronous delivery shape that
+  needs another temporal primitive. Remaining async work is recipe/corpus
+  population; RAWM fragmented logical records are a separate framing problem.
+
 ## 2026-09-18 — Finalmouse-style bounded response bursts
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `c9f7eb8` without

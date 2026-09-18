@@ -29,6 +29,7 @@ from .protocol_grammar import (
     FrameSide,
     ProtocolFamily,
     ProtocolSource,
+    PushedStateRecognitionRecipe,
     RecognitionRecipe,
     ReportSignature,
     SemanticDiscriminator,
@@ -38,7 +39,10 @@ from .protocol_grammar import (
     TransportKind,
     WriteScope,
 )
-from .temporal_dialogue import BurstDialogueResult
+from .temporal_dialogue import (
+    BurstDialogueResult, PushedStateAssociation, PushedStateRecord,
+    StateFreshness,
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,7 @@ class SemanticFamilyRecognition:
         recipe = (
             self.candidate.family.recognition
             or self.candidate.family.burst_recognition
+            or self.candidate.family.pushed_state_recognition
         )
         return (
             recipe is not None
@@ -723,6 +728,39 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="Read-only telemetry knowledge. Report 05 existence never implies configuration authority.",
     ),
     ProtocolFamily(
+        name="mchose-realtek-l7-pushed-state",
+        revision="async-state-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90% research payload — MCHOSE Realtek/L7 pushed state",
+                SourceTrust.REFERENCE,
+                notes="Independently reconstructed read-side fixture; no upstream capture or command imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("input", 0x13, vendor_usage_required=True, weight=8),
+        ),
+        pushed_state_recognition=PushedStateRecognitionRecipe(
+            namespace="mchose.realtek.state",
+            report_id=0x13,
+            subtype=0x1D,
+            payload_transform="xor_ff",
+            minimum_records=1,
+            maximum_records=64,
+            require_temporal_freshness=True,
+        ),
+        transports=(TransportKind.HID_INPUT, TransportKind.HID_FEATURE_GET),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=8,
+        notes=(
+            "Realtek/L7 generation only; deliberately distinct from MCHOSE V3. Input report 13, "
+            "subtype 1D and XOR-FF payload transformation are recognition facts. Periodic pushes "
+            "or an observed read-side nudge may establish freshness; immediate Feature data may "
+            "be stale. No nudge executor, setter, field offsets, or semantic state meanings exist."
+        ),
+    ),
+    ProtocolFamily(
         name="mchose-v3-block-rpc",
         revision="a7-v3",
         sources=(
@@ -910,6 +948,128 @@ def recognize_burst_family_semantics(
     )
 
 
+def _pushed_transform_valid(record: PushedStateRecord, transform: str | None) -> bool:
+    if transform is None:
+        return True
+    if record.transform != transform:
+        return False
+    if transform == "xor_ff":
+        expected = bytes(value ^ 0xFF for value in record.transform_source)
+        return bool(record.transform_source) and record.transformed_payload == expected
+    return False
+
+
+def recognize_pushed_state_semantics(
+    candidate: FamilyCandidate,
+    records: Iterable[PushedStateRecord],
+) -> SemanticFamilyRecognition:
+    """Evaluate generic asynchronous state evidence against family facts."""
+
+    recipe = candidate.family.pushed_state_recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-pushed-state-discriminator",), (), ()
+        )
+    observed = tuple(records)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-pushed-state-evidence",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+
+    stream_identities = {
+        (
+            record.observation.source_id,
+            record.observation.physical_id,
+            record.observation.transport,
+            record.observation.channel_id,
+            record.observation.report_namespace,
+            record.observation.report_id,
+            record.observation.grammar,
+            record.observation.generation,
+            record.semantic_state_id,
+        )
+        for record in observed
+    }
+    if len(stream_identities) == 1:
+        matched.append("coherent-pushed-state-stream")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("coherent-pushed-state-stream")
+
+    current_generation = all(record.accepted for record in observed)
+    if current_generation:
+        matched.append("current-generation-pushed-state")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("current-generation-pushed-state")
+
+    namespace_valid = all(
+        record.observation.report_namespace == recipe.namespace
+        and (recipe.report_id is None or record.observation.report_id == recipe.report_id)
+        for record in observed
+    )
+    if namespace_valid:
+        matched.append("pushed-state-namespace")
+        categories.add(EvidenceCategory.FRAME)
+    else:
+        missing.append("pushed-state-namespace")
+
+    subtype_valid = all(
+        recipe.subtype is None or record.subtype == recipe.subtype
+        for record in observed
+    )
+    if subtype_valid:
+        matched.append("pushed-state-subtype")
+        categories.add(EvidenceCategory.FRAME)
+    else:
+        missing.append("pushed-state-subtype")
+
+    transform_valid = all(
+        _pushed_transform_valid(record, recipe.payload_transform)
+        for record in observed
+    )
+    if transform_valid:
+        matched.append("pushed-state-payload-transform")
+        categories.add(EvidenceCategory.RELATIONSHIP)
+    else:
+        missing.append("pushed-state-payload-transform")
+
+    cardinality_valid = recipe.minimum_records <= len(observed) <= recipe.maximum_records
+    if cardinality_valid:
+        matched.append("pushed-state-cardinality")
+    else:
+        missing.append("pushed-state-cardinality")
+
+    temporal_valid = any(
+        record.association is PushedStateAssociation.NUDGED
+        or record.periodic_index >= 2
+        or "monotonic-state-counter" in record.freshness_reasons
+        or "state-changed-after-controlled-action" in record.freshness_reasons
+        for record in observed
+    )
+    freshness_valid = any(record.freshness is StateFreshness.FRESH for record in observed)
+    if temporal_valid and (freshness_valid or not recipe.require_temporal_freshness):
+        matched.append("asynchronous-freshness-evidence")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("asynchronous-freshness-evidence")
+
+    semantic_records = tuple(
+        record.transformed_payload for record in observed
+    ) if not missing else ()
+    return SemanticFamilyRecognition(
+        candidate,
+        tuple(sorted(matched)),
+        tuple(sorted(missing)),
+        semantic_records,
+        tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
 def _frame(exchange: SemanticExchange, side: FrameSide) -> bytes:
     return exchange.request if side is FrameSide.REQUEST else exchange.response
 
@@ -970,6 +1130,7 @@ def recognize_open_set(
     *,
     exchanges: Mapping[str, Iterable[SemanticExchange]] | None = None,
     bursts: Mapping[str, Iterable[BurstDialogueResult]] | None = None,
+    pushed_states: Mapping[str, Iterable[PushedStateRecord]] | None = None,
     families: Iterable[ProtocolFamily] = DEFAULT_REPERTOIRE,
     minimum_margin: int = 3,
 ) -> OpenSetRecognition:
@@ -979,11 +1140,14 @@ def recognize_open_set(
         raise ValueError("minimum_margin cannot be negative")
     supplied = exchanges or {}
     supplied_bursts = bursts or {}
+    supplied_pushed = pushed_states or {}
     structural = tuple(
         candidate
         for candidate in match_repertoire(physical, descriptors, families=families)
         if candidate.family.burst_recognition is None
         or candidate.family.name in supplied_bursts
+        if candidate.family.pushed_state_recognition is None
+        or candidate.family.name in supplied_pushed
     )
     if not structural:
         return OpenSetRecognition(RecognitionStatus.UNKNOWN, None, (), "no structural candidate")
@@ -994,6 +1158,10 @@ def recognize_open_set(
                 candidate, supplied_bursts.get(candidate.family.name, ()),
             )
             if candidate.family.burst_recognition is not None
+            else recognize_pushed_state_semantics(
+                candidate, supplied_pushed.get(candidate.family.name, ()),
+            )
+            if candidate.family.pushed_state_recognition is not None
             else recognize_family_semantics(
                 candidate, supplied.get(candidate.family.name, ()),
             )
@@ -1007,12 +1175,22 @@ def recognize_open_set(
                 discriminator.name: discriminator.weight
                 for discriminator in item.candidate.family.recognition.discriminators
             }
-        else:
+        elif item.candidate.family.burst_recognition is not None:
             weights = {
                 "declared-burst-namespace-pair": 4,
                 "bounded-burst-cardinality": 3,
                 "bounded-burst-completion": 3,
                 "length-command-payload-framing": 4,
+            }
+        else:
+            weights = {
+                "current-generation-pushed-state": 3,
+                "coherent-pushed-state-stream": 3,
+                "pushed-state-namespace": 3,
+                "pushed-state-subtype": 3,
+                "pushed-state-payload-transform": 4,
+                "pushed-state-cardinality": 2,
+                "asynchronous-freshness-evidence": 4,
             }
         return item.candidate.score + sum(weights.get(name, 0) for name in item.matched)
 

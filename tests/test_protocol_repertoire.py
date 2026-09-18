@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ from mouse_control.protocol_repertoire import (
 from mouse_control.semantic_inference import infer_stage_hypotheses
 from mouse_control.temporal_dialogue import (
     BurstDialogueSpec, DialogueAssembler, DialogueObservation, Direction,
+    PushedStateSpec,
 )
 
 
@@ -548,3 +550,145 @@ def test_unknown_multi_response_protocol_abstains_from_finalmouse() -> None:
     assert decision.status is RecognitionStatus.CANDIDATE
     assert decision.family == "finalmouse-ulx-bounded-telemetry"
     assert "declared-burst-namespace-pair" in decision.ranked[0].missing
+
+
+def _mchose_spec(*, namespace="mchose.realtek.state"):
+    return PushedStateSpec(
+        namespace=namespace, report_id=0x13, grammar="async-state",
+        channel_id="realtek-input", periodic_max_gap_ms=100,
+        nudge_window_ms=50, nudge_namespace="feature-nudge",
+        nudge_report_id=0x05, nudge_channel_id="realtek-feature",
+    )
+
+
+def _mchose_observation(sequence: int, timestamp_ms: int, encoded: int, *, generation=1):
+    return DialogueObservation(
+        "mchose-fixture", "mchose-physical", "realtek-input", "hid",
+        Direction.IN, "mchose.realtek.state", 0x13, generation,
+        timestamp_ms * 1_000_000, sequence, bytes((0x1D, encoded)),
+        grammar="async-state",
+    )
+
+
+def _mchose_periodic_records(*, subtype=0x1D, wrong_transform=False):
+    assembler = DialogueAssembler()
+    records = []
+    for sequence, timestamp, encoded in ((1, 0, 0xFE), (2, 40, 0xFD)):
+        transformed = bytes((encoded ^ (0x00 if wrong_transform else 0xFF),))
+        record = assembler.observe_pushed_state(
+            _mchose_observation(sequence, timestamp, encoded), _mchose_spec(),
+            semantic_state_id="opaque-device-state", decoded_state=transformed,
+            subtype=subtype, transform="xor_ff", transform_source=bytes((encoded,)),
+            transformed_payload=transformed,
+        )
+        assert record is not None
+        records.append(record)
+    return tuple(records)
+
+
+def _mchose_descriptor():
+    return descriptor(HidReportDefinition(0x13, "input", 16, (0xFF00,)))
+
+
+def test_mchose_periodic_push_recognition_is_passive_and_write_disabled() -> None:
+    n = node(vendor=0x3554, product=0xF58A)
+    decision = recognize_open_set(
+        physical(vendor=0x3554, product=0xF58A, n=n), {n: _mchose_descriptor()},
+        pushed_states={"mchose-realtek-l7-pushed-state": _mchose_periodic_records()},
+    )
+    assert decision.status is RecognitionStatus.RECOGNIZED
+    assert decision.family == "mchose-realtek-l7-pushed-state"
+    assert decision.write_authorized is False
+    assert decision.ranked[0].semantic_records == (b"\x01", b"\x02")
+
+
+def test_mchose_nudge_association_recognizes_delayed_push_without_response_ownership() -> None:
+    n = node(vendor=0x3554, product=0xF58A)
+    assembler = DialogueAssembler()
+    nudge = DialogueObservation(
+        "mchose-fixture", "mchose-physical", "realtek-feature", "hid",
+        Direction.OUT, "feature-nudge", 0x05, 1, 0, 1, b"read-side-nudge",
+        grammar="nudge",
+    )
+    assembler.begin_state_nudge(nudge, _mchose_spec())
+    record = assembler.observe_pushed_state(
+        _mchose_observation(2, 20, 0xFE), _mchose_spec(),
+        semantic_state_id="opaque-device-state", decoded_state=b"\x01",
+        subtype=0x1D, transform="xor_ff", transform_source=b"\xfe",
+        transformed_payload=b"\x01",
+    )
+    assert record is not None
+    decision = recognize_open_set(
+        physical(vendor=0x3554, product=0xF58A, n=n), {n: _mchose_descriptor()},
+        pushed_states={"mchose-realtek-l7-pushed-state": (record,)},
+    )
+    assert decision.status is RecognitionStatus.RECOGNIZED
+    assert decision.write_authorized is False
+
+
+@pytest.mark.parametrize(
+    "records",
+    (
+        pytest.param(_mchose_periodic_records(subtype=0x1C), id="wrong-subtype"),
+        pytest.param(_mchose_periodic_records(wrong_transform=True), id="wrong-transform"),
+    ),
+)
+def test_mchose_negative_discriminators_abstain(records) -> None:
+    n = node(vendor=0x3554, product=0xF58A)
+    decision = recognize_open_set(
+        physical(vendor=0x3554, product=0xF58A, n=n), {n: _mchose_descriptor()},
+        pushed_states={"mchose-realtek-l7-pushed-state": records},
+    )
+    assert decision.status is RecognitionStatus.CANDIDATE
+    assert decision.write_authorized is False
+
+
+def test_old_generation_and_unknown_async_state_abstain() -> None:
+    n = node(vendor=0x3554, product=0xF58A)
+    assembler = DialogueAssembler()
+    assembler.advance_generation("mchose-physical", 2)
+    stale = assembler.observe_pushed_state(
+        _mchose_observation(1, 10, 0xFE, generation=1), _mchose_spec(),
+        semantic_state_id="opaque-device-state", decoded_state=b"\x01",
+        subtype=0x1D, transform="xor_ff", transform_source=b"\xfe",
+        transformed_payload=b"\x01",
+    )
+    assert stale is not None
+    stale_decision = recognize_open_set(
+        physical(vendor=0x3554, product=0xF58A, n=n), {n: _mchose_descriptor()},
+        pushed_states={"mchose-realtek-l7-pushed-state": (stale,)},
+    )
+    assert stale_decision.status is RecognitionStatus.CANDIDATE
+
+    unknown_spec = _mchose_spec(namespace="unknown.async.state")
+    unknown_observation = DialogueObservation(
+        "unknown", "unknown-physical", "realtek-input", "hid", Direction.IN,
+        "unknown.async.state", 0x13, 1, 0, 1, b"\x99\x44", grammar="async-state",
+    )
+    unknown = DialogueAssembler().observe_pushed_state(
+        unknown_observation, unknown_spec, semantic_state_id="unknown-state",
+        decoded_state=b"\xbb", subtype=0x99, transform="xor_ff",
+        transform_source=b"\x44", transformed_payload=b"\xbb",
+    )
+    assert unknown is not None
+    unknown_decision = recognize_open_set(
+        physical(vendor=0x3554, product=0xF58A, n=n), {n: _mchose_descriptor()},
+        pushed_states={"mchose-realtek-l7-pushed-state": (unknown,)},
+    )
+    assert unknown_decision.status is RecognitionStatus.CANDIDATE
+    assert "pushed-state-namespace" in unknown_decision.ranked[0].missing
+
+
+def test_mixed_pushed_state_streams_cannot_form_one_recognition() -> None:
+    n = node(vendor=0x3554, product=0xF58A)
+    records = list(_mchose_periodic_records())
+    records[1] = replace(
+        records[1],
+        observation=replace(records[1].observation, source_id="different-source"),
+    )
+    decision = recognize_open_set(
+        physical(vendor=0x3554, product=0xF58A, n=n), {n: _mchose_descriptor()},
+        pushed_states={"mchose-realtek-l7-pushed-state": tuple(records)},
+    )
+    assert decision.status is RecognitionStatus.CANDIDATE
+    assert "coherent-pushed-state-stream" in decision.ranked[0].missing

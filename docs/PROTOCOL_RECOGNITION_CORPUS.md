@@ -25,6 +25,7 @@ runtime transaction, capability, or hardware write.
 | BITMOUSE `0x72` | paired 64-byte vendor Output/Input reports | request checksum; asymmetric marker placement; target, sequence, and declared-length relationships | `RECOGNIZED` when all relations pass |
 | Keychron M6 | `FFC1`; `B3/B4` and `B5/B6` Output/Input namespaces | both query→response and setting→ACK report-ID pairings | `RECOGNIZED` when both dialogues are observed |
 | Finalmouse ULX-style telemetry | vendor Output/Input reports; distinct mouse/dongle contexts | bounded response burst, exact namespace pairing, length+command+payload records | `RECOGNIZED` only for a completed valid burst |
+| MCHOSE Realtek/L7 | vendor Input report `0x13`; Realtek pushed-state context | subtype `0x1D`, verified XOR-FF transform, periodic cadence or nudge-associated freshness | `RECOGNIZED` from passive or nudged pushed-state evidence |
 | Holtek Venus `04d9:fc55` | interface 2; `FFA0`; Feature 2/16 and Feature 3/64 | not yet encoded because supplied research does not include safe passive frame samples | `CANDIDATE` only |
 
 Holtek control/read/flash/status roles, commit/reset behavior, and polling
@@ -47,7 +48,7 @@ sufficient family evidence alone.
 
 ## Project-owned benchmark fixtures
 
-The automated corpus independently constructs eleven minimal fixtures from
+The automated corpus independently constructs eighteen minimal fixtures from
 protocol facts; it imports no upstream capture:
 
 1. identity-blinded valid BITMOUSE exchange;
@@ -61,14 +62,51 @@ protocol facts; it imports no upstream capture:
 9. valid Finalmouse-style deadline completion under continuous records;
 10. wrong mouse/dongle namespace near miss;
 11. unknown multi-response protocol.
+12. valid periodic unsolicited MCHOSE-style state;
+13. valid nudge followed by delayed asynchronous state;
+14. stale immediate read superseded by a fresh delayed push;
+15. wrong pushed-state subtype;
+16. wrong XOR-FF transform;
+17. old-generation pushed state;
+18. unknown asynchronous protocol.
 
-The expected current outcomes are five recognized, four candidates, one unknown,
+The expected current outcomes are eight recognized, eight candidates, one unknown,
 and one ambiguous. This gives 100% recognized-family precision and known-case
-recall, 0% unknown and collision false recognition, 45.5% overall coverage,
-45.5% abstention, and 9.1% ambiguity **on this eleven-case ingestion fixture only**.
+recall, 0% unknown and collision false recognition, 44.4% overall coverage,
+50% abstention, and 5.6% ambiguity **on this eighteen-case ingestion fixture only**.
 It does not satisfy or claim the broader 90% objective; the positive set covers
-only three executable families. The benchmark code reports these rates from the
+only four executable families. The benchmark code reports these rates from the
 actual decisions so later corpus expansion cannot silently redefine them.
+
+## Asynchronous pushed-state model
+
+Pushed state is meaningful without a request object. Each record retains exact
+physical/source/transport/channel/namespace/report/grammar/generation identity,
+a semantic state identity, decoded opaque state, freshness, freshness reasons,
+periodic position, optional subtype/transform evidence, and an optional nudge
+association. A nudge is an observed read-side eligibility fact, never an
+executed command or runtime write permission.
+
+Freshness is explicitly `FRESH`, `STALE`, or `UNKNOWN_FRESHNESS`. Evidence can
+come from a bounded nudge association, periodic cadence, a monotonic state
+counter, a state transition after a controlled physical action, or a later
+accepted push that disagrees with an immediate read. A successful immediate
+read starts with unknown freshness and becomes stale when superseded. Reports
+from older connection generations are retained as rejected stale evidence and
+cannot update current state.
+
+The Realtek/L7 fixture intentionally claims no semantic field offsets. Report
+ID `0x13`, subtype `0x1D`, and an actually verified XOR-FF source/result pair
+are recognition evidence; transformed bytes remain opaque. Immediate Feature
+buffers are not treated as authoritative merely because transport succeeded.
+
+No asynchronous delivery shape currently identified in the research corpus
+requires another temporal primitive: periodic pushes, nudged delayed pushes,
+stale immediate reads, physical-action transitions, and receiver notices can
+all be represented as one or more pushed-state stream specifications. Remaining
+asynchronous-family work is recipe and corpus population. Fragmented logical
+record reassembly, such as RAWM transport-vs-record boundaries, remains a
+separate framing problem rather than an asynchronous-delivery limitation.
 
 ## Bounded response-burst model
 
@@ -94,7 +132,7 @@ use the maximum-count bound only when that count is already known.
 
 Add independently reconstructed passive fixtures before promoting the remaining
 research families. Priority evidence is GearHub internal device identity,
-MCHOSE Realtek fresh asynchronous status, RAWM logical
+RAWM logical
 record boundaries, VAXEE echo/direction/length, HyperX no-ACK readback, and Beken
 prerequisite/apply state. Incomplete research remains negative or abstention
 evidence rather than guessed semantics.

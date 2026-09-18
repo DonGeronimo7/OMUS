@@ -1,6 +1,7 @@
 from mouse_control.temporal_dialogue import (
     BurstCompletionReason, BurstDialogueSpec, DialogueAssembler, DialogueKind,
-    DialogueObservation, Direction,
+    DialogueObservation, Direction, PushedStateAssociation, PushedStateSpec,
+    StateFreshness,
 )
 
 
@@ -199,3 +200,126 @@ def test_zero_response_burst_and_invalid_limits_are_explicit() -> None:
             pass
         else:
             raise AssertionError("invalid burst bounds must fail")
+
+
+def pushed_spec():
+    return PushedStateSpec(
+        namespace="state-input", report_id=0x13, grammar="pushed-state",
+        channel_id="hidraw-if2", periodic_max_gap_ms=100,
+        nudge_window_ms=50, nudge_namespace="feature-nudge",
+        nudge_report_id=0x05, nudge_channel_id="hidraw-if2",
+    )
+
+
+def pushed_obs(seq, ms, state, *, generation=1, subtype=0x1D):
+    raw = bytes((subtype, state ^ 0xFF))
+    return obs(
+        seq, ms, Direction.IN, raw, generation=generation,
+        grammar="pushed-state", namespace="state-input", report_id=0x13,
+    )
+
+
+def test_unsolicited_periodic_state_is_grouped_with_explicit_freshness() -> None:
+    assembler = DialogueAssembler()
+    first = assembler.observe_pushed_state(
+        pushed_obs(20, 0, 1), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=1, subtype=0x1D, transform="xor_ff",
+    )
+    second = assembler.observe_pushed_state(
+        pushed_obs(21, 40, 1), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=1, subtype=0x1D, transform="xor_ff",
+    )
+    assert first is not None and second is not None
+    assert first.association is PushedStateAssociation.UNSOLICITED
+    assert first.freshness is StateFreshness.UNKNOWN
+    assert second.periodic_index == 2
+    assert second.freshness is StateFreshness.FRESH
+    assert "known-periodic-push-cadence" in second.freshness_reasons
+
+
+def test_nudge_association_is_not_request_response_ownership() -> None:
+    assembler = DialogueAssembler()
+    nudge = obs(
+        30, 0, Direction.OUT, b"read-side-nudge", grammar="state-nudge",
+        namespace="feature-nudge", report_id=0x05,
+    )
+    assembler.begin_state_nudge(nudge, pushed_spec())
+    pushed = assembler.observe_pushed_state(
+        pushed_obs(31, 20, 2), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=2, subtype=0x1D, transform="xor_ff",
+    )
+    assert pushed is not None
+    assert pushed.association is PushedStateAssociation.NUDGED
+    assert pushed.nudge is nudge
+    assert pushed.freshness is StateFreshness.FRESH
+    assert "nudge-precedes-asynchronous-push" in pushed.freshness_reasons
+
+
+def test_stale_immediate_read_loses_to_fresh_delayed_push() -> None:
+    assembler = DialogueAssembler()
+    immediate_observation = obs(
+        40, 1, Direction.IN, b"old", grammar="feature-read",
+        namespace="feature", report_id=0x05,
+    )
+    immediate = assembler.state_read_evidence(
+        immediate_observation, semantic_state_id="dpi-stage", decoded_state=1,
+    )
+    nudge = obs(
+        39, 0, Direction.OUT, b"nudge", grammar="state-nudge",
+        namespace="feature-nudge", report_id=0x05,
+    )
+    assembler.begin_state_nudge(nudge, pushed_spec())
+    pushed = assembler.observe_pushed_state(
+        pushed_obs(41, 20, 2), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=2, subtype=0x1D, transform="xor_ff",
+    )
+    assert pushed is not None
+    stale, fresh = assembler.prefer_later_pushed_state(immediate, pushed)
+    assert stale.freshness is StateFreshness.STALE
+    assert fresh.freshness is StateFreshness.FRESH
+    assert stale.decoded_state == 1
+    assert fresh.decoded_state == 2
+
+
+def test_old_generation_push_is_rejected_and_unrelated_input_is_ignored() -> None:
+    assembler = DialogueAssembler()
+    accepted = assembler.observe_pushed_state(
+        pushed_obs(50, 0, 1), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=1,
+    )
+    assert accepted is not None and accepted.accepted
+    assembler.advance_generation("physical-a", 2)
+    stale = assembler.observe_pushed_state(
+        pushed_obs(51, 5, 2, generation=1), pushed_spec(),
+        semantic_state_id="dpi-stage", decoded_state=2,
+    )
+    assert stale is not None
+    assert not stale.accepted
+    assert stale.freshness is StateFreshness.STALE
+
+    unrelated = obs(
+        52, 6, Direction.IN, b"movement", generation=2, grammar="event",
+        namespace="mouse-input", report_id=1,
+    )
+    assert assembler.observe_pushed_state(
+        unrelated, pushed_spec(), semantic_state_id="dpi-stage", decoded_state=9,
+    ) is None
+
+
+def test_controlled_action_correlates_transition_without_write_authority() -> None:
+    assembler = DialogueAssembler()
+    assembler.observe_pushed_state(
+        pushed_obs(60, 0, 1), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=1,
+    )
+    action = obs(
+        61, 10, Direction.IN, b"dpi-button", grammar="physical_action",
+        namespace="mouse-input", report_id=1,
+    )
+    changed = assembler.observe_pushed_state(
+        pushed_obs(62, 20, 2), pushed_spec(), semantic_state_id="dpi-stage",
+        decoded_state=2, controlled_action=action,
+    )
+    assert changed is not None
+    assert "state-changed-after-controlled-action" in changed.freshness_reasons
+    assert changed.freshness is StateFreshness.FRESH
