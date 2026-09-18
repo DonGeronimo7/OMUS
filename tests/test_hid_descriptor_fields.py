@@ -1,6 +1,7 @@
 """Field-level HID descriptor parsing tests for generic discovery."""
 
 from mouse_control.hid_descriptor import (
+    _parse_report_descriptor,
     fields_overlapping_wire_byte,
     parse_report_descriptor,
 )
@@ -76,3 +77,19 @@ def test_wire_byte_overlap_accounts_for_numbered_report_prefix():
         byte_offset=2,
     )
     assert tuple(field.role for field in byte_two) == ("pointer",)
+
+
+def test_identical_descriptor_bytes_reuse_one_immutable_parse():
+    first = parse_report_descriptor(DESCRIPTOR)
+    second = parse_report_descriptor(bytearray(DESCRIPTOR))
+
+    assert first is second
+    assert first.fingerprint == second.fingerprint
+
+
+def test_descriptor_parse_cache_is_bounded():
+    _parse_report_descriptor.cache_clear()
+    for value in range(256):
+        parse_report_descriptor(bytes((0x06, value, 0xFF)))
+
+    assert _parse_report_descriptor.cache_info().currsize == 128

@@ -188,6 +188,33 @@ def test_engine_exposes_descriptor_semantics_and_passive_decoder(tmp_path):
     assert not result.writable
 
 
+def test_engine_reuses_topology_descriptor_snapshot_without_second_sysfs_read(tmp_path):
+    descriptor = bytes.fromhex('05 09 09 01 15 00 25 01 75 01 95 01 81 02')
+    original = node('/dev/hidraw8', 'hidraw')
+    hid = DeviceNode(
+        **{
+            **vars(original),
+            "descriptor_bytes": descriptor,
+        }
+    )
+    physical = PhysicalDevice(
+        'Unknown', 0x1234, 0x5678, 3, None, [], [hid], 'm', None
+    )
+    mouse = MouseDevice('Unknown', '/dev/input/event1', '', 0x1234, 0x5678, 3)
+    engine = DiscoveryEngine(
+        topology_builder=lambda _mouse: physical,
+        detectors=(),
+        probe_factory=lambda _node: pytest.fail("descriptor was read twice"),
+        profile_store=DeviceProfileStore(tmp_path),
+        save_profiles=False,
+    )
+
+    result = engine.discover(mouse, force=True)
+
+    assert result is not None
+    assert engine.descriptors[hid].raw == descriptor
+
+
 def test_engine_exposes_saved_profile_path(tmp_path):
     physical = PhysicalDevice('Unknown', 0x1234, 0x5678, 3, None, [], [], 'model-hash', None)
     mouse = MouseDevice('Unknown', '/dev/input/event1', '', 0x1234, 0x5678, 3)

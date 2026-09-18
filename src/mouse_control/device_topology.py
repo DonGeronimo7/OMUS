@@ -84,8 +84,7 @@ def _descriptor_bytes(path: Path) -> bytes:
     return b""
 
 
-def _descriptor_sha256(path: Path) -> str | None:
-    descriptor = _descriptor_bytes(path)
+def _descriptor_sha256(descriptor: bytes) -> str | None:
     return hashlib.sha256(descriptor).hexdigest() if descriptor else None
 
 
@@ -181,6 +180,7 @@ def enumerate_evdev_nodes(
                 device.close()
 
         sysfs = sys_class_input / path.name / "device"
+        descriptor = _descriptor_bytes(sysfs)
         parent_key = _parent_key(
             sysfs_path=sysfs,
             bus=bus,
@@ -202,8 +202,9 @@ def enumerate_evdev_nodes(
                 name=name,
                 phys=phys,
                 uniq=uniq,
-                descriptor_sha256=_descriptor_sha256(sysfs),
+                descriptor_sha256=_descriptor_sha256(descriptor),
                 parent_key=parent_key,
+                descriptor_bytes=descriptor,
             )
         )
     return result
@@ -224,6 +225,7 @@ def enumerate_hidraw_nodes(
         name = fields.get("HID_NAME", "")
         phys = fields.get("HID_PHYS", "")
         uniq = fields.get("HID_UNIQ", "")
+        descriptor = _descriptor_bytes(sysfs)
         result.append(
             DeviceNode(
                 path=dev_root / entry.name,
@@ -237,7 +239,7 @@ def enumerate_hidraw_nodes(
                 name=name,
                 phys=phys,
                 uniq=uniq,
-                descriptor_sha256=_descriptor_sha256(sysfs),
+                descriptor_sha256=_descriptor_sha256(descriptor),
                 parent_key=_parent_key(
                     sysfs_path=sysfs,
                     bus=bus,
@@ -246,6 +248,7 @@ def enumerate_hidraw_nodes(
                     phys=phys,
                     uniq=uniq,
                 ),
+                descriptor_bytes=descriptor,
             )
         )
     return result

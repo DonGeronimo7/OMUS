@@ -336,7 +336,9 @@ class DiscoveryBackend(HardwareBackend):
                             or node.sysfs_path is None
                         ):
                             continue
-                        raw_descriptor = (node.sysfs_path / "report_descriptor").read_bytes()
+                        raw_descriptor = node.descriptor_bytes or (
+                            node.sysfs_path / "report_descriptor"
+                        ).read_bytes()
                         descriptor = parse_report_descriptor(raw_descriptor)
                     except (KeyError, OSError, TypeError, ValueError):
                         continue

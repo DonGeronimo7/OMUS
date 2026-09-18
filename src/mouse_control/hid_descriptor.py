@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, IntEnum
+from functools import cached_property, lru_cache
 import hashlib
 from math import ceil
 
@@ -99,7 +100,7 @@ class HidFieldDefinition:
     logical_usage: tuple[int, int] | None = None
     field_index: int = 0
 
-    @property
+    @cached_property
     def main_flags(self) -> HidMainFlags: return HidMainFlags.from_raw(self.flags)
     @property
     def bit_length(self) -> int: return self.report_size * self.report_count
@@ -123,6 +124,9 @@ class HidFieldDefinition:
         if 0x0C in pages: return "consumer"
         return "standard" if pages else "undeclared"
     def stable_id(self, fingerprint: str) -> str:
+        return _stable_field_id(self, fingerprint)
+
+    def _calculate_stable_id(self, fingerprint: str) -> str:
         material = repr((fingerprint, self.report_type, self.report_id,
                          self.field_index, self.bit_offset, self.report_size,
                          self.report_count, self.usages, self.collection_path))
@@ -156,13 +160,13 @@ class ParsedHidDescriptor:
     fields: tuple[HidFieldDefinition, ...] = ()
     collections: tuple[HidCollection, ...] = ()
     diagnostics: tuple[HidDescriptorDiagnostic, ...] = ()
-    @property
+    @cached_property
     def fingerprint(self) -> str: return hashlib.sha256(self.raw).hexdigest()
-    @property
+    @cached_property
     def input_reports(self): return get_input_reports(self)
-    @property
+    @cached_property
     def output_reports(self): return get_output_reports(self)
-    @property
+    @cached_property
     def feature_reports(self): return get_feature_reports(self)
 
 
@@ -192,6 +196,11 @@ class _Local:
 def _u(data: bytes) -> int: return int.from_bytes(data,"little") if data else 0
 def _s(data: bytes) -> int: return int.from_bytes(data,"little",signed=True) if data else 0
 def _usage(value:int,page:int,size:int): return ((value>>16)&0xffff,value&0xffff) if size==4 else (page,value)
+
+
+@lru_cache(maxsize=4096)
+def _stable_field_id(field: HidFieldDefinition, fingerprint: str) -> str:
+    return field._calculate_stable_id(fingerprint)
 
 
 def _expand_range(result, low, high, diagnostics, offset):
@@ -227,7 +236,12 @@ def _containing(collections, path, kind):
 
 def parse_report_descriptor(raw: bytes) -> ParsedHidDescriptor:
     if not isinstance(raw,(bytes,bytearray,memoryview)): raise TypeError("raw HID descriptor must be bytes-like")
-    data=bytes(raw); state=_Global(); stack=[]; local=_Local.empty(); path=[]
+    return _parse_report_descriptor(bytes(raw))
+
+
+@lru_cache(maxsize=128)
+def _parse_report_descriptor(data: bytes) -> ParsedHidDescriptor:
+    state=_Global(); stack=[]; local=_Local.empty(); path=[]
     collections=[]; diagnostics=[]; lengths={}; pages={}; fields=[]; indexes={}; offset=0
     def diag(severity,code,message,where): diagnostics.append(HidDescriptorDiagnostic(severity,code,message,where))
     while offset < len(data):
@@ -330,7 +344,10 @@ def _reports(d,t): return tuple(r for r in d.reports if r.report_type==t)
 def get_input_reports(d): return _reports(d,"input")
 def get_output_reports(d): return _reports(d,"output")
 def get_feature_reports(d): return _reports(d,"feature")
-def fields_for_report(d,*,report_type,report_id): return tuple(f for f in d.fields if f.report_type==report_type and f.report_id==report_id)
+@lru_cache(maxsize=1024)
+def _fields_for_report(d, report_type, report_id):
+    return tuple(f for f in d.fields if f.report_type==report_type and f.report_id==report_id)
+def fields_for_report(d,*,report_type,report_id): return _fields_for_report(d,report_type,report_id)
 def fields_overlapping_wire_byte(d,*,report_type,report_id,byte_offset): return tuple(f for f in fields_for_report(d,report_type=report_type,report_id=report_id) if f.overlaps_wire_byte(byte_offset))
 def calculate_report_lengths(d,*,report_type=None):
     result={}

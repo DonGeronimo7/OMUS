@@ -99,6 +99,7 @@ class DeviceNode:
     uniq: str = ""
     descriptor_sha256: str | None = None
     parent_key: str | None = None
+    descriptor_bytes: bytes = field(default=b"", repr=False, compare=False)
 
     @property
     def stable_interface_key(self) -> tuple[object, ...]:

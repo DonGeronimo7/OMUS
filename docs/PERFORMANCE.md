@@ -81,3 +81,7 @@ explanation.
 |---|---|---:|---:|---:|---:|---|
 | Baseline only | — | — | — | — | — | 728-test updater checkpoint; performance gate pending |
 | Lazy command-specific imports | Cold `mouse_control.app` import | 113.328 ms | 16.527 ms | -96.801 ms | -85.4% | Runtime/research/updater imports stay absent from cold help; full regression gate required |
+| Bounded immutable descriptor reuse | Descriptor parse/reuse | 0.0209 ms | 0.000150 ms | -0.0208 ms | -99.3% | Exact descriptor bytes key a 128-entry cache; topology snapshots retain bytes in memory only |
+| Cached descriptor field identities/layout | Single HID decode | 0.0652 ms | 0.0281 ms | -0.0371 ms | -56.9% | Immutable descriptor/field facts only; packet semantics and authority unchanged |
+| Cached descriptor field identities/layout | 1,000 HID decodes | 66.552 ms | 28.196 ms | -38.356 ms | -57.6% | Same decoded values and diagnostics; no write path involved |
+| Snapshot plus parsed-knowledge reuse | Explicit Rediscover | 0.577 ms | 0.407 ms | -0.170 ms | -29.4% | Forced discovery still executes descriptor, protocol, observation, and validation phases |

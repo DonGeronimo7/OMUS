@@ -263,10 +263,11 @@ class DiscoveryEngine:
         self, physical: PhysicalDevice
     ) -> dict[DeviceNode, ParsedHidDescriptor]:
         for node in physical.hidraw_nodes:
-            probe = self._probe_factory(node)
             try:
                 with measure("descriptor_acquisition"):
-                    raw = probe.read_descriptor()
+                    raw = node.descriptor_bytes
+                    if not raw:
+                        raw = self._probe_factory(node).read_descriptor()
                 with measure("descriptor_parsing"):
                     descriptor = parse_report_descriptor(raw)
             except (OSError, PermissionError, HidDescriptorError, ValueError) as exc:
