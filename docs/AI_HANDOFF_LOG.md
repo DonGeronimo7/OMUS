@@ -1,5 +1,27 @@
 # AI handoff log
 
+## 2026-09-17 — Open-source credit, provenance, and license audit
+
+- Added `CREDITS.md` as the project-level record for protocol-research credit,
+  source links, current upstream license metadata where available, distribution
+  scope, and a strict distinction between cited facts and imported expression.
+- The audit found no vendored third-party source tree or retained upstream
+  copyright header in the current tree. Git history shows the current native
+  and repertoire modules were introduced in-tree, but cannot prove that every
+  protocol constant was never translated from upstream expression; that limit is
+  recorded instead of being presented as a legal conclusion.
+- Added source-level pointers from the native Razer implementation and protocol
+  repertoire to the record. The `bitmouse-72` fixture and unlicensed/unclear
+  OpenMouse and AJAZZ source status are explicit maintainer-review items and
+  remain non-authorizing/write-disabled where applicable.
+- Added the credits record to source, wheel, RPM, Debian, Arch, and AppImage
+  distribution paths. Wheel/sdist build inspection verified both `LICENSE` and
+  `CREDITS.md` are present in wheel license metadata and that the sdist includes
+  the credit record. Updated SPDX metadata to the current string form.
+- Validation: release-metadata and package tests passed 15; full suite passed
+  685 with one existing GLib deprecation warning; compileall and `git diff
+  --check` passed. No hardware behavior or write authority changed.
+
 ## 2026-09-17 — GitHub discovery onboarding overhaul
 
 - Reframed the repository landing page as native Linux mouse configuration

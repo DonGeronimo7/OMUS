@@ -4,6 +4,10 @@ The repertoire is intentionally *not* a device support table.  It records
 reusable grammar facts learned from maintained open-source implementations and
 hardware verification.  Structural matches help discovery decide what to
 observe next; they never grant write permission on their own.
+
+Source links, license-review status, and unresolved attribution work are kept
+in ``CREDITS.md``. A cited protocol fact is not a bundled upstream code file,
+and a family match never grants write authority.
 """
 
 from __future__ import annotations

@@ -10,7 +10,8 @@ authors = [
     {name = "Marc-A. Geronimo"}
 ]
 readme = "README.md"
-license = {text = "GPL-3.0-or-later"}
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "CREDITS.md"]
 requires-python = ">=3.12"
 dependencies = [
     "dbus-next>=0.2.3",

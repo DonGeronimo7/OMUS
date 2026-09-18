@@ -1,9 +1,10 @@
 """Native Razer protocol grammar and exact-model transport.
 
 This module deliberately does not depend on OpenRazer, its daemon, D-Bus API,
-or Python client. Public
-OpenRazer/OpenMouse protocol research is used only as reference material for a
+or Python client. Public OpenRazer/OpenMouse protocol research informs the
 small exact-PID table and the already-documented 90-byte Razer control grammar.
+See ``CREDITS.md`` for source links, scope, and the review boundary for
+reference material versus imported expression.
 
 Writes are constructed only for exact product specifications declared below
 and remain subject to backend identity checks plus canonical readback.

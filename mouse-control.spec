@@ -67,7 +67,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 
 %files -f %{pyproject_files}
 %license LICENSE
-%doc README.md CHANGELOG.md
+%doc README.md CHANGELOG.md CREDITS.md
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
 %{_bindir}/mouse-control-discover

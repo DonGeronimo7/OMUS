@@ -322,6 +322,16 @@ Repository settings are not stored in Git. Recommended About description:
 Recommended topics: `linux`, `linux-gaming`, `mouse`, `gaming-mouse`, `hid`,
 `usb-hid`, `evdev`, `mouse-remapping`, `device-discovery`, `dpi`.
 
+## Credits and provenance
+
+Mouse Control builds on public Linux input and mouse-protocol research. Its
+contribution is bringing that knowledge together with evidence-driven discovery
+and strict write-safety boundaries—not claiming every protocol fact was
+independently discovered here. See [CREDITS.md](CREDITS.md) for the projects and
+sources represented in the repertoire, the distinction between cited research
+and imported code, package visibility, and attribution items that still need
+maintainer review.
+
 ## License
 
 Mouse Control is licensed under the GNU General Public License, version 3 or

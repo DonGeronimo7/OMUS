@@ -13,7 +13,7 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 rm -rf AppDir
-mkdir -p AppDir/usr/bin AppDir/usr/share/applications
+mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/doc/mouse-control
 
 echo "Downloading portable CPython 3.12 runtime..."
 
@@ -74,6 +74,7 @@ chmod +x AppDir/usr/bin/mouse-control
 
 install -Dm644 packaging/appimage/mouse-control.desktop \
   AppDir/usr/share/applications/mouse-control.desktop
+install -Dm644 CREDITS.md AppDir/usr/share/doc/mouse-control/CREDITS.md
 
 for size in 512 256 128 64 48 32; do
   install -Dm644 \
