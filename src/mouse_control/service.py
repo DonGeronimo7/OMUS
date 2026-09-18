@@ -113,6 +113,14 @@ def stop_service() -> None:
     )
 
 
+def request_stop_service() -> None:
+    """Queue a stop without delaying the supervised foreground process."""
+    subprocess.run(
+        [SYSTEMCTL, "--user", "--no-block", "stop", SERVICE_NAME],
+        check=True,
+    )
+
+
 def disable_service() -> None:
     if not service_path().is_file():
         return

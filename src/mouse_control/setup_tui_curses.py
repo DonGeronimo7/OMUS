@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import curses
 import errno
+import queue
+import threading
 from typing import Any, Callable
 
 from evdev import InputDevice, ecodes
@@ -149,6 +151,82 @@ class CursesSetupApp:
         self._accent = curses.A_BOLD
         self._warn = 0
         self._muted = curses.A_DIM
+        self._initialization: threading.Thread | None = None
+        self._initialization_results: queue.SimpleQueue[
+            tuple[SetupController | None, BaseException | None]
+        ] = queue.SimpleQueue()
+        self._initialization_target = getattr(controller, "selected_index", 0)
+        self._pending_device_activation = False
+
+    def _start_initialization(self, index: int) -> None:
+        """Initialize one backend after the first frame, with one owned worker."""
+        if self._initialization is not None:
+            return
+        self._initialization_target = index
+        self.controller.status = (
+            f"Preparing {self.controller.devices[index].name}; you can still select a device, "
+            "open help, or cancel."
+        )
+
+        def initialize() -> None:
+            try:
+                ready = self.controller.initialized_copy(index)
+            except BaseException as exc:
+                self._initialization_results.put((None, exc))
+            else:
+                self._initialization_results.put((ready, None))
+
+        self._initialization = threading.Thread(
+            target=initialize,
+            name="mouse-control-setup-initialization",
+        )
+        self._initialization.start()
+
+    def _poll_initialization(self) -> None:
+        try:
+            ready, error = self._initialization_results.get_nowait()
+        except queue.Empty:
+            return
+        worker = self._initialization
+        if worker is not None:
+            worker.join()
+        self._initialization = None
+        if error is not None:
+            self.controller.status = f"Hardware initialization failed: {error}"
+            self._pending_device_activation = False
+            return
+        assert ready is not None
+        requested = self.controller.device_cursor
+        if ready.selected_index != requested:
+            try:
+                ready.backend.close()
+            except Exception:
+                pass
+            self._start_initialization(requested)
+            return
+        self.controller = ready
+        if self._pending_device_activation:
+            self._pending_device_activation = False
+            self.controller._go(SetupSection.HARDWARE)
+            if not self.controller.discovery_complete:
+                self._run_automatic()
+
+    def _finish_initialization(self) -> None:
+        """Join and close an unadopted backend during deterministic shutdown."""
+        worker = self._initialization
+        if worker is None:
+            return
+        worker.join()
+        self._initialization = None
+        try:
+            ready, _error = self._initialization_results.get_nowait()
+        except queue.Empty:
+            return
+        if ready is not None:
+            try:
+                ready.backend.close()
+            except Exception:
+                pass
 
     @staticmethod
     def _put(window, y: int, x: int, text: str, width: int, attr: int = 0) -> None:
@@ -1085,48 +1163,83 @@ class CursesSetupApp:
         except curses.error:
             pass
 
-        while True:
-            self._draw()
-            key = stdscr.getch()
-            if key == curses.KEY_RESIZE:
-                continue
-            symbolic = self._symbolic_key(key)
-            if symbolic is None:
-                continue
-            action = self.controller.handle_key(symbolic)
+        # Present a complete device-selection screen before opening HID
+        # sessions or querying live capabilities. Initialization is singular,
+        # owned by this app, and joined on every exit path.
+        self._draw()
+        self._start_initialization(self.controller.selected_index)
+        stdscr.timeout(50)
+        try:
+            while True:
+                self._poll_initialization()
+                self._draw()
+                key = stdscr.getch()
+                if key == -1:
+                    continue
+                if (
+                    not self.controller.backend_ready
+                    and key in (10, 13, curses.KEY_ENTER)
+                    and self.controller.section is SetupSection.DEVICE
+                ):
+                    self._pending_device_activation = True
+                    if self._initialization is None:
+                        self._start_initialization(self.controller.device_cursor)
+                    if self.controller.device_cursor != self._initialization_target:
+                        self.controller.status = (
+                            "Finishing the current safe hardware check before switching devices."
+                        )
+                    else:
+                        self.controller.status = "Hardware initialization is still in progress."
+                    continue
+                if key == curses.KEY_RESIZE:
+                    continue
+                symbolic = self._symbolic_key(key)
+                if symbolic is None:
+                    continue
+                if (
+                    not self.controller.backend_ready
+                    and self.controller.section is SetupSection.DEVICE
+                    and symbolic == "RIGHT"
+                ):
+                    self.controller.status = "Hardware initialization is still in progress."
+                    continue
+                action = self.controller.handle_key(symbolic)
 
-            if action.kind is ActionKind.HELP:
-                self._show_help()
-            elif action.kind is ActionKind.CANCEL:
-                if self._confirm(
-                    "Cancel setup?",
-                    [
-                        "Existing configuration will remain unchanged.",
-                        "Temporary DPI tests will be restored.",
-                    ],
-                ):
-                    return False
-            elif action.kind in {ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY}:
-                self._run_automatic(force=action.kind is ActionKind.RETRY_DISCOVERY)
-            elif action.kind is ActionKind.GUIDED_DISCOVERY:
-                self._run_guided()
-            elif action.kind is ActionKind.MEASURE_POLLING:
-                self._run_polling_measurement()
-            elif action.kind is ActionKind.EDIT_DPI:
-                self._dpi_editor(int(action.payload))
-            elif action.kind is ActionKind.CAPTURE_BUTTONS:
-                try:
-                    self._button_editor()
-                except ButtonCaptureError as exc:
-                    self.controller.status = str(exc)
-            elif action.kind is ActionKind.SAVE:
-                if self._confirm(
-                    "Save configuration?",
-                    ["Apply the reviewed settings and finish setup."],
-                    yes="Enter Save and Finish",
-                    no="b Back",
-                ):
-                    return True
+                if action.kind is ActionKind.HELP:
+                    self._show_help()
+                elif action.kind is ActionKind.CANCEL:
+                    if self._confirm(
+                        "Cancel setup?",
+                        [
+                            "Existing configuration will remain unchanged.",
+                            "Temporary DPI tests will be restored.",
+                        ],
+                    ):
+                        return False
+                elif action.kind in {ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY}:
+                    self._run_automatic(force=action.kind is ActionKind.RETRY_DISCOVERY)
+                elif action.kind is ActionKind.GUIDED_DISCOVERY:
+                    self._run_guided()
+                elif action.kind is ActionKind.MEASURE_POLLING:
+                    self._run_polling_measurement()
+                elif action.kind is ActionKind.EDIT_DPI:
+                    self._dpi_editor(int(action.payload))
+                elif action.kind is ActionKind.CAPTURE_BUTTONS:
+                    try:
+                        self._button_editor()
+                    except ButtonCaptureError as exc:
+                        self.controller.status = str(exc)
+                elif action.kind is ActionKind.SAVE:
+                    if self._confirm(
+                        "Save configuration?",
+                        ["Apply the reviewed settings and finish setup."],
+                        yes="Enter Save and Finish",
+                        no="b Back",
+                    ):
+                        return True
+        finally:
+            stdscr.timeout(-1)
+            self._finish_initialization()
 
 
 def run_curses(app: CursesSetupApp) -> bool:

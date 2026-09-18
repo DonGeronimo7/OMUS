@@ -152,6 +152,8 @@ class SetupController:
         choices_factory: Callable[[dict[str, object]], SetupChoices],
         backend_factory: Callable[[Any], Any] = get_backend,
         known_device_loader: Callable[[Any], Any | None] = load_known_device_state,
+        initialize_backend: bool = True,
+        selected_index: int | None = None,
     ) -> None:
         if not devices:
             raise ValueError("setup requires at least one mouse")
@@ -178,12 +180,39 @@ class SetupController:
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
 
-        self.selected_index = self._configured_device_index()
+        self.selected_index = (
+            self._configured_device_index() if selected_index is None else selected_index
+        )
+        if not 0 <= self.selected_index < len(self.devices):
+            raise ValueError("selected device index is out of range")
         self.device_cursor = self.selected_index
         self.selected = self.devices[self.selected_index]
         self.backend: Any = None
         self.choices = self._choices_factory(self.existing_config)
-        self._bind_device(self.selected_index, restore_old=False, reset_choices=True)
+        if initialize_backend:
+            self._bind_device(self.selected_index, restore_old=False, reset_choices=True)
+        else:
+            self.status = (
+                f"Selected {self.selected.name}; preparing live hardware capabilities."
+            )
+
+    @property
+    def backend_ready(self) -> bool:
+        return self.backend is not None
+
+    def initialized_copy(self, selected_index: int) -> "SetupController":
+        """Build live hardware state without mutating the displayed controller."""
+        from .foreground_session import complete_pending_suspension
+
+        complete_pending_suspension()
+        return type(self)(
+            self.devices,
+            self.existing_config,
+            choices_factory=self._choices_factory,
+            backend_factory=self._backend_factory,
+            known_device_loader=self._known_device_loader,
+            selected_index=selected_index,
+        )
 
     @property
     def section(self) -> SetupSection:
@@ -1068,12 +1097,16 @@ def run_setup_tui(
         existing_config,
         choices_factory=choices_factory,
         backend_factory=backend_factory,
+        initialize_backend=False,
     )
+    app = CursesSetupApp(controller)
     try:
-        finished = run_curses(CursesSetupApp(controller))
+        finished = run_curses(app)
     except BaseException:
-        controller.restore_temporary_state()
+        if app.controller.backend_ready:
+            app.controller.restore_temporary_state()
         raise
+    controller = app.controller
     return SetupTuiResult(
         finished=bool(finished),
         selected=controller.selected,

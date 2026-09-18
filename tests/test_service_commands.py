@@ -20,6 +20,15 @@ def test_short_commands_call_existing_service_helpers():
     start.assert_called_once(); stop.assert_called_once(); restart.assert_called_once(); status.assert_called_once()
 
 
+def test_nonblocking_stop_only_queues_the_existing_service_unit():
+    with patch.object(service.subprocess, "run") as run:
+        service.request_stop_service()
+    run.assert_called_once_with(
+        [service.SYSTEMCTL, "--user", "--no-block", "stop", service.SERVICE_NAME],
+        check=True,
+    )
+
+
 def test_disable_service_is_idempotent_when_not_installed(monkeypatch, tmp_path):
     monkeypatch.setattr(service, "service_path", lambda: tmp_path / "missing.service")
     with patch.object(service.subprocess, "run") as run:

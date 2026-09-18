@@ -311,7 +311,13 @@ def test_explicit_saved_disable_does_not_restore_established_service(tmp_path):
 
 def test_tui_wrapper_restores_temporary_dpi_when_curses_aborts(monkeypatch):
     backend = FakeBackend()
-    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.wrapper", lambda _call: (_ for _ in ()).throw(KeyboardInterrupt()))
+    def interrupt(call):
+        app = call.__self__
+        app.controller = app.controller.initialized_copy(app.controller.selected_index)
+        app.controller.backend.set_dpi(app.controller.selected, 1500)
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.wrapper", interrupt)
     try:
         run_setup_tui(
             [MOUSE], {}, choices_factory=_choices, backend_factory=lambda _device: backend

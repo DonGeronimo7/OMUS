@@ -83,6 +83,26 @@ def controller(*, backends=None, existing=None, known_device_loader=lambda _devi
     ), backends
 
 
+def test_deferred_controller_does_not_open_hardware_before_first_frame():
+    opened = []
+    app = SetupController(
+        [MOUSE1],
+        {},
+        choices_factory=choices_factory,
+        backend_factory=lambda device: opened.append(device) or FakeBackend(),
+        known_device_loader=lambda _device: None,
+        initialize_backend=False,
+    )
+
+    assert app.backend is None
+    assert opened == []
+    assert app.detail_rows()[0].text == "Select the mouse to configure."
+
+    ready = app.initialized_copy(0)
+    assert opened == [MOUSE1]
+    assert ready.backend_ready is True
+
+
 def test_known_configured_device_loads_persisted_state_without_automatic_discovery():
     result = SimpleNamespace(device=SimpleNamespace(), protocol=None, capabilities={})
     outcome = SimpleNamespace(

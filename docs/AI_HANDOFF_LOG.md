@@ -1,5 +1,29 @@
 # AI handoff log
 
+## 2026-09-18 — launcher / TUI first-frame performance pass
+
+- Starting point: `c4828c6cdf99f2f6dc1b9e459e99f170024920f9` on a new
+  `codex/launcher-tui-startup-performance` branch. Profiling found the live
+  backend/HID++ handshake (5,618.49 ms in the slow sample), not imports
+  (104.38 ms), dominated the pre-frame path.
+- The TUI now renders its real device-selection screen first and performs live
+  backend/capability/exact-evidence initialization in one owned worker. It
+  remains responsive for selection/help/cancel, blocks hardware navigation
+  until ready, and deterministically joins/closes the worker.
+- Foreground service suspension is queued before process startup and completed
+  synchronously before backend creation. Direct event-node enumeration removes
+  duplicate evdev prevalidation without dropping the comprehensive candidate
+  scan or existing capability/permission checks.
+- Same-host supervised timing: warm known-device median 676.22 → 504.15 ms
+  (five runs), observed max 777.43 → 647.61 ms; cold/transitional first frame
+  6,347.09 → 464.83 ms. Cancel-without-save restored the service after every
+  run and preserved the exact configuration SHA-256.
+- Validation: focused lifecycle/TUI suites passed 124 tests; the full suite
+  passed 787 tests with the existing GLib warning. The 500-round performance
+  suite retained known-device restore (0.0342 ms) and explicit Rediscover
+  (0.4171 ms). Compileall, diff validation, package checks, and final commit are
+  recorded in the final task handoff.
+
 ## 2026-09-18 — external foreground-session supervision candidate
 
 - The acceptance claim at `7fb39fb` was treated as failed. Reproduction began

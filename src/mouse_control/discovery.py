@@ -9,7 +9,7 @@ from typing import Iterable
 
 from .performance import timed
 
-from evdev import InputDevice, ecodes, list_devices
+from evdev import InputDevice, ecodes
 
 
 @dataclass(frozen=True)
@@ -40,12 +40,19 @@ def _iter_candidate_paths() -> Iterable[str]:
     by_id = Path("/dev/input/by-id")
     if by_id.is_dir():
         try:
-            yield from (str(entry) for entry in sorted(by_id.iterdir()))
+            yield from (
+                str(entry) for entry in sorted(by_id.iterdir())
+                if "event" in entry.name
+            )
         except OSError:
             pass
 
     try:
-        yield from list_devices()
+        # InputDevice below already performs the authoritative open/type check.
+        # evdev.list_devices() opens every event node once to pre-filter it,
+        # which duplicates that work and can add hundreds of milliseconds on
+        # hosts with many input devices.
+        yield from (str(entry) for entry in sorted(Path("/dev/input").glob("event*")))
     except OSError:
         return
 

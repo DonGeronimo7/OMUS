@@ -25,7 +25,7 @@ def test_prepare_records_active_state_before_stopping(monkeypatch, tmp_path):
         events.append(("stop", json.loads(state_path.read_text())))
 
     monkeypatch.setattr(foreground_session, "is_service_active", lambda: True)
-    monkeypatch.setattr(foreground_session, "stop_service", stop)
+    monkeypatch.setattr(foreground_session, "request_stop_service", stop)
     assert foreground_session.prepare() == 0
     assert events == [("stop", {"preference": None, "was_active": True})]
 
@@ -33,7 +33,7 @@ def test_prepare_records_active_state_before_stopping(monkeypatch, tmp_path):
 def test_prepare_does_not_stop_an_initially_inactive_service(monkeypatch, tmp_path):
     state_path = _use_state_directory(monkeypatch, tmp_path)
     monkeypatch.setattr(foreground_session, "is_service_active", lambda: False)
-    with patch.object(foreground_session, "stop_service") as stop:
+    with patch.object(foreground_session, "request_stop_service") as stop:
         assert foreground_session.prepare() == 0
     stop.assert_not_called()
     assert json.loads(state_path.read_text())["was_active"] is False
@@ -139,3 +139,20 @@ def test_launch_execs_transient_service_with_external_pre_and_post_hooks(monkeyp
 def test_supervised_child_does_not_reenter_systemd(monkeypatch):
     monkeypatch.setenv(foreground_session.SESSION_ENV, "1")
     assert not foreground_session.should_supervise(["setup"], interactive=True)
+
+
+def test_supervised_child_waits_for_queued_stop_before_hardware(monkeypatch, tmp_path):
+    state_path = _use_state_directory(monkeypatch, tmp_path)
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"was_active": True, "preference": None}))
+    monkeypatch.setenv(foreground_session.SESSION_ENV, "1")
+    with patch.object(foreground_session, "stop_service") as stop:
+        foreground_session.complete_pending_suspension()
+    stop.assert_called_once_with()
+
+
+def test_unsupervised_setup_does_not_touch_background_service(monkeypatch):
+    monkeypatch.delenv(foreground_session.SESSION_ENV, raising=False)
+    with patch.object(foreground_session, "stop_service") as stop:
+        foreground_session.complete_pending_suspension()
+    stop.assert_not_called()

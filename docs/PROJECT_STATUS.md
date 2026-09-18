@@ -1,5 +1,26 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — launcher / TUI first-frame performance candidate
+
+- The canonical device-selection frame now renders before the live HID backend
+  handshake. One TUI-owned, non-daemon initializer performs the unchanged
+  backend, capability, and exact-evidence checks; hardware navigation remains
+  unavailable until it completes, and every exit joins/closes the worker.
+- The foreground supervisor queues background-service suspension without
+  blocking process startup. Backend initialization still waits synchronously
+  for suspension completion before opening hardware, preserving ownership and
+  unsaved-exit restoration.
+- Evdev discovery now enumerates the same event-node namespace directly instead
+  of using `evdev.list_devices()` to open every node before Mouse Control opens
+  and validates it again. Existing capability, permission, stable-path, and
+  unknown-device checks remain authoritative.
+- On the acceptance host, warm known-device first-frame median improved from
+  676.22 ms to 504.15 ms across five supervised launches; a cold/transitional
+  sample improved from 6,347.09 ms to 464.83 ms. Every benchmark cancellation
+  restored the service and preserved the configuration hash. Automated source
+  validation passes 787 tests; installed/package and physical interaction
+  validation remain separate.
+
 ## 2026-09-18 — externally supervised foreground lifecycle candidate
 
 - Interactive launches now enter one transient systemd user service. Its

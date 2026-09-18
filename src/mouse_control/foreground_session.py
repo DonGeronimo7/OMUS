@@ -13,6 +13,7 @@ from .service import (
     SERVICE_NAME,
     SYSTEMCTL,
     is_service_active,
+    request_stop_service,
     restart_service,
     stop_service,
 )
@@ -68,8 +69,17 @@ def prepare() -> int:
     was_active = is_service_active()
     _write_state({"was_active": was_active, "preference": None})
     if was_active:
-        stop_service()
+        request_stop_service()
     return 0
+
+
+def complete_pending_suspension() -> None:
+    """Wait for a queued stop before the TUI opens any hardware backend."""
+    if not is_supervised():
+        return
+    state = _read_state()
+    if state is not None and state.get("was_active") is True:
+        stop_service()
 
 
 def record_service_preference(enabled: bool) -> None:

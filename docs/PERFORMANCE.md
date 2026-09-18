@@ -91,6 +91,45 @@ explanation.
 | Snapshot plus parsed-knowledge reuse | Explicit Rediscover | 0.577 ms | 0.411 ms | -0.166 ms | -28.8% | Forced discovery still executes descriptor, protocol, observation, and validation phases |
 | Event-driven notification wakeup | Idle notifier process CPU / second | 1.031 ms | 0.016 ms | -1.015 ms | -98.4% | Cross-thread queue tests preserve ordered delivery and prohibit timer sleeps |
 | Event-driven notification wakeup | Idle voluntary context switches / second | 20 | 1 | -19 | -95.0% | Remaining switch is the measurement thread's one-second sleep |
+| Deferred live backend initialization | Cold/transitional supervised TUI first frame | 6,347.09 ms | 464.83 ms | -5,882.26 ms | -92.7% | The complete device-selection frame is interactive first; one owned worker performs the unchanged live backend/evidence checks before hardware navigation |
+| Deferred live backend initialization + single evdev validation | Warm known-device supervised TUI first frame (5-run median) | 676.22 ms | 504.15 ms | -172.07 ms | -25.4% | Direct event-node enumeration preserves every candidate and retains the existing `InputDevice` capability/permission checks; service suspension is complete before backend creation |
+
+### Launcher / TUI first-frame pass — 2026-09-18
+
+Starting product commit: `c4828c6cdf99f2f6dc1b9e459e99f170024920f9`.
+Measurements used the same Fedora host and attached configured G305. The
+supervised interactive application path ran in a fresh pseudo-terminal and
+cancelled without saving after the first complete device-selection frame. The
+desktop helper's terminal-selection process is unchanged; no build was
+installed for this source-only pass.
+
+| Metric | Before | After | Improvement |
+|---|---:|---:|---:|
+| Process invocation → first supervisor output | 25.60 ms | 25.60 ms | unchanged |
+| Interpreter + application/CLI import | 16.25 ms | 16.25 ms | unchanged |
+| Setup import graph | 104.38 ms | 104.38 ms | unchanged |
+| Configuration load | 2.11 ms | 2.11 ms | unchanged |
+| Evdev enumeration (representative live run) | 536.06 ms | 273.55 ms | -49.0% |
+| Live backend construction / HID++ handshake | 5,618.49 ms | deferred after frame | removed from first-frame path |
+| Capability reads | 68.85 ms | deferred after frame | removed from first-frame path |
+| Persisted-state validation | 303.43 ms | deferred after frame | removed from first-frame path |
+| Warm known-device first frame, median of 5 | 676.22 ms | 504.15 ms | -25.4% |
+| Warm known-device observed maximum of 5 (p95 proxy) | 777.43 ms | 647.61 ms | -16.7% |
+| Cold/transitional first frame | 6,347.09 ms | 464.83 ms | -92.7% |
+
+The worker is not an uncontrolled background task: each setup app owns exactly
+one non-daemon initializer, polls its result on the curses thread, and joins
+and closes it on every exit path. Device selection, Help, resize, and Cancel
+remain responsive while it runs. Hardware-dependent navigation is blocked with
+an explicit status until initialization completes. The foreground supervisor
+queues service suspension early, but backend initialization performs a
+blocking completion check before opening any hardware session. Unsaved exit
+therefore retains the established external restoration contract.
+
+The permanent 500-round fixture after this pass measured cold app import at
+15.655 ms, known-device restore at 0.0342 ms, explicit Rediscover at 0.4171 ms,
+and first-frame row preparation at 0.00130 ms. Rediscover continues to execute
+its descriptor, protocol, observation, and validation phases.
 
 ## Resident-runtime and memory audit — 2026-09-18
 

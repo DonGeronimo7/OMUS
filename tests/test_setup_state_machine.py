@@ -294,6 +294,7 @@ def test_interrupt_inside_curses_restores_temporary_dpi(monkeypatch):
     backend = PolicyBackend(initial_dpi=1200)
 
     def interrupt(app):
+        app.controller = app.controller.initialized_copy(app.controller.selected_index)
         app.controller.backend.set_dpi(app.controller.selected, 1500)
         raise KeyboardInterrupt
 
