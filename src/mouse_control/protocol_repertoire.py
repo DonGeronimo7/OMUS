@@ -20,6 +20,7 @@ from .discovery_models import DeviceNode, PhysicalDevice
 from .hid_descriptor import ParsedHidDescriptor
 from .protocol_codec import ProtocolCodecError, decode_value
 from .protocol_grammar import (
+    BurstRecognitionRecipe,
     CodecKind,
     CodecSpec,
     DiscriminatorKind,
@@ -37,6 +38,7 @@ from .protocol_grammar import (
     TransportKind,
     WriteScope,
 )
+from .temporal_dialogue import BurstDialogueResult
 
 
 @dataclass(frozen=True)
@@ -57,7 +59,10 @@ class SemanticFamilyRecognition:
 
     @property
     def recognized(self) -> bool:
-        recipe = self.candidate.family.recognition
+        recipe = (
+            self.candidate.family.recognition
+            or self.candidate.family.burst_recognition
+        )
         return (
             recipe is not None
             and bool(self.matched)
@@ -564,6 +569,41 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         ),
     ),
     ProtocolFamily(
+        name="finalmouse-ulx-bounded-telemetry",
+        revision="burst-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90% research payload — Finalmouse ULX bounded response bursts",
+                SourceTrust.REFERENCE,
+                notes="Independently reconstructed abstract fixture; no upstream source or capture imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("output", vendor_usage_required=True, weight=4),
+            ReportSignature("input", vendor_usage_required=True, weight=4),
+        ),
+        burst_recognition=BurstRecognitionRecipe(
+            namespace_pairs=(
+                ("finalmouse.mouse.command", "finalmouse.mouse.telemetry"),
+                ("finalmouse.dongle.command", "finalmouse.dongle.telemetry"),
+            ),
+            length_offset=0,
+            command_offset=1,
+            payload_offset=2,
+            minimum_responses=1,
+            maximum_responses=32,
+        ),
+        transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=8,
+        notes=(
+            "Recognition-only length + command + payload record grammar. Mouse and dongle namespaces "
+            "are related family contexts but are never interchangeable. Established LE16 values remain "
+            "opaque because this fixture does not establish semantic field offsets."
+        ),
+    ),
+    ProtocolFamily(
         name="redragon-m724-feature-session",
         revision="m724-k1ng-1k-v1",
         sources=(
@@ -728,18 +768,7 @@ def recognize_family_semantics(
 
     matched: list[str] = []
     missing: list[str] = []
-    categories: set[EvidenceCategory] = set()
-    if candidate.family.signatures:
-        categories.add(EvidenceCategory.FRAME)
-    if candidate.exact_identity:
-        categories.add(EvidenceCategory.IDENTITY)
-    if any(
-        signature.required_usage_page is not None
-        or signature.required_application_usage is not None
-        or signature.required_interface_number is not None
-        for signature in candidate.family.signatures
-    ):
-        categories.add(EvidenceCategory.TOPOLOGY)
+    categories = _candidate_evidence_categories(candidate)
     for discriminator in recipe.discriminators:
         results = tuple(
             _discriminator_matches(discriminator, exchange) for exchange in observed
@@ -768,6 +797,115 @@ def recognize_family_semantics(
         tuple(sorted(matched)),
         tuple(sorted(missing)),
         tuple(records),
+        tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
+def _candidate_evidence_categories(candidate: FamilyCandidate) -> set[EvidenceCategory]:
+    categories: set[EvidenceCategory] = set()
+    if candidate.family.signatures:
+        categories.add(EvidenceCategory.FRAME)
+    if candidate.exact_identity:
+        categories.add(EvidenceCategory.IDENTITY)
+    if any(
+        signature.required_usage_page is not None
+        or signature.required_application_usage is not None
+        or signature.required_interface_number is not None
+        for signature in candidate.family.signatures
+    ):
+        categories.add(EvidenceCategory.TOPOLOGY)
+    return categories
+
+
+def _burst_frame_valid(frame: bytes, recipe: BurstRecognitionRecipe) -> bool:
+    required = max(recipe.length_offset, recipe.command_offset)
+    if len(frame) <= required or len(frame) < recipe.payload_offset:
+        return False
+    declared = frame[recipe.length_offset]
+    return recipe.payload_offset + declared == len(frame)
+
+
+def recognize_burst_family_semantics(
+    candidate: FamilyCandidate,
+    bursts: Iterable[BurstDialogueResult],
+) -> SemanticFamilyRecognition:
+    """Evaluate a completed generic burst against declarative family facts."""
+
+    recipe = candidate.family.burst_recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-burst-discriminator",), (), ()
+        )
+    observed = tuple(bursts)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-response-burst",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+
+    namespaces_valid = all(
+        (
+            burst.request.report_namespace,
+            burst.responses[0].report_namespace if burst.responses else "",
+        ) in recipe.namespace_pairs
+        and all(
+            response.report_namespace
+            == (burst.responses[0].report_namespace if burst.responses else "")
+            for response in burst.responses
+        )
+        for burst in observed
+    )
+    if namespaces_valid:
+        matched.append("declared-burst-namespace-pair")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("declared-burst-namespace-pair")
+
+    cardinality_valid = all(
+        recipe.minimum_responses <= burst.response_count <= recipe.maximum_responses
+        for burst in observed
+    )
+    if cardinality_valid:
+        matched.append("bounded-burst-cardinality")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("bounded-burst-cardinality")
+
+    completion_valid = all(
+        burst.completion_reason.value in recipe.allowed_completion_reasons
+        for burst in observed
+    )
+    if completion_valid:
+        matched.append("bounded-burst-completion")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("bounded-burst-completion")
+
+    framing_valid = all(
+        _burst_frame_valid(burst.request.payload, recipe)
+        and all(
+            _burst_frame_valid(response.payload, recipe)
+            for response in burst.responses
+        )
+        for burst in observed
+    )
+    if framing_valid:
+        matched.append("length-command-payload-framing")
+        categories.add(EvidenceCategory.RELATIONSHIP)
+    else:
+        missing.append("length-command-payload-framing")
+
+    records = tuple(
+        response.payload for burst in observed for response in burst.responses
+    ) if not missing else ()
+    return SemanticFamilyRecognition(
+        candidate,
+        tuple(sorted(matched)),
+        tuple(sorted(missing)),
+        records,
         tuple(sorted(categories, key=lambda item: item.value)),
     )
 
@@ -831,6 +969,7 @@ def recognize_open_set(
     descriptors: Mapping[DeviceNode, ParsedHidDescriptor],
     *,
     exchanges: Mapping[str, Iterable[SemanticExchange]] | None = None,
+    bursts: Mapping[str, Iterable[BurstDialogueResult]] | None = None,
     families: Iterable[ProtocolFamily] = DEFAULT_REPERTOIRE,
     minimum_margin: int = 3,
 ) -> OpenSetRecognition:
@@ -838,22 +977,43 @@ def recognize_open_set(
 
     if minimum_margin < 0:
         raise ValueError("minimum_margin cannot be negative")
-    structural = match_repertoire(physical, descriptors, families=families)
+    supplied = exchanges or {}
+    supplied_bursts = bursts or {}
+    structural = tuple(
+        candidate
+        for candidate in match_repertoire(physical, descriptors, families=families)
+        if candidate.family.burst_recognition is None
+        or candidate.family.name in supplied_bursts
+    )
     if not structural:
         return OpenSetRecognition(RecognitionStatus.UNKNOWN, None, (), "no structural candidate")
 
-    supplied = exchanges or {}
     evaluated = tuple(
-        recognize_family_semantics(candidate, supplied.get(candidate.family.name, ()))
+        (
+            recognize_burst_family_semantics(
+                candidate, supplied_bursts.get(candidate.family.name, ()),
+            )
+            if candidate.family.burst_recognition is not None
+            else recognize_family_semantics(
+                candidate, supplied.get(candidate.family.name, ()),
+            )
+        )
         for candidate in structural
     )
 
     def score(item: SemanticFamilyRecognition) -> int:
-        weights = {
-            discriminator.name: discriminator.weight
-            for discriminator in (item.candidate.family.recognition.discriminators
-                                  if item.candidate.family.recognition else ())
-        }
+        if item.candidate.family.recognition is not None:
+            weights = {
+                discriminator.name: discriminator.weight
+                for discriminator in item.candidate.family.recognition.discriminators
+            }
+        else:
+            weights = {
+                "declared-burst-namespace-pair": 4,
+                "bounded-burst-cardinality": 3,
+                "bounded-burst-completion": 3,
+                "length-command-payload-framing": 4,
+            }
         return item.candidate.score + sum(weights.get(name, 0) for name in item.matched)
 
     ranked = tuple(sorted(evaluated, key=lambda item: (-score(item), item.candidate.family.name)))

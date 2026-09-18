@@ -25,6 +25,9 @@ from mouse_control.protocol_repertoire import (
     recognize_open_set, RecognitionStatus,
 )
 from mouse_control.semantic_inference import infer_stage_hypotheses
+from mouse_control.temporal_dialogue import (
+    BurstDialogueSpec, DialogueAssembler, DialogueObservation, Direction,
+)
 
 
 def node(
@@ -435,3 +438,113 @@ def test_keychron_namespace_shape_is_candidate_not_confident_recognition() -> No
     assert paired.status is RecognitionStatus.RECOGNIZED
     assert paired.family == "keychron-m6-paired-namespaces"
     assert paired.write_authorized is False
+
+
+def _finalmouse_observation(
+    sequence: int, timestamp_ms: int, direction: Direction, payload: bytes,
+    *, target: str = "mouse",
+) -> DialogueObservation:
+    namespace_role = "command" if direction is Direction.OUT else "telemetry"
+    return DialogueObservation(
+        source_id="finalmouse-fixture", physical_id="finalmouse-physical",
+        channel_id=f"finalmouse-{target}", transport="hid",
+        direction=direction,
+        report_namespace=f"finalmouse.{target}.{namespace_role}",
+        report_id=0x50 if direction is Direction.OUT else 0x51,
+        generation=1, timestamp_ns=timestamp_ms * 1_000_000,
+        sequence=sequence, payload=payload, transaction_tag=0x10,
+        grammar="finalmouse-telemetry-burst",
+    )
+
+
+def _finalmouse_burst(*, request_target: str = "mouse", response_target: str = "mouse"):
+    assembler = DialogueAssembler()
+    request = _finalmouse_observation(
+        1, 0, Direction.OUT, bytes((0, 0x10)), target=request_target,
+    )
+    assembler.begin_burst(request, BurstDialogueSpec(
+        request_namespace=f"finalmouse.{request_target}.command",
+        response_namespace=f"finalmouse.{request_target}.telemetry",
+        request_report_id=0x50, response_report_id=0x51,
+        response_channel_id=f"finalmouse-{request_target}",
+        response_grammar="finalmouse-telemetry-burst",
+        quiet_interval_ms=10, absolute_deadline_ms=50, max_responses=8,
+    ))
+    assembler.observe_burst(_finalmouse_observation(
+        2, 5, Direction.IN, bytes((2, 0x10, 0x34, 0x12)),
+        target=response_target,
+    ))
+    return assembler.advance_time(15_000_000)[0]
+
+
+def test_finalmouse_recognition_consumes_generic_burst_and_remains_write_disabled() -> None:
+    n = node(vendor=0x361D, product=0x0100)
+    reports = descriptor(
+        HidReportDefinition(0x50, "output", 64, (0xFF00,)),
+        HidReportDefinition(0x51, "input", 64, (0xFF00,)),
+    )
+    burst = _finalmouse_burst()
+    decision = recognize_open_set(
+        physical(vendor=0x361D, product=0x0100, n=n), {n: reports},
+        bursts={"finalmouse-ulx-bounded-telemetry": (burst,)},
+    )
+    assert decision.status is RecognitionStatus.RECOGNIZED
+    assert decision.family == "finalmouse-ulx-bounded-telemetry"
+    assert decision.write_authorized is False
+    assert decision.ranked[0].semantic_records == (bytes((2, 0x10, 0x34, 0x12)),)
+
+
+@pytest.mark.parametrize(
+    ("request_target", "response_target"),
+    (("mouse", "dongle"), ("dongle", "mouse")),
+)
+def test_finalmouse_mouse_and_dongle_namespaces_are_not_interchangeable(
+    request_target: str, response_target: str,
+) -> None:
+    n = node(vendor=0x361D, product=0x0100)
+    reports = descriptor(
+        HidReportDefinition(0x50, "output", 64, (0xFF00,)),
+        HidReportDefinition(0x51, "input", 64, (0xFF00,)),
+    )
+    burst = _finalmouse_burst(
+        request_target=request_target, response_target=response_target,
+    )
+    assert burst.responses == ()
+    decision = recognize_open_set(
+        physical(vendor=0x361D, product=0x0100, n=n), {n: reports},
+        bursts={"finalmouse-ulx-bounded-telemetry": (burst,)},
+    )
+    assert decision.status is RecognitionStatus.CANDIDATE
+    assert decision.write_authorized is False
+
+
+def test_unknown_multi_response_protocol_abstains_from_finalmouse() -> None:
+    n = node(vendor=0x9999, product=0x9999)
+    reports = descriptor(
+        HidReportDefinition(0x60, "output", 32, (0xFF44,)),
+        HidReportDefinition(0x61, "input", 32, (0xFF44,)),
+    )
+    assembler = DialogueAssembler()
+    request = DialogueObservation(
+        "unknown", "unknown-physical", "unknown-channel", "hid", Direction.OUT,
+        "unknown.command", 0x60, 1, 0, 1, b"\x00\x99", grammar="unknown-burst",
+    )
+    assembler.begin_burst(request, BurstDialogueSpec(
+        "unknown.command", "unknown.records", 10, 50, 8,
+        request_report_id=0x60, response_report_id=0x61,
+        response_grammar="unknown-burst",
+    ))
+    for sequence, timestamp in ((2, 2), (3, 4)):
+        assembler.observe_burst(DialogueObservation(
+            "unknown", "unknown-physical", "unknown-channel", "hid", Direction.IN,
+            "unknown.records", 0x61, 1, timestamp * 1_000_000, sequence,
+            b"\x01\x99\x01", grammar="unknown-burst",
+        ))
+    burst = assembler.advance_time(14_000_000)[0]
+    decision = recognize_open_set(
+        physical(vendor=0x9999, product=0x9999, n=n), {n: reports},
+        bursts={"finalmouse-ulx-bounded-telemetry": (burst,)},
+    )
+    assert decision.status is RecognitionStatus.CANDIDATE
+    assert decision.family == "finalmouse-ulx-bounded-telemetry"
+    assert "declared-burst-namespace-pair" in decision.ranked[0].missing

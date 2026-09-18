@@ -24,6 +24,7 @@ runtime transaction, capability, or hardware write.
 |---|---|---|---|
 | BITMOUSE `0x72` | paired 64-byte vendor Output/Input reports | request checksum; asymmetric marker placement; target, sequence, and declared-length relationships | `RECOGNIZED` when all relations pass |
 | Keychron M6 | `FFC1`; `B3/B4` and `B5/B6` Output/Input namespaces | both query→response and setting→ACK report-ID pairings | `RECOGNIZED` when both dialogues are observed |
+| Finalmouse ULX-style telemetry | vendor Output/Input reports; distinct mouse/dongle contexts | bounded response burst, exact namespace pairing, length+command+payload records | `RECOGNIZED` only for a completed valid burst |
 | Holtek Venus `04d9:fc55` | interface 2; `FFA0`; Feature 2/16 and Feature 3/64 | not yet encoded because supplied research does not include safe passive frame samples | `CANDIDATE` only |
 
 Holtek control/read/flash/status roles, commit/reset behavior, and polling
@@ -36,6 +37,7 @@ exists.
 |---|---|---|---|
 | BITMOUSE vs arbitrary `0x72` reports | report ID and 64-byte size | checksum plus target, sequence, and length correlation | `CANDIDATE` |
 | Keychron vs generic 64-byte RPC | vendor page and report sizes | both paired namespaces (`B3→B4`, `B5→B6`) | `CANDIDATE` |
+| Finalmouse vs unknown multi-response RPC | one Output followed by Input records | declared mouse/dongle namespace pair, bounded completion, cardinality, and record length | `CANDIDATE` |
 | Holtek Venus vs Redragon/Holtek Feature protocols | `FFA0`, Feature IDs, reciprocal polling values | exact PID, interface, both exact lengths, then future semantic dialogue | `CANDIDATE` |
 | SinoWealth plus Keychron descriptor collision | multiple independently valid structural signatures | family-specific semantic evidence and score margin | `AMBIGUOUS` |
 | Unknown vendor protocol | vendor usage/report presence | no nearest-family fallback | `UNKNOWN` |
@@ -45,7 +47,7 @@ sufficient family evidence alone.
 
 ## Project-owned benchmark fixtures
 
-The automated corpus independently constructs six minimal fixtures from
+The automated corpus independently constructs eleven minimal fixtures from
 protocol facts; it imports no upstream capture:
 
 1. identity-blinded valid BITMOUSE exchange;
@@ -54,20 +56,45 @@ protocol facts; it imports no upstream capture:
 4. Keychron paired query/status and setting/ACK dialogues;
 5. intentional SinoWealth/Keychron structural collision;
 6. exact Holtek Venus structure without semantic traffic.
+7. valid Finalmouse-style burst ending at the maximum record count;
+8. valid Finalmouse-style quiet-interval completion;
+9. valid Finalmouse-style deadline completion under continuous records;
+10. wrong mouse/dongle namespace near miss;
+11. unknown multi-response protocol.
 
-The expected current outcomes are two recognized, two candidates, one unknown,
+The expected current outcomes are five recognized, four candidates, one unknown,
 and one ambiguous. This gives 100% recognized-family precision and known-case
-recall, 0% unknown and collision false recognition, 33.3% overall coverage,
-50% abstention, and 16.7% ambiguity **on this six-case ingestion fixture only**.
+recall, 0% unknown and collision false recognition, 45.5% overall coverage,
+45.5% abstention, and 9.1% ambiguity **on this eleven-case ingestion fixture only**.
 It does not satisfy or claim the broader 90% objective; the positive set covers
-only two executable families. The benchmark code reports these rates from the
+only three executable families. The benchmark code reports these rates from the
 actual decisions so later corpus expansion cannot silently redefine them.
+
+## Bounded response-burst model
+
+The temporal assembler now represents one trigger followed by zero or more
+correlated records. It terminates deterministically from replay timestamps on a
+quiet interval, absolute deadline, maximum record count, explicit caller end,
+or connection-generation change. Results retain the trigger, every accepted
+record, timing, completion reason, confidence, generation, channel, and grammar.
+
+Records must match the physical device, source, transport, response channel,
+namespace, report ID, grammar, transaction tag when present, and connection
+generation. Mouse movement, button/physical events, wrong namespaces/channels,
+late records, and post-reconnect records cannot join the burst.
+
+The current model intentionally requires one declared response channel,
+namespace, report ID, and grammar per burst. It cannot yet describe one burst
+whose valid records intentionally multiplex several response namespaces, nor
+does it automatically decode an expected-count or terminator field from a
+payload. A caller can end a burst explicitly, and expected-count protocols can
+use the maximum-count bound only when that count is already known.
 
 ## Next corpus layers
 
 Add independently reconstructed passive fixtures before promoting the remaining
-research families. Priority evidence is Finalmouse burst termination, GearHub
-internal device identity, MCHOSE Realtek fresh asynchronous status, RAWM logical
+research families. Priority evidence is GearHub internal device identity,
+MCHOSE Realtek fresh asynchronous status, RAWM logical
 record boundaries, VAXEE echo/direction/length, HyperX no-ACK readback, and Beken
 prerequisite/apply state. Incomplete research remains negative or abstention
 evidence rather than guessed semantics.

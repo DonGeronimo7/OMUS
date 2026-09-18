@@ -1,5 +1,28 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — bounded response-burst recognition milestone
+
+- The existing temporal assembler now supports one trigger followed by zero or
+  more exactly correlated responses. Replay timestamps drive quiet-interval and
+  absolute-deadline completion; maximum-count, explicit-end, and connection-
+  generation completion are also distinct, bounded result states.
+- Burst isolation requires exact physical/source/transport/channel/namespace/
+  report/grammar/generation evidence plus transaction-tag equality when present.
+  Wrong mouse/dongle context, ordinary input events, late records, and stale
+  generations are excluded without wall-clock sleeps or hardware interaction.
+- The repertoire expresses Finalmouse ULX-style mouse and dongle telemetry as
+  generic bounded bursts with length+command+payload framing. It remains
+  recognition-only, `WriteScope.NEVER`, and contains no runtime setter or
+  semantic claim for opaque LE16 fields.
+- The project-owned benchmark grows from 6 to 11 cases: five recognized, four
+  candidates, one unknown, and one ambiguous. On this small fixture only,
+  precision/known-case recall remain 100%, unknown/collision false recognition
+  remain 0%, coverage is 45.5%, abstention 45.5%, and ambiguity 9.1%.
+- Focused protocol/discovery validation passes 69 tests; the complete suite
+  passes 806 tests with the existing GLib warning. No physical validation,
+  hardware write, write-authority change, install, push, merge, tag, or release
+  occurred.
+
 ## 2026-09-18 — open-set protocol-recognition corpus foundation
 
 - Protocol-family semantic recognition is now data-driven. Reusable passive

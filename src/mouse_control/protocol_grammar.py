@@ -191,6 +191,38 @@ class RecognitionRecipe:
 
 
 @dataclass(frozen=True)
+class BurstRecognitionRecipe:
+    """Passive framing and dialogue requirements for bounded response bursts."""
+
+    namespace_pairs: tuple[tuple[str, str], ...]
+    length_offset: int
+    command_offset: int
+    payload_offset: int
+    minimum_responses: int = 1
+    maximum_responses: int = 32
+    allowed_completion_reasons: tuple[str, ...] = (
+        "quiet_interval", "max_responses", "deadline", "explicit_end",
+    )
+    minimum_independent_categories: int = 3
+
+    def __post_init__(self) -> None:
+        if not self.namespace_pairs or any(
+            not left or not right for left, right in self.namespace_pairs
+        ):
+            raise ValueError("burst recognition requires namespace pairs")
+        if min(self.length_offset, self.command_offset, self.payload_offset) < 0:
+            raise ValueError("burst recognition offsets cannot be negative")
+        if self.minimum_responses <= 0:
+            raise ValueError("minimum_responses must be positive")
+        if self.maximum_responses < self.minimum_responses:
+            raise ValueError("maximum_responses cannot be below minimum_responses")
+        if not self.allowed_completion_reasons:
+            raise ValueError("burst recognition requires allowed completion reasons")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
+@dataclass(frozen=True)
 class ProtocolSource:
     """Auditable provenance for protocol knowledge."""
 
@@ -374,6 +406,7 @@ class ProtocolFamily:
     transactions: tuple[TransactionSpec, ...] = ()
     sessions: tuple[SessionGrammar, ...] = ()
     recognition: RecognitionRecipe | None = None
+    burst_recognition: BurstRecognitionRecipe | None = None
     write_scope: WriteScope = WriteScope.NEVER
     identity_required: bool = False
     minimum_match_score: int = 4

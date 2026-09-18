@@ -1,5 +1,31 @@
 # AI handoff log
 
+## 2026-09-18 — Finalmouse-style bounded response bursts
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `c9f7eb8` without
+  restarting recognition architecture. `DialogueAssembler` now owns a generic
+  bounded-burst lifecycle with timestamp-driven quiet/deadline completion,
+  maximum count, explicit end, and generation-change invalidation.
+- Burst results preserve the request, all qualifying responses, start/last
+  timestamps, exact completion reason, confidence, generation, channel, and
+  grammar. Correlation requires exact physical/source/transport/channel/
+  namespace/report/grammar/generation and tag evidence; wrong contexts,
+  unrelated events, late replies, and stale generations are excluded.
+- Added recognition-only Finalmouse ULX-style facts: distinct mouse/dongle
+  namespace pairs, one trigger to multiple telemetry records, and project-owned
+  length+command+payload fixtures. Unknown multi-response traffic abstains and
+  cross-target mouse/dongle traffic cannot satisfy the family recipe.
+- The benchmark retains all six prior cases and adds five burst cases for 11
+  total. Outcomes are 5 recognized, 4 candidate, 1 unknown, 1 ambiguous;
+  coverage is 45.5%. These fixture metrics do not claim broader 90% coverage.
+- Validation: 69 focused protocol/discovery tests and 806 complete-suite tests
+  passed with the existing GLib warning; compileall and diff checks passed. No
+  runtime writer, write authority, physical test, installation, push, merge,
+  tag, or release was added or performed.
+- Known model limit: one burst currently has one response channel/namespace/
+  report/grammar. Payload-driven automatic terminators/expected counts and
+  intentionally multiplexed response namespaces remain future primitives.
+
 ## 2026-09-18 — open-set protocol-recognition corpus foundation
 
 - Starting point: clean `main` at `9deabf5`, isolated on local branch
