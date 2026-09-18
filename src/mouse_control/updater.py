@@ -24,6 +24,7 @@ from urllib.request import Request, urlopen
 from packaging.version import InvalidVersion, Version
 
 from . import __version__
+from .release_version import ReleaseVersion
 from .service import is_service_active, restart_service
 
 RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/mouse-control/releases/latest"
@@ -192,16 +193,13 @@ def _asset_matches(name: str, version: str, suffix: str, architecture: str) -> b
     """Match only documented Mouse Control release filenames."""
     escaped_version = re.escape(version.lstrip("vV"))
     if suffix == ".rpm":
-        match = re.fullmatch(rf"mouse-control-{escaped_version}-.+\.([^.]+)\.rpm", name)
-        if match is None and re.search(r"-\d+$", version):
-            # Incremental tags already include RPM's package release and are
-            # followed only by an optional distro suffix and architecture.
-            match = re.fullmatch(
-                rf"mouse-control-{escaped_version}(?:\.[^.]+)*\.([^.]+)\.rpm",
-                name,
-            )
-        return bool(match and (match.group(1) == "noarch"
-                               or _normalize_architecture(match.group(1)) == architecture))
+        try:
+            match = ReleaseVersion.parse(version).match_rpm_filename(name)
+        except ValueError:
+            return False
+        return bool(match and (match.group("architecture") == "noarch"
+                               or _normalize_architecture(match.group("architecture"))
+                               == architecture))
     if suffix == ".deb":
         match = re.fullmatch(rf"mouse-control_{escaped_version}_([^_]+)\.deb", name)
         return bool(match and (match.group(1) == "all"

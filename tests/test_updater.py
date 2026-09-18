@@ -66,13 +66,41 @@ def test_incremental_release_tag_selects_matching_package_revision(monkeypatch):
     assert updater.select_asset(incremental, ".appimage")["name"] == appimage
 
 
+@pytest.mark.parametrize(("version", "rpm"), [
+    ("0.9.7", "mouse-control-0.9.7-1.fc44.noarch.rpm"),
+    ("0.9.7-1", "mouse-control-0.9.7-1.fc44.noarch.rpm"),
+    ("0.9.7-1", "mouse-control-0.9.7-1.fc44.x86_64.rpm"),
+])
+def test_rpm_selection_uses_separate_version_release_dist_and_arch(
+        monkeypatch, version, rpm):
+    monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
+    selected = updater.select_asset(
+        release(version, assets=(asset(rpm, version),)), ".rpm"
+    )
+    assert selected["name"] == rpm
+
+
+@pytest.mark.parametrize("rpm", [
+    "mouse-control-0.9.7-2.fc44.noarch.rpm",
+    "mouse-control-0.9.7-1.fc44.aarch64.rpm",
+    "mouse-control-0.9.7-1-fc44.noarch.rpm",
+    "mouse-control-0.9.7-1.fc44.noarch.rpm.extra",
+])
+def test_rpm_selection_rejects_wrong_or_fuzzy_package_fields(monkeypatch, rpm):
+    monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
+    with pytest.raises(updater.UpdateError, match="identify one"):
+        updater.select_asset(
+            release("0.9.7-1", assets=(asset(rpm, "0.9.7-1"),)), ".rpm"
+        )
+
+
 def test_asset_selection_normalizes_architecture_and_rejects_ambiguity(monkeypatch):
     monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
     assert updater.select_asset(release(assets=(asset("mouse-control-0.8.0-1.amd64.rpm"),)), ".rpm")["name"].endswith("amd64.rpm")
     with pytest.raises(updater.UpdateError, match="identify one"):
         updater.select_asset(release(assets=(
             asset("mouse-control-0.8.0-1.noarch.rpm"),
-            asset("mouse-control-0.8.0-2.noarch.rpm"),
+            asset("mouse-control-0.8.0-1.fc44.noarch.rpm"),
         )), ".rpm")
 
 
@@ -306,6 +334,49 @@ def test_dnf_error_continues_to_verified_github_rpm(monkeypatch):
         return result(1, err="not in repository")
     updater._package_update(install, release(assets=(artifact,)), runner)
     assert any(any(str(part).endswith(".rpm") for part in call) for call in calls)
+
+
+def test_096_updater_path_installs_published_096_2_rpm_via_verified_dnf_fallback(
+        monkeypatch):
+    install = updater.Installation(
+        "rpm", Path("/usr/bin/mouse-control"), "mouse-control"
+    )
+    version = "0.9.6-2"
+    package = "mouse-control-0.9.6-2.fc44.noarch.rpm"
+    artifact = asset(package, version)
+    monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
+    monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
+    verified = []
+
+    def download(release_info, selected, path, *_args):
+        assert release_info.version == version
+        assert selected is artifact
+        verified.append(selected["name"])
+        path.write_bytes(b"verified-rpm")
+        return path
+
+    monkeypatch.setattr(updater, "_download_verified", download)
+    installed = ["0.9.6-1.fc44"]
+    calls = []
+
+    def runner(args):
+        calls.append(args)
+        if args[0] == "rpm":
+            return result(out=installed[0] + "\n")
+        if any(str(part).endswith(".rpm") for part in args):
+            installed[0] = "0.9.6-2.fc44"
+        return result(1, err="not in configured repositories")
+
+    updater._package_update(
+        install, release(version, assets=(artifact,)), runner, assume_yes=True
+    )
+
+    assert verified == [package]
+    assert any(
+        "dnf" in call and "upgrade" in call and "--assumeyes" in call
+        for call in calls
+    )
+    assert any(any(str(part).endswith(package) for part in call) for call in calls)
 
 
 @pytest.mark.parametrize("kind,asset_name,query", [

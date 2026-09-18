@@ -133,9 +133,10 @@ jobs:
       - name: Verify tag and release assets
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          base_version=${version%-*}
-          package_release=${version##*-}
-          python_version=$(python3 -c 'import tomllib; v=tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]; base, release=v.rsplit("-", 1); print(f"{base}.post{release}")')
+          release_field() { PYTHONPATH=src python3 -m mouse_control.release_version "$version" "$1"; }
+          base_version=$(release_field rpm-version)
+          package_release=$(release_field rpm-release)
+          python_version=$(release_field python-version)
           test "$GITHUB_REF_NAME" = "v${version}"
           test -f "release-assets/mouse-control-${base_version}-${package_release}.fc44.noarch.rpm"
           test -f "release-assets/mouse-control_${version}_all.deb"

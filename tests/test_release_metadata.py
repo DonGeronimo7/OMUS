@@ -1,9 +1,11 @@
 from pathlib import Path
 import re
 import tomllib
-from packaging.version import Version
+
+import pytest
 
 from mouse_control import __version__
+from mouse_control.release_version import ReleaseVersion
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,31 +21,59 @@ def _project():
 
 
 def test_release_versions_are_synchronized():
-    version = __version__
-    base_version, package_release = version.rsplit("-", 1)
-    python_version = str(Version(version))
-    assert _project()["version"] == version
-    assert f"Version:        {base_version}" in _text("mouse-control.spec")
-    assert f"Release:        {package_release}%{{?dist}}" in _text("mouse-control.spec")
-    assert f"%global python_version {python_version}" in _text("mouse-control.spec")
-    assert f"pkgver={base_version}" in _text("PKGBUILD")
-    assert f"pkgrel={package_release}" in _text("PKGBUILD")
+    version = ReleaseVersion.parse(__version__)
+    assert _project()["version"] == version.display
+    assert f"Version:        {version.rpm_version}" in _text("mouse-control.spec")
+    assert f"Release:        {version.rpm_release}%{{?dist}}" in _text("mouse-control.spec")
+    assert f"%global python_version {version.python_version}" in _text("mouse-control.spec")
+    assert f"pkgver={version.rpm_version}" in _text("PKGBUILD")
+    assert f"pkgrel={version.rpm_release}" in _text("PKGBUILD")
     if (ROOT / ".SRCINFO").exists():
-        assert f"pkgver = {base_version}" in _text(".SRCINFO")
-        assert f"pkgrel = {package_release}" in _text(".SRCINFO")
-        assert f"#tag=v{version}" in _text(".SRCINFO")
-    assert _text("debian/changelog").startswith(f"mouse-control ({version})")
-    assert f"Version: {version}" in _text("packaging/debian-binary-control")
-    assert f"The current release is [v{version}]" in _text("README.md")
-    assert f"mouse-control-{base_version}-{package_release}.fc44.noarch.rpm" in _text("README.md")
-    assert f"mouse-control_{version}_all.deb" in _text("README.md")
-    assert f"Mouse-Control-{version}-x86_64.AppImage" in _text("README.md")
-    assert f"mouse_control-{python_version}-py3-none-any.whl" in _text("README.md")
-    assert f"Mouse-Control-{version}-x86_64.AppImage" in _text(
+        assert f"pkgver = {version.rpm_version}" in _text(".SRCINFO")
+        assert f"pkgrel = {version.rpm_release}" in _text(".SRCINFO")
+        assert f"#tag={version.tag}" in _text(".SRCINFO")
+    assert _text("debian/changelog").startswith(f"mouse-control ({version.display})")
+    assert f"Version: {version.display}" in _text("packaging/debian-binary-control")
+    assert f"The current release is [{version.tag}]" in _text("README.md")
+    assert version.rpm_filename("fc44", "noarch") in _text("README.md")
+    assert f"mouse-control_{version.display}_all.deb" in _text("README.md")
+    assert f"Mouse-Control-{version.display}-x86_64.AppImage" in _text("README.md")
+    assert f"mouse_control-{version.python_version}-py3-none-any.whl" in _text("README.md")
+    assert f"Mouse-Control-{version.display}-x86_64.AppImage" in _text(
         "packaging/appimage/README.md"
     )
-    assert _text("RELEASE_NOTES.md").startswith(f"# Mouse Control v{version}")
-    assert f"## {version} — " in _text("CHANGELOG.md").splitlines()[2]
+    assert _text("RELEASE_NOTES.md").startswith(f"# Mouse Control {version.tag}")
+    assert f"## {version.display} — " in _text("CHANGELOG.md").splitlines()[2]
+
+
+@pytest.mark.parametrize(("display", "python_version", "rpm_version", "rpm_release"), [
+    ("0.9.7", "0.9.7", "0.9.7", 1),
+    ("v0.9.7-1", "0.9.7.post1", "0.9.7", 1),
+    ("0.9.6-2", "0.9.6.post2", "0.9.6", 2),
+])
+def test_release_version_model_keeps_packaging_fields_distinct(
+        display, python_version, rpm_version, rpm_release):
+    version = ReleaseVersion.parse(display)
+    assert version.python_version == python_version
+    assert version.rpm_version == rpm_version
+    assert version.rpm_release == rpm_release
+
+
+@pytest.mark.parametrize("invalid", ("", "vv0.9.7", "0.9", "0.9.7-0", "0.9.7-beta"))
+def test_release_version_model_rejects_ambiguous_or_unsupported_versions(invalid):
+    with pytest.raises(ValueError, match="unsupported"):
+        ReleaseVersion.parse(invalid)
+
+
+def test_previous_published_updater_recognizes_next_generated_rpm_asset():
+    """Freeze the v0.9.6-2 matcher contract against the next release output."""
+    version = ReleaseVersion.parse("0.9.7-1")
+    filename = version.rpm_filename("fc44", "noarch")
+    escaped = re.escape(version.display)
+    match = re.fullmatch(
+        rf"mouse-control-{escaped}(?:\.[^.]+)*\.([^.]+)\.rpm", filename
+    )
+    assert match is not None and match.group(1) == "noarch"
 
 
 def test_rpm_packages_every_declared_console_script():
@@ -96,8 +126,10 @@ def test_ci_and_release_workflow_are_version_independent():
     assert f"mouse-control-{version}" not in release
     assert "pyproject.toml" in ci
     assert "pyproject.toml" in release
-    assert "base_version=${release_version%-*}" in ci
-    assert "package_release=${release_version##*-}" in ci
+    for workflow in (ci, release):
+        assert "mouse_control.release_version" in workflow
+        assert 'release_field rpm-version' in workflow
+        assert 'release_field rpm-release' in workflow
     assert "'%{VERSION}'" in ci and '"$base_version"' in ci
     assert "'%{RELEASE}'" in ci and '"$package_release"' in ci
     assert "permissions:\n  contents: read" in release
