@@ -38,6 +38,15 @@ def run_tui_setup_wizard() -> int:
     # does not create a cli <-> setup_tui import cycle.
     from . import cli
 
+    # Take the persisted snapshot before pausing the runtime.  A non-empty,
+    # successfully parsed configuration is the established session boundary:
+    # the TUI may stage edits to it, but it never owns that session's lifetime.
+    try:
+        existing_config = cli._load_setup_config()
+    except Exception as exc:
+        print(f"Could not load the existing configuration: {exc}", file=sys.stderr)
+        return 1
+    established_config = bool(existing_config)
     was_active = cli.is_service_active()
     service_restored = False
     selected = None
@@ -59,7 +68,6 @@ def run_tui_setup_wizard() -> int:
         if not mice:
             print("No mouse devices found. Check input permissions.", file=sys.stderr)
         else:
-            existing_config = cli._load_setup_config()
             result = run_setup_tui(
                 mice,
                 existing_config,
@@ -145,9 +153,10 @@ def run_tui_setup_wizard() -> int:
                 # Rollback can become impossible after a hardware disconnect;
                 # service restoration must still run.
                 logging.warning("Could not restore temporary DPI after setup: %s", exc)
-        restore_required = was_active and not service_restored and (
-            not saved or bool(choices and choices.enable_service)
-        )
+        # An established runtime remains enabled across every normal setup
+        # termination.  "Keep disabled" is a first-run choice; it must not
+        # turn an already active service into an accidental TUI side effect.
+        restore_required = was_active and established_config and not service_restored
         if restore_required:
             try:
                 cli.restart_service()

@@ -317,7 +317,7 @@ def test_tui_entry_interruptions_restore_running_service_and_do_not_save(interru
         patch.object(cli, "stop_service") as stop,
         patch.object(cli, "restart_service") as restart,
         patch.object(cli, "get_mouse_devices", return_value=[MOUSE1]),
-        patch.object(cli, "_load_setup_config", return_value={}),
+        patch.object(cli, "_load_setup_config", return_value={"device": {"vendor": 0x1111}}),
         patch.object(cli, "save_config") as save,
         patch.object(setup_entry, "run_setup_tui", side_effect=interruption),
     ):
@@ -334,7 +334,7 @@ def test_tui_entry_handled_exception_restores_running_service_and_does_not_save(
         patch.object(cli, "stop_service"),
         patch.object(cli, "restart_service") as restart,
         patch.object(cli, "get_mouse_devices", return_value=[MOUSE1]),
-        patch.object(cli, "_load_setup_config", return_value={}),
+        patch.object(cli, "_load_setup_config", return_value={"device": {"vendor": 0x1111}}),
         patch.object(cli, "save_config") as save,
         patch.object(setup_entry, "run_setup_tui", side_effect=RuntimeError("broken UI")),
     ):

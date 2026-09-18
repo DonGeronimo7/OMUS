@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.7-1 established-runtime TUI restoration fix
+
+- Goal: preserve an already active Mouse Control runtime when its established
+  configuration is opened in the canonical TUI and then canceled, abandoned,
+  or saved through the transient `Keep disabled` selection.
+- Root cause: the setup finalizer conditioned service restoration after a save
+  on the in-session `enable_service` choice. That choice is appropriate for
+  first-run activation, but it allowed an already running established service
+  to remain stopped after a TUI session. The configuration snapshot was also
+  loaded only after the service pause.
+- Correction: setup loads the persisted configuration before pausing the
+  runtime and treats a successfully parsed non-empty configuration as the
+  established-session boundary. An active established service is restarted on
+  every finalizer path unless `install_service()` has already restored it. A
+  first-run cancellation with no saved configuration still does not fabricate
+  configuration or start a runtime.
+- Regression coverage: cancellation preserves the full existing configuration
+  while discarding staged DPI/remap edits; cancellation and handled failures
+  restore established services; restart failure is surfaced; first-run cancel
+  remains inactive; and a saved established session through `Keep disabled`
+  still restores the running service.
+- Validation: focused TUI/service lifecycle suite passed 88 tests; complete
+  suite passed 744 tests with one existing GLib deprecation warning; compileall
+  and whitespace checks passed. No hardware, package install, push, merge,
+  tag, or release was performed. G305 acceptance must be repeated on this
+  commit before release.
+
 ## 2026-09-18 — Redragon M724 + Ryunix Kyu Pro MX1 protocol knowledge delta
 
 - Goal: import newly upstream-researched protocol facts into the universal

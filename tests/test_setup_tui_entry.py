@@ -8,6 +8,13 @@ from mouse_control.setup_tui import SetupTuiResult, run_setup_tui
 
 MOUSE = MouseDevice("Test Mouse", "/dev/input/test", vendor=1, product=2, phys="usb-test")
 
+ESTABLISHED_CONFIG = {
+    "device": {"vendor": 1, "product": 2, "phys": "usb-test"},
+    "dpi": {"active": 800, "stages": [800, 1500, 2000, 2500, 3000]},
+    "polling": {"rate_hz": 1000},
+    "remap": {"BTN_FORWARD": "dpi-cycle"},
+}
+
 
 class Tty:
     def isatty(self):
@@ -139,12 +146,35 @@ def test_tui_setup_cancel_restores_dpi_config_and_running_service():
          patch.object(cli, "stop_service"), \
          patch.object(cli, "restart_service") as restart, \
          patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
-         patch.object(cli, "_load_setup_config", return_value={}), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
          patch.object(setup_entry, "run_setup_tui", return_value=result), \
          patch.object(setup_entry, "restore_dpi") as restore, \
          patch.object(cli, "save_config") as save:
         assert setup_entry.run_tui_setup_wizard() == 0
     restore.assert_called_once_with(backend, MOUSE, 800)
+    save.assert_not_called()
+    restart.assert_called_once_with()
+
+
+def test_tui_cancel_discards_transient_choices_without_changing_established_config():
+    choices = SetupChoices(
+        original_dpi=800,
+        stages=[400, 800],
+        active_dpi=400,
+        mappings={"BTN_FORWARD": "disable"},
+    )
+    result = SetupTuiResult(False, MOUSE, Mock(), choices)
+    existing = {**ESTABLISHED_CONFIG, "future": {"preserve": "exactly"}}
+    original = {**existing, "future": dict(existing["future"])}
+    with patch.object(cli, "is_service_active", return_value=True), \
+         patch.object(cli, "stop_service"), \
+         patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value=existing), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result), \
+         patch.object(cli, "save_config") as save:
+        assert setup_entry.run_tui_setup_wizard() == 0
+    assert existing == original
     save.assert_not_called()
     restart.assert_called_once_with()
 
@@ -156,7 +186,7 @@ def test_tui_setup_cancel_surfaces_failed_service_restoration(capsys):
          patch.object(cli, "stop_service"), \
          patch.object(cli, "restart_service"), \
          patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
-         patch.object(cli, "_load_setup_config", return_value={"remap": {}}), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
          patch.object(setup_entry, "run_setup_tui", return_value=result), \
          patch.object(cli, "save_config") as save:
         assert setup_entry.run_tui_setup_wizard() == 1
@@ -171,7 +201,7 @@ def test_tui_setup_rollback_failure_does_not_prevent_service_restoration():
          patch.object(cli, "stop_service"), \
          patch.object(cli, "restart_service") as restart, \
          patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
-         patch.object(cli, "_load_setup_config", return_value={}), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
          patch.object(setup_entry, "run_setup_tui", return_value=result), \
          patch.object(setup_entry, "restore_dpi", side_effect=OSError("disconnected")):
         assert setup_entry.run_tui_setup_wizard() == 0
@@ -190,6 +220,43 @@ def test_tui_setup_cancel_does_not_start_initially_inactive_service():
         assert setup_entry.run_tui_setup_wizard() == 0
     stop.assert_not_called()
     restart.assert_not_called()
+
+
+def test_first_run_cancel_does_not_start_service_without_a_saved_configuration():
+    result = SetupTuiResult(False, MOUSE, Mock(), SetupChoices())
+    with patch.object(cli, "is_service_active", return_value=True), \
+         patch.object(cli, "stop_service") as stop, \
+         patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value={}), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result):
+        assert setup_entry.run_tui_setup_wizard() == 0
+    stop.assert_called_once_with()
+    restart.assert_not_called()
+
+
+def test_established_service_is_restored_after_saved_keep_disabled_choice(tmp_path):
+    choices = SetupChoices(
+        stages=[800, 1500, 2000, 2500, 3000],
+        active_dpi=800,
+        mappings={"BTN_FORWARD": "dpi-cycle"},
+        enable_service=False,
+    )
+    result = SetupTuiResult(True, MOUSE, Mock(), choices)
+    with patch.object(cli, "is_service_active", return_value=True), \
+         patch.object(cli, "stop_service"), \
+         patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result), \
+         patch.object(cli, "_apply_hardware"), \
+         patch.object(cli, "merge_setup_config", return_value="updated config"), \
+         patch.object(cli, "save_config", return_value=tmp_path / "config.toml") as save, \
+         patch.object(cli, "install_service") as install:
+        assert setup_entry.run_tui_setup_wizard() == 0
+    save.assert_called_once_with("updated config")
+    install.assert_not_called()
+    restart.assert_called_once_with()
 
 
 def test_tui_wrapper_restores_temporary_dpi_when_curses_aborts(monkeypatch):
