@@ -7,7 +7,7 @@ Mouse Control has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v0.9.5](https://img.shields.io/badge/release-v0.9.5-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.5)
+[![Current release: v0.9.6](https://img.shields.io/badge/release-v0.9.6-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.6)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 
@@ -15,45 +15,45 @@ privacy-conscious report that helps expand support.
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v0.9.5](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.5).
+The current release is [v0.9.6](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.6).
 
 ## Install and run
 
 Download the package for your system from the
-[v0.9.5 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.5),
+[v0.9.6 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.6),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse-control-0.9.5-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.6/mouse-control-0.9.6-1.fc44.noarch.rpm), then run:
 
 ```bash
-sudo dnf install ./mouse-control-0.9.5-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.9.6-1.fc44.noarch.rpm
 ```
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse-control_0.9.5-1_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.6/mouse-control_0.9.6-1_all.deb), then run:
 
 ```bash
-sudo apt install ./mouse-control_0.9.5-1_all.deb
+sudo apt install ./mouse-control_0.9.6-1_all.deb
 ```
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/Mouse-Control-0.9.5-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.6/Mouse-Control-0.9.6-x86_64.AppImage), then run:
 
 ```bash
-chmod +x Mouse-Control-0.9.5-x86_64.AppImage
-./Mouse-Control-0.9.5-x86_64.AppImage setup
+chmod +x Mouse-Control-0.9.6-x86_64.AppImage
+./Mouse-Control-0.9.6-x86_64.AppImage setup
 ```
 
 Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse_control-0.9.5-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse_control-0.9.5.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.6/mouse_control-0.9.6-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.6/mouse_control-0.9.6.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:
@@ -178,6 +178,18 @@ package-managed install behind the package manager's back.
 mouse-control update --check   # check without changing anything
 mouse-control update --yes     # update without a confirmation question
 ```
+
+## Security and privacy
+
+Normal runtime is local-only: there is no telemetry, analytics, crash upload,
+or automatic hardware-report upload. The explicit updater contacts the official
+GitHub release endpoint and verifies direct-download artifacts against the
+release's SHA-256 manifest before installation or AppImage replacement.
+Generic HID discovery remains read-only, hardware writes require exact proven
+authority, and the shipped udev rules avoid blanket keyboard or hidraw access.
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting, updater trust,
+device-write, usbmon, service, and privacy boundaries.
 
 ## How discovery works
 

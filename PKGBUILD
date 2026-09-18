@@ -1,5 +1,5 @@
 pkgname=mouse-control
-pkgver=0.9.5
+pkgver=0.9.6
 pkgrel=1
 pkgdesc='Linux mouse remapping with Automatic Discovery and validated hardware control'
 arch=('any')
@@ -29,4 +29,5 @@ package() {
   done
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 CREDITS.md "$pkgdir/usr/share/doc/$pkgname/CREDITS.md"
+  install -Dm644 SECURITY.md "$pkgdir/usr/share/doc/$pkgname/SECURITY.md"
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.6 — 2026-09-18
+
+### Security hardening
+
+- Require strict SHA-256 manifest verification for direct RPM, DEB, and
+  AppImage updates before privileged installation or atomic replacement.
+- Reject unsafe/mismatched assets, malformed or duplicate manifests, untrusted
+  redirects, symlink targets, and AppImage target-identity changes.
+- Pin GitHub Actions, AppImageKit, and the portable Python runtime to immutable
+  commits/digests; publish checksums only after exact artifact-set validation.
+- Harden per-user systemd service installation and document the updater,
+  hardware-write, input, usbmon, network, and privacy security model.
+
 ## 0.9.5 — 2026-09-17
 
 ### Persistent discovery and runtime performance

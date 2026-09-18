@@ -1,5 +1,29 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — v0.9.6 security hardening candidate
+
+- Direct GitHub RPM, DEB, and AppImage updates now require a strict official
+  release `SHA256SUMS` manifest and verify the selected artifact before any
+  privileged install or atomic AppImage replacement. Unsafe names, mismatched
+  versions/architectures, malformed/duplicate/unexpected manifest entries,
+  untrusted redirects, symlinks, and target-identity races fail closed.
+- Release Actions are immutable-SHA pinned and least-privilege scoped. The
+  publish job validates an exact five-artifact set and generates its checksum
+  manifest. AppImageKit and the portable CPython input are SHA-256 pinned and
+  verified before execution/extraction.
+- User-service installation resolves a non-group/world-writable executable,
+  atomically replaces a non-symlink unit, uses an absolute systemctl path, and
+  applies compatible process hardening. Existing event/uinput/G305 udev scope
+  remains narrow; its comments now accurately acknowledge validated writes.
+- `SECURITY.md` records reporting, updater trust, privacy/network, device-write,
+  usbmon, service, and limitation boundaries. The audit found no malware,
+  backdoor, telemetry, credential access, or exfiltration behavior.
+- Automated validation passes 700 tests. Bandit reports 0 medium/high and 52
+  manually reviewed low findings; pip-audit reports no known vulnerabilities.
+  Wheel/sdist and Fedora RPM `%check`/CLI smokes pass. Debian tooling is absent;
+  AppDir build passes but AppImageKit cannot emit the final wrapper headlessly.
+  No new physical hardware validation was performed.
+
 ## 2026-09-17 — v0.9.5 macro and release candidate
 
 - Button remaps can reference structured named macros containing ordered key,

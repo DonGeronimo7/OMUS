@@ -1,5 +1,33 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.6 security hardening release candidate
+
+- Started from clean `be03fad` on `codex/github-discovery-onboarding`; created
+  `codex/security-hardening-v0.9.6` and preserved both post-v0.9.5 documentation
+  and provenance commits.
+- Fixed a high-severity update-integrity gap: direct GitHub packages/AppImages
+  were previously installed after only non-empty checks. v0.9.6 requires a
+  strict official `SHA256SUMS`, verifies before mutation, restricts redirects,
+  and hardens AppImage staging/identity/atomic replacement.
+- Fixed supply-chain weaknesses by immutable-SHA pinning Actions, least-privilege
+  scoping, exact artifact-set enforcement, checksum publication, and digest
+  verification for AppImageKit and portable CPython before use.
+- Hardened per-user service installation and documented the audited security,
+  hardware-write, udev, input, usbmon, filesystem, network, and privacy model.
+  No malware, backdoor, telemetry, credential access, or exfiltration was found.
+- Validation: focused security/hardware suite 114 passed; full source and RPM
+  `%check` suites each passed 700 with one existing GLib warning. Compileall,
+  diff check, workflow YAML parsing, sdist/wheel build and content inspection,
+  and RPM CLI smokes passed. pip-audit found no known vulnerabilities. Bandit
+  found 0 medium/high and 52 reviewed low findings (fixed-argument subprocesses,
+  state assertions, and best-effort cleanup).
+- Remaining release gates: Debian build is unverified because its tooling is
+  absent. AppDir creation and both pinned input hashes passed, but AppImageKit
+  could not create the final wrapper without a graphical/FUSE-capable host.
+  Checksums are not independently signed; Arch's tag-based PKGBUILD still uses
+  `SKIP`; Python/AppImage dependency resolution is version-ranged rather than a
+  fully hashed lock. No physical device retest was performed.
+
 ## 2026-09-17 — Open-source credit, provenance, and license audit
 
 - Added `CREDITS.md` as the project-level record for protocol-research credit,

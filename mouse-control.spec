@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.9.5
+Version:        0.9.6
 Release:        1%{?dist}
 Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
@@ -67,7 +67,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 
 %files -f %{pyproject_files}
 %license LICENSE
-%doc README.md CHANGELOG.md CREDITS.md
+%doc README.md CHANGELOG.md CREDITS.md SECURITY.md
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
 %{_bindir}/mouse-control-discover
@@ -80,6 +80,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 %changelog
+* Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.6-1
+- Require SHA-256 verification before direct release artifact installation.
+- Pin release workflow actions and AppImage runtime/tool inputs.
+- Harden user-service installation and document security/privacy boundaries.
+
 * Thu Sep 17 2026 Marc-Anthony Geronimo - 0.9.5-1
 - Add persistent known-device startup, progress reporting, and reconnect affinity.
 - Add responsive TUI navigation, Vim controls, and basic sequential macros.

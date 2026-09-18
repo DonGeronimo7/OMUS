@@ -16,8 +16,10 @@ jobs:
       matrix:
         python-version: ['3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -29,8 +31,10 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: '3.14'
       - run: python -m pip install --upgrade build
@@ -39,7 +43,7 @@ jobs:
         run: |
           python -m pip install dist/*.whl
           mouse-control cpi --help
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: python-distributions
           path: dist/*
@@ -48,7 +52,9 @@ jobs:
   deb:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
       - name: Install Debian build dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential debhelper dh-python pybuild-plugin-pyproject python3-all python3-setuptools python3-evdev python3-dbus-next python3-packaging
       - name: Build Debian package
@@ -58,7 +64,7 @@ jobs:
           mv ../mouse-control_*.deb artifacts/
           sudo apt-get install -y ./artifacts/mouse-control_*.deb
           mouse-control cpi --help
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: debian-package
           path: artifacts/*.deb
@@ -68,13 +74,15 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:44
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
       - run: dnf -y install dnf-plugins-core rpm-build rpmdevtools
       - run: dnf -y builddep mouse-control.spec
       - run: |
           python3 -m build --sdist
           rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: fedora-rpm
           path: rpms/noarch/mouse-control-*.rpm
@@ -83,12 +91,15 @@ jobs:
   appimage:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
       - name: Install AppImage build prerequisites
         run: sudo apt-get update && sudo apt-get install -y python3-pip libfuse2 build-essential
       - name: Install AppImageKit 13
         run: |
           curl --fail --location --retry 3 --output /tmp/appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/13/obsolete-appimagetool-x86_64.AppImage
+          echo 'df3baf5ca5facbecfc2f3fa6713c29ab9cefa8fd8c1eac5d283b79cab33e4acb  /tmp/appimagetool.AppImage' | sha256sum --check --strict -
           chmod +x /tmp/appimagetool.AppImage
           sudo ln -s /tmp/appimagetool.AppImage /usr/local/bin/appimagetool
       - name: Build AppImage
@@ -99,20 +110,23 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --help
           APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage cpi --help
           APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage update --check
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: appimage
           path: Mouse-Control-*.AppImage
           if-no-files-found: error
 
   publish:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     needs: [test, python, deb, rpm, appimage]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: release-assets
           merge-multiple: true
@@ -125,6 +139,15 @@ jobs:
           test -f "release-assets/Mouse-Control-${version}-x86_64.AppImage"
           test -f "release-assets/mouse_control-${version}-py3-none-any.whl"
           test -f "release-assets/mouse_control-${version}.tar.gz"
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort > /tmp/release-files
+          printf '%s\n' \
+            "Mouse-Control-${version}-x86_64.AppImage" \
+            "mouse-control-${version}-1.fc44.noarch.rpm" \
+            "mouse-control_${version}-1_all.deb" \
+            "mouse_control-${version}-py3-none-any.whl" \
+            "mouse_control-${version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
+          diff -u /tmp/expected-files /tmp/release-files
+          (cd release-assets && sha256sum * > SHA256SUMS)
           ls -lah release-assets
       - name: Prepare release notes
         run: awk '/^---$/{exit} {print}' RELEASE_NOTES.md > release-body.md

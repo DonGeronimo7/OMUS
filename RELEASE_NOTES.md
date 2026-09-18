@@ -1,3 +1,48 @@
+# Mouse Control v0.9.6
+
+Security hardening release focused on update integrity, supply-chain
+verification, least-privilege hardware access, privacy guarantees, and
+defense-in-depth. The audit found no malware, backdoor, telemetry, credential
+access, or data-exfiltration path.
+
+## Security changes
+
+- Direct GitHub RPM, DEB, and AppImage updates now require the exact selected
+  artifact in a strict release `SHA256SUMS` manifest and verify SHA-256 before
+  invoking a package manager or replacing an executable.
+- The updater rejects malformed or duplicate manifests, unsafe names, missing
+  or unexpected assets, wrong versions/architectures, untrusted redirects,
+  symlinked AppImage targets, and target-identity races.
+- Release Actions are pinned to immutable commits with least-privilege tokens.
+  Release publication accepts exactly the five expected artifacts and publishes
+  their SHA-256 manifest.
+- AppImageKit and the portable CPython runtime are pinned and hash-verified
+  before execution or extraction.
+- User-service installation resolves and validates its executable, refuses a
+  symlinked unit destination, writes atomically, and enables compatible systemd
+  process hardening.
+
+These changes are proactive hardening plus fixes for insufficient artifact
+verification and build-input integrity. No evidence was found that the prior
+paths had been maliciously exploited. Release checksums are bound to the
+official GitHub release over HTTPS but are not independently signed.
+
+## Compatibility
+
+The v0.9.5 runtime, TUI, Automatic Discovery, macros, remapping, notifications,
+DPI/polling control, reconnect behavior, packaging, and exact-model hardware
+write policy are preserved. No new device-write authority is introduced.
+
+## Downloads
+
+- RPM: `mouse-control-0.9.6-1.fc44.noarch.rpm`
+- DEB: `mouse-control_0.9.6-1_all.deb`
+- AppImage: `Mouse-Control-0.9.6-x86_64.AppImage`
+- Wheel: `mouse_control-0.9.6-py3-none-any.whl`
+- Source: `mouse_control-0.9.6.tar.gz`
+- Integrity manifest: `SHA256SUMS`
+
+---
 # Mouse Control v0.9.5
 
 ## Persistent Automatic Discovery

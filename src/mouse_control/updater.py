@@ -6,6 +6,7 @@ never replaces files owned by a system package manager.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import importlib.metadata
 import json
 import os
@@ -18,6 +19,7 @@ import sys
 import tempfile
 from typing import Callable
 from urllib.error import URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from packaging.version import InvalidVersion, Version
 
@@ -25,6 +27,9 @@ from . import __version__
 from .service import is_service_active, restart_service
 
 RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/mouse-control/releases/latest"
+REPOSITORY = "DonGeronimo7/mouse-control"
+CHECKSUMS_NAME = "SHA256SUMS"
+_DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com"})
 
 
 class UpdateError(RuntimeError):
@@ -134,9 +139,12 @@ def detect_installation(executable: Path | None = None) -> Installation:
 
 
 def fetch_latest(url: str = RELEASE_URL, opener: Callable = urlopen) -> Release:
+    if url != RELEASE_URL:
+        raise UpdateError("Release information URL is not the official Mouse Control endpoint.")
     try:
         request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "mouse-control-updater"})
         with opener(request, timeout=10) as response:
+            _validate_response_url(response, expected_host="api.github.com")
             data = json.loads(response.read().decode("utf-8"))
     except (URLError, OSError, ValueError, json.JSONDecodeError) as exc:
         raise UpdateError("GitHub release information could not be retrieved.") from exc
@@ -147,6 +155,18 @@ def fetch_latest(url: str = RELEASE_URL, opener: Callable = urlopen) -> Release:
     if not isinstance(tag, str) or not isinstance(assets, list):
         raise UpdateError("GitHub returned malformed release information.")
     return Release(tag.lstrip("vV"), tuple(asset for asset in assets if isinstance(asset, dict)))
+
+
+def _validate_response_url(response: object, *, expected_host: str | None = None) -> None:
+    """Reject downgrade and cross-origin redirects before consuming a response."""
+    geturl = getattr(response, "geturl", None)
+    if geturl is None:  # Small deterministic test doubles have no redirect state.
+        return
+    final_url = geturl()
+    parsed = urlparse(final_url)
+    allowed = {expected_host} if expected_host else set(_DOWNLOAD_HOSTS)
+    if parsed.scheme != "https" or parsed.hostname not in allowed or parsed.username or parsed.password:
+        raise UpdateError("Release download was redirected to an untrusted source.")
 
 
 def _architecture() -> str:
@@ -202,15 +222,75 @@ def select_asset(release: Release, suffix: str) -> dict:
     if len(candidates) != 1:
         raise UpdateError(f"Could not safely identify one {suffix} release asset for this architecture.")
     url = candidates[0].get("browser_download_url")
-    if not isinstance(url, str) or not url.startswith("https://github.com/DonGeronimo7/mouse-control/"):
+    expected_prefix = f"https://github.com/{REPOSITORY}/releases/download/v{release.version}/"
+    if not isinstance(url, str) or url != expected_prefix + candidates[0]["name"]:
         raise UpdateError("Release asset URL is not from the official Mouse Control repository.")
     return candidates[0]
+
+
+def _checksum_asset(release: Release) -> dict:
+    matches = [asset for asset in release.assets if asset.get("name") == CHECKSUMS_NAME]
+    if len(matches) != 1:
+        raise UpdateError("Release must contain exactly one SHA256SUMS asset.")
+    asset = matches[0]
+    expected = f"https://github.com/{REPOSITORY}/releases/download/v{release.version}/{CHECKSUMS_NAME}"
+    if asset.get("browser_download_url") != expected:
+        raise UpdateError("Checksum manifest URL is not from the official Mouse Control release.")
+    return asset
+
+
+def _parse_checksums(data: bytes) -> dict[str, str]:
+    """Parse a strict, path-free GNU sha256sum manifest."""
+    try:
+        text = data.decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise UpdateError("Checksum manifest is not valid ASCII.") from exc
+    checksums: dict[str, str] = {}
+    for line in text.splitlines():
+        match = re.fullmatch(r"([0-9a-fA-F]{64})  ([^\s]+)", line)
+        if match is None:
+            raise UpdateError("Checksum manifest is malformed.")
+        digest, filename = match.groups()
+        _safe_asset_filename(filename)
+        if filename in checksums:
+            raise UpdateError("Checksum manifest contains a duplicate filename.")
+        checksums[filename] = digest.lower()
+    if not checksums:
+        raise UpdateError("Checksum manifest is empty.")
+    return checksums
+
+
+def _download_bytes(asset: dict, *, opener: Callable = urlopen, limit: int = 1024 * 1024) -> bytes:
+    url = asset["browser_download_url"]
+    try:
+        with opener(Request(url, headers={"User-Agent": "mouse-control-updater"}), timeout=30) as response:
+            _validate_response_url(response)
+            data = response.read(limit + 1)
+    except (URLError, OSError, ValueError) as exc:
+        raise UpdateError("Release checksum manifest could not be retrieved.") from exc
+    if len(data) > limit:
+        raise UpdateError("Checksum manifest is unexpectedly large.")
+    return data
+
+
+def _expected_checksum(release: Release, filename: str, *, opener: Callable = urlopen) -> str:
+    checksums = _parse_checksums(_download_bytes(_checksum_asset(release), opener=opener))
+    if filename not in checksums:
+        raise UpdateError("Selected release artifact is missing from SHA256SUMS.")
+    expected_names = {
+        asset.get("name") for asset in release.assets
+        if isinstance(asset.get("name"), str) and asset.get("name") != CHECKSUMS_NAME
+    }
+    if set(checksums) != expected_names:
+        raise UpdateError("SHA256SUMS contains a missing or unexpected release asset.")
+    return checksums[filename]
 
 
 def _download(asset: dict, destination: Path, opener: Callable = urlopen) -> Path:
     url = asset["browser_download_url"]
     try:
         with opener(Request(url, headers={"User-Agent": "mouse-control-updater"}), timeout=60) as response:
+            _validate_response_url(response)
             with destination.open("wb") as output:
                 shutil.copyfileobj(response, output)
     except (URLError, OSError) as exc:
@@ -218,6 +298,20 @@ def _download(asset: dict, destination: Path, opener: Callable = urlopen) -> Pat
     if not destination.is_file() or destination.stat().st_size == 0:
         raise UpdateError("Downloaded release asset is empty.")
     return destination
+
+
+def _download_verified(release: Release, asset: dict, destination: Path,
+                       opener: Callable = urlopen) -> Path:
+    filename = _safe_asset_filename(asset["name"])
+    expected = _expected_checksum(release, filename, opener=opener)
+    artifact = _download(asset, destination, opener)
+    digest = hashlib.sha256()
+    with artifact.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if not digest.hexdigest() == expected:
+        raise UpdateError("Downloaded release artifact failed SHA-256 verification.")
+    return artifact
 
 
 def _sudo(command: list[str]) -> list[str]:
@@ -270,7 +364,8 @@ def _package_error(result: subprocess.CompletedProcess[str]) -> str:
 def _package_update(installation: Installation, release: Release,
                     run: Callable | None = None, assume_yes: bool = False, *,
                     run_capture: Callable | None = None,
-                    run_interactive: Callable | None = None) -> None:
+                    run_interactive: Callable | None = None,
+                    opener: Callable = urlopen) -> None:
     # ``run`` is retained as a compatibility injection point for existing tests
     # and callers. Production code leaves it unset and uses distinct captured
     # and terminal-owned execution paths.
@@ -307,7 +402,7 @@ def _package_update(installation: Installation, release: Release,
         destination = (Path(directory) / filename).resolve()
         if destination.parent != Path(directory).resolve():
             raise UpdateError("Release asset destination escaped its temporary directory.")
-        artifact = _download(asset, destination)
+        artifact = _download_verified(release, asset, destination, opener)
         command = [manager, "install", *yes_args, str(artifact)]
         result = run_interactive(_sudo(command))
     if installation.kind == "rpm":
@@ -321,6 +416,12 @@ def _package_update(installation: Installation, release: Release,
 
 def _appimage_update(installation: Installation, release: Release, opener: Callable = urlopen) -> None:
     target = installation.executable
+    try:
+        original = target.lstat()
+    except OSError as exc:
+        raise UpdateError("AppImage target could not be inspected safely.") from exc
+    if not target.is_file() or target.is_symlink():
+        raise UpdateError("AppImage target must be a regular, non-symlink file.")
     if not os.access(target.parent, os.W_OK):
         raise UpdateError(f"AppImage cannot be replaced safely. Download the new AppImage manually from GitHub Releases.")
     asset = select_asset(release, ".appimage")
@@ -330,9 +431,19 @@ def _appimage_update(installation: Installation, release: Release, opener: Calla
     os.close(descriptor)
     temporary = Path(temporary_name)
     try:
-        _download(asset, temporary, opener)
-        temporary.chmod(target.stat().st_mode)
+        _download_verified(release, asset, temporary, opener)
+        current = target.lstat()
+        if (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+            raise UpdateError("AppImage target changed during the update; replacement was refused.")
+        temporary.chmod(original.st_mode & 0o777)
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
         os.replace(temporary, target)
+        directory_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -393,7 +504,8 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
                 package_interactive_runner = (_run_interactive if runner is _run_capture
                                               else runner)
             _package_update(installation, release, assume_yes=assume_yes,
-                            run_capture=runner, run_interactive=package_interactive_runner)
+                            run_capture=runner, run_interactive=package_interactive_runner,
+                            opener=opener)
         elif installation.kind == "appimage":
             _appimage_update(installation, release, opener)
         elif installation.kind == "pip":

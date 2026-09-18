@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -14,8 +17,10 @@ jobs:
       matrix:
         python-version: ['3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -28,7 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:44
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
       - name: Install RPM build tooling
         run: dnf -y install dnf-plugins-core rpm-build rpmdevtools
       - name: Install spec build requirements
@@ -43,7 +50,7 @@ jobs:
           rpm_path=$(find rpms/noarch -maxdepth 1 -type f -name 'mouse-control-*.noarch.rpm' -print -quit)
           test "$(rpm -qp --qf '%{VERSION}' "$rpm_path")" = "$version"
           rpm -qp --info "$rpm_path"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: rpm-packages
           path: rpms/

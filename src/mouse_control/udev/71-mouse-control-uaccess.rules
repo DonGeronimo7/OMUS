@@ -7,8 +7,8 @@ SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEY
 # grants an ACL to the active local session rather than changing its mode/group.
 SUBSYSTEM=="misc", KERNEL=="uinput", TAG+="uaccess"
 
-# Read-only HID++ DPI notifications from the hardware-validated Logitech G305.
+# HID++ reads and validated DPI/polling writes for the exact Logitech G305.
 # Match the parent HID device rather than HID_ID on the hidraw child; this does
 # not grant access to other Logitech receiver interfaces or hidraw devices.
-# Logitech G305 HID++ child interface used for passive DPI notifications.
+# Runtime drivers still require exact protocol/interface evidence before writes.
 SUBSYSTEM=="hidraw", KERNEL=="hidraw*", KERNELS=="0003:046D:4074.*", DRIVERS=="logitech-hidpp-device", TAG+="uaccess"

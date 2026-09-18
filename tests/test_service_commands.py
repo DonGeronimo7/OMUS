@@ -42,3 +42,34 @@ def test_status_reports_active_enabled_and_failure_states(capsys, tmp_path):
     failed = Mock(returncode=3, stdout="failed\n")
     with patch.object(service, "service_path", return_value=unit), patch.object(service.subprocess, "run", side_effect=[failed, enabled]):
         assert service.status_service() == 3
+
+
+def test_user_service_has_compatible_process_hardening_and_quoted_exec():
+    text = service.build_service_text('/opt/Mouse Control/bin/mouse-control')
+    assert 'ExecStart="/opt/Mouse Control/bin/mouse-control" run' in text
+    for directive in (
+        "NoNewPrivileges=true", "PrivateTmp=true", "ProtectSystem=strict",
+        "ProtectKernelTunables=true", "ProtectKernelModules=true",
+        "ProtectControlGroups=true", "RestrictSUIDSGID=true", "LockPersonality=true",
+    ):
+        assert directive in text
+    assert "Environment=" not in text
+
+
+def test_install_service_refuses_symlink_destination(monkeypatch, tmp_path):
+    executable = tmp_path / "mouse-control"
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    real_unit = tmp_path / "real.service"
+    real_unit.write_text("unchanged", encoding="utf-8")
+    unit = tmp_path / "mouse-control.service"
+    unit.symlink_to(real_unit)
+    monkeypatch.setattr(service.shutil, "which", lambda _name: str(executable))
+    monkeypatch.setattr(service, "service_path", lambda: unit)
+    try:
+        service.install_service()
+    except RuntimeError as exc:
+        assert "symlinked" in str(exc)
+    else:
+        raise AssertionError("symlinked service destination was replaced")
+    assert real_unit.read_text(encoding="utf-8") == "unchanged"

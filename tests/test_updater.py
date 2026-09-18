@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import subprocess
 
 import pytest
@@ -177,10 +178,10 @@ def test_package_manager_failure_uses_only_matching_official_asset(monkeypatch, 
     install = updater.Installation("deb", Path("/usr/bin/mouse-control"), "mouse-control")
     asset = {"name": "mouse-control_0.8.0_all.deb", "browser_download_url": "https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/mouse-control_0.8.0_all.deb"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    def download(_asset, path):
+    def download(_release, _asset, path, *_args):
         path.write_bytes(b"deb")
         return path
-    monkeypatch.setattr(updater, "_download", download)
+    monkeypatch.setattr(updater, "_download_verified", download)
     calls = []
     def runner(args):
         calls.append(args)
@@ -199,7 +200,7 @@ def test_package_manager_false_success_falls_back_and_verifies(monkeypatch, kind
     install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
     asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{asset_name}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     calls, installed = [], ["0.7.6"]
     def runner(args):
         calls.append(args)
@@ -217,7 +218,7 @@ def test_package_manager_false_success_falls_back_and_verifies(monkeypatch, kind
 def test_package_manager_real_upgrade_does_not_download(monkeypatch, kind, query_version):
     install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    monkeypatch.setattr(updater, "_download", lambda *_args: pytest.fail("fallback must not download"))
+    monkeypatch.setattr(updater, "_download_verified", lambda *_args: pytest.fail("fallback must not download"))
     def runner(args):
         return result(out=query_version + "\n") if args[0] in {"rpm", "dpkg-query"} else result()
     updater._package_update(install, release(), runner)
@@ -230,7 +231,7 @@ def test_noisy_dnf_output_with_target_rpm_installed_reports_success(monkeypatch,
     monkeypatch.setattr(updater, "is_service_active", lambda: False)
     monkeypatch.setattr(updater, "__version__", "0.7.9")
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    monkeypatch.setattr(updater, "_download", lambda *_: pytest.fail("fallback must not download"))
+    monkeypatch.setattr(updater, "_download_verified", lambda *_: pytest.fail("fallback must not download"))
     calls = []
 
     def runner(args):
@@ -253,7 +254,7 @@ def test_rpm_fallback_preserves_version_check_and_dnf_confirmation(monkeypatch, 
     artifact = {"name": package, "browser_download_url":
                 f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{package}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     calls, installed = [], ["0.7.9"]
 
     def runner(args):
@@ -278,7 +279,7 @@ def test_dnf_error_continues_to_verified_github_rpm(monkeypatch):
     package = "mouse-control-0.8.0-1.noarch.rpm"
     artifact = {"name": package, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{package}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     installed, calls = ["0.7.6"], []
     def runner(args):
         calls.append(args)
@@ -300,7 +301,7 @@ def test_package_fallback_requires_final_version_verification(monkeypatch, kind,
     install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
     asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{asset_name}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
-    monkeypatch.setattr(updater, "_download", lambda _asset, path: (path.write_bytes(b"package"), path)[1])
+    monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     def runner(args):
         return result(out="0.7.6\n") if args[0] == query else result()
     with pytest.raises(updater.UpdateError, match="did not install"):
@@ -318,7 +319,7 @@ def test_appimage_replaces_atomically(monkeypatch, tmp_path):
     target.chmod(0o755)
     asset = {"name": "Mouse-Control-0.8.0-x86_64.AppImage", "browser_download_url": "https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/Mouse-Control-0.8.0-x86_64.AppImage"}
     monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
-    monkeypatch.setattr(updater, "_download", lambda a, path, o: path.write_bytes(b"new") or path)
+    monkeypatch.setattr(updater, "_download_verified", lambda _release, a, path, o: path.write_bytes(b"new") or path)
     updater._appimage_update(updater.Installation("appimage", target), release(assets=(asset,)))
     assert target.read_bytes() == b"new" and target.stat().st_mode & 0o111
 
@@ -329,7 +330,7 @@ def test_appimage_uses_secure_same_directory_staging_and_replaces_after_download
     target.chmod(0o755)
     monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
     downloaded = []
-    def download(_asset, destination, _opener):
+    def download(_release, _asset, destination, _opener):
         downloaded.append(destination)
         assert destination.parent == target.parent
         assert destination.name != f".{target.name}.new"
@@ -342,7 +343,7 @@ def test_appimage_uses_secure_same_directory_staging_and_replaces_after_download
         assert Path(source).read_bytes() == b"new"
         assert target.read_bytes() == b"old"
         original_replace(source, destination)
-    monkeypatch.setattr(updater, "_download", download)
+    monkeypatch.setattr(updater, "_download_verified", download)
     monkeypatch.setattr(updater.os, "replace", replace)
     updater._appimage_update(updater.Installation("appimage", target), release(assets=(asset("Mouse-Control-0.8.0-x86_64.AppImage"),)))
     assert len(downloaded) == len(replaced) == 1
@@ -354,10 +355,10 @@ def test_appimage_download_failure_preserves_target_and_removes_secure_staging(m
     target.write_bytes(b"old")
     monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
     staged = []
-    def failed_download(_asset, destination, _opener):
+    def failed_download(_release, _asset, destination, _opener):
         staged.append(destination)
         raise updater.UpdateError("offline")
-    monkeypatch.setattr(updater, "_download", failed_download)
+    monkeypatch.setattr(updater, "_download_verified", failed_download)
     with pytest.raises(updater.UpdateError, match="offline"):
         updater._appimage_update(updater.Installation("appimage", target), release(assets=(asset("Mouse-Control-0.8.0-x86_64.AppImage"),)))
     assert target.read_bytes() == b"old"
@@ -438,3 +439,95 @@ def test_failed_service_restart_does_not_claim_install_failed(monkeypatch, capsy
     assert updater.run_update(assume_yes=True, fetcher=lambda: release(future_release_version()), runner=lambda _: result()) == 1
     output = capsys.readouterr()
     assert "updated successfully" in output.out and "could not be restarted" in output.err
+
+
+class _BytesResponse:
+    def __init__(self, data, url="https://objects.githubusercontent.com/release-asset"):
+        self.data = data
+        self.url = url
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self, limit=-1):
+        data, self.data = self.data, b""
+        return data if limit < 0 else data[:limit]
+
+    def geturl(self):
+        return self.url
+
+
+def _verified_release(name, payload, manifest=None):
+    artifact = asset(name)
+    checksums = {
+        "name": updater.CHECKSUMS_NAME,
+        "browser_download_url": (
+            "https://github.com/DonGeronimo7/mouse-control/releases/download/"
+            f"v0.8.0/{updater.CHECKSUMS_NAME}"
+        ),
+    }
+    line = manifest if manifest is not None else f"{hashlib.sha256(payload).hexdigest()}  {name}\n".encode()
+    return release(assets=(artifact, checksums)), line
+
+
+def test_verified_download_rejects_modified_artifact(tmp_path):
+    name = "Mouse-Control-0.8.0-x86_64.AppImage"
+    rel, manifest = _verified_release(name, b"expected")
+    responses = iter((_BytesResponse(manifest), _BytesResponse(b"modified")))
+    with pytest.raises(updater.UpdateError, match="SHA-256"):
+        updater._download_verified(rel, rel.assets[0], tmp_path / name,
+                                    opener=lambda *_a, **_k: next(responses))
+
+
+@pytest.mark.parametrize("manifest, message", [
+    (b"not-a-checksum\n", "malformed"),
+    ((b"0" * 64) + b"  artifact\n" + (b"1" * 64) + b"  artifact\n", "duplicate"),
+    ((b"0" * 64) + b"  ../artifact\n", "unsafe filename"),
+])
+def test_checksum_manifest_rejects_malformed_duplicate_and_traversal(manifest, message):
+    with pytest.raises(updater.UpdateError, match=message):
+        updater._parse_checksums(manifest)
+
+
+def test_missing_checksum_and_unexpected_manifest_asset_are_rejected(tmp_path):
+    name = "Mouse-Control-0.8.0-x86_64.AppImage"
+    rel, _ = _verified_release(name, b"artifact", (b"0" * 64) + b"  other.bin\n")
+    with pytest.raises(updater.UpdateError, match="missing"):
+        updater._download_verified(
+            rel, rel.assets[0], tmp_path / name,
+            opener=lambda *_a, **_k: _BytesResponse((b"0" * 64) + b"  other.bin\n"),
+        )
+
+
+def test_untrusted_download_redirect_is_rejected(tmp_path):
+    name = "Mouse-Control-0.8.0-x86_64.AppImage"
+    rel, manifest = _verified_release(name, b"artifact")
+    responses = iter((
+        _BytesResponse(manifest),
+        _BytesResponse(b"artifact", "https://evil.example/artifact"),
+    ))
+    with pytest.raises(updater.UpdateError, match="untrusted"):
+        updater._download_verified(rel, rel.assets[0], tmp_path / name,
+                                    opener=lambda *_a, **_k: next(responses))
+
+
+def test_fetch_latest_rejects_nonofficial_endpoint():
+    with pytest.raises(updater.UpdateError, match="official"):
+        updater.fetch_latest("https://example.test/releases/latest")
+
+
+def test_appimage_symlink_target_is_refused(monkeypatch, tmp_path):
+    real = tmp_path / "real.AppImage"
+    real.write_bytes(b"old")
+    target = tmp_path / "Mouse-Control.AppImage"
+    target.symlink_to(real)
+    monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
+    with pytest.raises(updater.UpdateError, match="non-symlink"):
+        updater._appimage_update(
+            updater.Installation("appimage", target),
+            release(assets=(asset("Mouse-Control-0.8.0-x86_64.AppImage"),)),
+        )
+    assert real.read_bytes() == b"old"

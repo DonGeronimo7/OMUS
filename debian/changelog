@@ -1,3 +1,11 @@
+mouse-control (0.9.6-1) unstable; urgency=medium
+
+  * Verify direct-download updates with published SHA-256 manifests.
+  * Pin release workflow and AppImage build inputs.
+  * Harden user-service installation and document security boundaries.
+
+ -- Marc-Anthony Geronimo <dongeronimo7@users.noreply.github.com>  Fri, 18 Sep 2026 00:00:00 -0400
+
 mouse-control (0.9.5-1) unstable; urgency=medium
 
   * Reuse proven discovery knowledge for faster known-device startup.

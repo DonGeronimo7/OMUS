@@ -4,6 +4,8 @@ set -eu
 test "$(uname -m)" = x86_64
 
 PY_RUNTIME_RELEASE="20260901"
+PY_RUNTIME_SHA256="72748da13197c1fb161e3afeef20a6a385ff24f2165e6e2758e47008e7faba4c"
+PY_RUNTIME_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_RUNTIME_RELEASE}/cpython-3.12.14%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 version=$(
   python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])'
@@ -15,31 +17,13 @@ trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 rm -rf AppDir
 mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/doc/mouse-control
 
-echo "Downloading portable CPython 3.12 runtime..."
+echo "Downloading pinned portable CPython 3.12 runtime..."
 
 curl --fail --location --retry 3 \
-  "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/${PY_RUNTIME_RELEASE}" \
-  -o "$tmpdir/python-release.json"
-
-python_url=$(
-  python3 -c '
-import json, re, sys
-release = json.load(open(sys.argv[1], encoding="utf-8"))
-pattern = re.compile(r"^cpython-3\.12\.\d+\+20260901-x86_64-unknown-linux-gnu-install_only_stripped\.tar\.gz$")
-matches = [
-    a["browser_download_url"]
-    for a in release["assets"]
-    if pattern.fullmatch(a["name"])
-]
-if len(matches) != 1:
-    raise SystemExit(f"Expected exactly one CPython 3.12 runtime, found {len(matches)}")
-print(matches[0])
-' "$tmpdir/python-release.json"
-)
-
-curl --fail --location --retry 3 \
-  "$python_url" \
+  "$PY_RUNTIME_URL" \
   -o "$tmpdir/python-runtime.tar.gz"
+
+printf '%s  %s\n' "$PY_RUNTIME_SHA256" "$tmpdir/python-runtime.tar.gz" | sha256sum --check --strict -
 
 tar -xzf "$tmpdir/python-runtime.tar.gz" -C AppDir/usr
 
@@ -75,6 +59,7 @@ chmod +x AppDir/usr/bin/mouse-control
 install -Dm644 packaging/appimage/mouse-control.desktop \
   AppDir/usr/share/applications/mouse-control.desktop
 install -Dm644 CREDITS.md AppDir/usr/share/doc/mouse-control/CREDITS.md
+install -Dm644 SECURITY.md AppDir/usr/share/doc/mouse-control/SECURITY.md
 
 for size in 512 256 128 64 48 32; do
   install -Dm644 \
