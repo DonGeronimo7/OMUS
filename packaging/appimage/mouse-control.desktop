@@ -2,9 +2,9 @@
 Type=Application
 Name=Mouse Control
 Comment=Configure and remap gaming mice on Linux
-Exec=mouse-control
+Exec=mouse-control-launcher
 Icon=mouse-control
 Categories=Utility;System;
-Terminal=true
+Terminal=false
 Keywords=mouse;gaming;remap;dpi;polling;hid;logitech;
 StartupNotify=true

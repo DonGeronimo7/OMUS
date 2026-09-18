@@ -138,6 +138,11 @@ def stop_service(*args, **kwargs):
     return operation(*args, **kwargs)
 
 
+def disable_service(*args, **kwargs):
+    from .service import disable_service as operation
+    return operation(*args, **kwargs)
+
+
 def restart_service(*args, **kwargs):
     from .service import restart_service as operation
     return operation(*args, **kwargs)

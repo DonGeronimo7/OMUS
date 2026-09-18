@@ -1,5 +1,60 @@
 # AI handoff log
 
+## 2026-09-18 — external foreground-session supervision candidate
+
+- The acceptance claim at `7fb39fb` was treated as failed. Reproduction began
+  with an active live G305 service: externally sending SIGTERM to
+  `mouse-control setup` after it suspended the runtime left the service
+  inactive. This directly proved that the TUI's Python `finally` could not own
+  the required guarantee.
+- The canonical installed application entry now replaces itself with
+  `systemd-run --user --pty --wait --collect`. One transient
+  `mouse-control-foreground.service` records/stops the prior runtime in
+  `ExecStartPre`, runs the canonical module entry, and restores in
+  `ExecStopPost`. The fixed unit name serializes foreground owners; systemd
+  owns teardown independently of curses, Python exceptions, and TUI signals.
+- Runtime suspension and the persisted service choice are separate. The
+  process writes a preference marker only after configuration save. Enable
+  installs/enables without starting until post-teardown; Keep disabled disables
+  the unit and suppresses restoration. Cancel and unsaved staged disable leave
+  the pre-session marker unchanged. Restoration consumes its marker once and
+  does not save configuration or enter discovery.
+- Live software/system integration: active service restoration passed after
+  no-argument cancel, explicit `tui` cancel, `python -m mouse_control` cancel,
+  foreground SIGTERM, and a niri/Kitty compositor window close. The inactive
+  precondition remained inactive after cancel. Final state was active; journal
+  evidence showed the exact G305 Native HID adapter, 1000-DPI reconciliation,
+  and `DPI event watcher ready` after restoration.
+- Graphical-launch correction: the desktop entry now invokes the packaged
+  `mouse-control-launcher` with `Terminal=false`. It prefers a valid
+  `$TERMINAL`, then an already installed `xdg-terminal-exec`, then Kitty, foot,
+  Alacritty, WezTerm, GNOME Terminal, Console/kgx, Konsole, Xfce Terminal, MATE
+  Terminal, or xterm using terminal-specific argument conventions. None is a
+  dependency. Missing-terminal failure prints an actionable error and uses
+  `notify-send` only when already available.
+- Current niri acceptance: the user-local editable package and desktop entry
+  were refreshed for testing, not installed as a release. With `$TERMINAL`
+  unset and no `xdg-terminal-exec`, the real `gtk-launch mouse-control` path
+  selected Kitty, displayed the canonical supervised TUI, and window closure
+  restored the active service. An unchanged Save restored active and retained
+  the exact pre-test configuration SHA-256
+  `25ff898ebd639a2f2c5ffcfa20dd1486351078d82983d63985af7ec94012c17b`.
+- Automated/package validation: focused lifecycle/entry/service suites passed
+  104 tests before the final package gate; the source gate passed 783 tests
+  with the existing GLib warning;
+  compileall and `git diff --check` passed. Wheel/sdist built and contained the
+  supervisor and graphical helper modules/scripts. Fedora RPM build and
+  `%check` passed the same 783 tests plus packaged command smokes; inspection
+  confirmed no terminal dependency. The AppImage built in extract-and-run tool
+  mode, contains its launcher wrapper/module and `Terminal=false` desktop file,
+  and its unpacked AppDir version/help smokes passed.
+- Physical acceptance: the user subsequently confirmed remap input, physical
+  DPI-button notifications, tray visibility, and battery behavior all work on
+  the attached G305. Together with the live lifecycle evidence above, this
+  completes the requested current-machine acceptance. It does not establish
+  physical support or write authority for another model. No merge, tag, or
+  release was performed.
+
 ## 2026-09-18 — v0.9.7-1 scoped TUI service-suspension correction
 
 - Follow-up evidence: a direct user-manager trace showed the running service

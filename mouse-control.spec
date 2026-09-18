@@ -71,6 +71,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %doc README.md CHANGELOG.md CREDITS.md SECURITY.md
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
+%{_bindir}/mouse-control-launcher
 %{_bindir}/mouse-control-discover
 %{_bindir}/mouse-control-sensor-calibrate
 %{_bindir}/mouse-control-write-trace

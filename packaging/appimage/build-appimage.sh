@@ -49,6 +49,7 @@ CC=gcc "$bundled_python" -m pip install \
 # temporary absolute path, and remove bytecode shipped by the portable runtime.
 for script in \
   mouse-control \
+  mouse-control-launcher \
   mouse-control-discover \
   mouse-control-discovery-monitor \
   mouse-control-polling-promote \
@@ -72,6 +73,18 @@ exec "$appdir/usr/python/bin/python3" -m mouse_control "$@"
 EOF
 
 chmod +x AppDir/usr/bin/mouse-control
+
+cat > AppDir/usr/bin/mouse-control-launcher <<'EOF'
+#!/bin/sh
+appdir=${APPDIR:-}
+if [ -z "$appdir" ]; then
+  appdir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+fi
+
+exec "$appdir/usr/python/bin/python3" -m mouse_control.graphical_launcher "$@"
+EOF
+
+chmod +x AppDir/usr/bin/mouse-control-launcher
 
 install -Dm644 packaging/appimage/mouse-control.desktop \
   AppDir/usr/share/applications/mouse-control.desktop
@@ -98,6 +111,10 @@ if [ -z "$appdir" ]; then
 fi
 
 export APPDIR="$appdir"
+if [ "$#" -eq 0 ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
+  export MOUSE_CONTROL_APPIMAGE=${APPIMAGE:-$0}
+  exec "$appdir/usr/bin/mouse-control-launcher"
+fi
 exec "$appdir/usr/bin/mouse-control" "$@"
 EOF
 

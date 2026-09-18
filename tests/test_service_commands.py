@@ -20,6 +20,13 @@ def test_short_commands_call_existing_service_helpers():
     start.assert_called_once(); stop.assert_called_once(); restart.assert_called_once(); status.assert_called_once()
 
 
+def test_disable_service_is_idempotent_when_not_installed(monkeypatch, tmp_path):
+    monkeypatch.setattr(service, "service_path", lambda: tmp_path / "missing.service")
+    with patch.object(service.subprocess, "run") as run:
+        service.disable_service()
+    run.assert_not_called()
+
+
 def test_start_and_restart_explain_missing_installation(capsys):
     with patch.object(service, "service_path", return_value=Path("/missing/service")):
         try:

@@ -38,39 +38,20 @@ def run_tui_setup_wizard() -> int:
     # does not create a cli <-> setup_tui import cycle.
     from . import cli
 
-    # Take the persisted snapshot before pausing the runtime.  A non-empty,
-    # successfully parsed configuration is the established session boundary:
-    # the TUI may stage edits to it, but it never owns that session's lifetime.
+    # The external foreground-session supervisor owns service suspension and
+    # restoration.  This process owns only staged configuration and hardware.
     try:
         existing_config = cli._load_setup_config()
     except Exception as exc:
         print(f"Could not load the existing configuration: {exc}", file=sys.stderr)
         return 1
-    established_config = bool(existing_config)
-    was_active = cli.is_service_active()
-    service_suspended = False
-    service_restored = False
-    explicitly_disabled = False
     selected = None
     backend = None
     choices = None
     saved = False
     status = 1
-    restoration_error: Exception | None = None
 
     try:
-        # The foreground TUI is the sole temporary owner of this suspension.
-        # Keep acquisition inside the same try/finally that restores it, so no
-        # normal TUI path can escape after a successful stop without reaching
-        # the one authoritative restoration decision below.
-        if was_active:
-            try:
-                cli.stop_service()
-                service_suspended = True
-            except Exception as exc:
-                print(f"Could not stop the background service: {exc}", file=sys.stderr)
-                return 1
-
         mice = cli.get_mouse_devices()
         if not mice:
             print("No mouse devices found. Check input permissions.", file=sys.stderr)
@@ -130,20 +111,25 @@ def run_tui_setup_wizard() -> int:
 
                 if choices.enable_service:
                     try:
-                        cli.install_service()
-                        service_restored = True
-                        print("Mouse Control background service enabled and started.")
+                        from .foreground_session import record_service_preference
+                        cli.install_service(start=False)
+                        record_service_preference(True)
+                        print("Mouse Control background service enabled.")
                     except Exception as exc:
                         print(f"Warning: could not enable background service: {exc}")
                         print("Your mouse configuration was still saved successfully.")
                 else:
-                    # A saved choice is explicit.  A merely staged choice is
-                    # discarded with the rest of an unsaved TUI session.
-                    explicitly_disabled = True
-                    print(
-                        "Background service not enabled. "
-                        "You can enable it later with: mouse-control install-service"
-                    )
+                    try:
+                        from .foreground_session import record_service_preference
+                        cli.disable_service()
+                        record_service_preference(False)
+                        print(
+                            "Background service disabled. "
+                            "You can enable it later with: mouse-control install-service"
+                        )
+                    except Exception as exc:
+                        print(f"Warning: could not disable background service: {exc}")
+                        print("Your mouse configuration was still saved successfully.")
                 status = 0
     except ButtonCaptureError:
         print("Setup failed; the existing configuration was not changed.", file=sys.stderr)
@@ -163,27 +149,4 @@ def run_tui_setup_wizard() -> int:
                 # Rollback can become impossible after a hardware disconnect;
                 # service restoration must still run.
                 logging.warning("Could not restore temporary DPI after setup: %s", exc)
-        # Configuration save/cancel is separate from runtime restoration.  An
-        # established service returns after every ordinary TUI exit unless the
-        # user explicitly saved the persistent-service disable choice.
-        restore_required = (
-            service_suspended
-            and established_config
-            and not service_restored
-            and not explicitly_disabled
-        )
-        if restore_required:
-            try:
-                cli.restart_service()
-                if not cli.is_service_active():
-                    raise RuntimeError("service did not become active after restart")
-            except Exception as exc:
-                restoration_error = exc
-                logging.error("Could not restart the background service after setup: %s", exc)
-    if restoration_error is not None:
-        print(
-            f"Could not restore the background service after setup: {restoration_error}",
-            file=sys.stderr,
-        )
-        return 1
     return status

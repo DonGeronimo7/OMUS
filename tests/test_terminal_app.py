@@ -51,6 +51,18 @@ def test_installed_console_script_dispatches_through_application_entry():
     dispatcher.assert_called_once_with(["tui"])
 
 
+def test_installed_interactive_entry_execs_external_supervisor(monkeypatch):
+    from mouse_control import foreground_session
+
+    monkeypatch.setattr(app.sys, "stdin", TtyBuffer())
+    monkeypatch.setattr(app.sys, "stdout", TtyBuffer())
+    with patch.object(foreground_session, "launch", return_value=29) as launch, \
+         patch.object(cli, "main") as dispatcher:
+        assert app.main(["setup"]) == 29
+    launch.assert_called_once_with(["setup"])
+    dispatcher.assert_not_called()
+
+
 def test_source_module_execution_dispatches_through_application_entry():
     with patch.object(app, "main", return_value=23) as application:
         with pytest.raises(SystemExit, match="23"):
@@ -120,9 +132,9 @@ def test_desktop_entry_is_launcher_safe_and_complete():
             key, value = line.split("=", 1)
             fields[key] = value
     assert fields["Type"] == "Application"
-    assert fields["Exec"] == "mouse-control"
+    assert fields["Exec"] == "mouse-control-launcher"
     assert fields["Icon"] == "mouse-control"
-    assert fields["Terminal"] == "true"
+    assert fields["Terminal"] == "false"
     assert fields["Categories"] == "Utility;System;"
 
 
@@ -130,11 +142,14 @@ def test_all_packaged_interactive_launchers_use_application_entry():
     with (ROOT / "pyproject.toml").open("rb") as handle:
         scripts = tomllib.load(handle)["project"]["scripts"]
     assert scripts["mouse-control"] == "mouse_control.app:main"
+    assert scripts["mouse-control-launcher"] == "mouse_control.graphical_launcher:main"
     assert sum(target == "mouse_control.app:main" for target in scripts.values()) == 1
     assert all("setup_tui" not in target for target in scripts.values())
 
     appimage = (ROOT / "packaging/appimage/build-appimage.sh").read_text()
     assert 'exec "$appdir/usr/python/bin/python3" -m mouse_control "$@"' in appimage
+    assert '-m mouse_control.graphical_launcher' in appimage
+    assert "MOUSE_CONTROL_APPIMAGE" in appimage
     assert "-m mouse_control.cli" not in appimage
     assert not (ROOT / "packaging/mouse-control").exists()
     assert not hasattr(cli, "run_home_screen")

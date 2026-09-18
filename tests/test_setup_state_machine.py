@@ -323,8 +323,8 @@ def test_tui_entry_interruptions_restore_running_service_and_do_not_save(interru
     ):
         assert setup_entry.run_tui_setup_wizard() == 1
 
-    stop.assert_called_once()
-    restart.assert_called_once()
+    stop.assert_not_called()
+    restart.assert_not_called()
     save.assert_not_called()
 
 
@@ -340,7 +340,7 @@ def test_tui_entry_handled_exception_restores_running_service_and_does_not_save(
     ):
         assert setup_entry.run_tui_setup_wizard() == 1
 
-    restart.assert_called_once()
+    restart.assert_not_called()
     save.assert_not_called()
 
 

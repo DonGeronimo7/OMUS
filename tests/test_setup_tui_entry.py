@@ -126,15 +126,17 @@ def test_tui_setup_success_reuses_existing_commit_and_service_flow(tmp_path):
          patch.object(cli, "_apply_hardware") as apply, \
          patch.object(cli, "merge_setup_config", return_value="config text") as merge, \
          patch.object(cli, "save_config", return_value=target) as save, \
-         patch.object(cli, "install_service") as install:
+         patch.object(cli, "install_service") as install, \
+         patch("mouse_control.foreground_session.record_service_preference") as preference:
         assert setup_entry.run_tui_setup_wizard() == 0
-    stop.assert_called_once_with()
+    stop.assert_not_called()
     apply.assert_called_once_with(
         backend, MOUSE, choices.stages, 800, 500, setup=True
     )
     merge.assert_called_once()
     save.assert_called_once_with("config text")
-    install.assert_called_once_with()
+    install.assert_called_once_with(start=False)
+    preference.assert_called_once_with(True)
     restart.assert_not_called()
 
 
@@ -153,7 +155,7 @@ def test_tui_setup_cancel_restores_dpi_config_and_running_service():
         assert setup_entry.run_tui_setup_wizard() == 0
     restore.assert_called_once_with(backend, MOUSE, 800)
     save.assert_not_called()
-    restart.assert_called_once_with()
+    restart.assert_not_called()
 
 
 def test_tui_cancel_discards_transient_choices_without_changing_established_config():
@@ -176,23 +178,25 @@ def test_tui_cancel_discards_transient_choices_without_changing_established_conf
         assert setup_entry.run_tui_setup_wizard() == 0
     assert existing == original
     save.assert_not_called()
-    restart.assert_called_once_with()
+    restart.assert_not_called()
 
 
-def test_tui_cancel_restores_established_service_even_when_disable_was_staged():
+def test_tui_cancel_does_not_persist_staged_disable():
     choices = SetupChoices(original_dpi=800, enable_service=False)
     result = SetupTuiResult(False, MOUSE, Mock(), choices)
     with patch.object(cli, "is_service_active", return_value=True), \
          patch.object(cli, "stop_service"), \
          patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "disable_service") as disable, \
          patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
          patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
          patch.object(setup_entry, "run_setup_tui", return_value=result):
         assert setup_entry.run_tui_setup_wizard() == 0
-    restart.assert_called_once_with()
+    restart.assert_not_called()
+    disable.assert_not_called()
 
 
-def test_established_cancel_service_operations_finish_active_without_a_late_stop():
+def test_tui_process_never_owns_background_service_lifecycle():
     choices = SetupChoices(original_dpi=800)
     result = SetupTuiResult(False, MOUSE, Mock(), choices)
     operations = []
@@ -217,11 +221,11 @@ def test_established_cancel_service_operations_finish_active_without_a_late_stop
          patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
          patch.object(setup_entry, "run_setup_tui", return_value=result):
         assert setup_entry.run_tui_setup_wizard() == 0
-    assert operations == ["active", "stop", "restart", "active"]
+    assert operations == []
     assert state["active"] is True
 
 
-def test_tui_setup_cancel_surfaces_failed_service_restoration(capsys):
+def test_tui_setup_cancel_leaves_restoration_to_external_supervisor(capsys):
     choices = SetupChoices(original_dpi=800, mappings={"BTN_LEFT": "passthrough"})
     result = SetupTuiResult(False, MOUSE, Mock(), choices)
     with patch.object(cli, "is_service_active", side_effect=[True, False]), \
@@ -231,9 +235,9 @@ def test_tui_setup_cancel_surfaces_failed_service_restoration(capsys):
          patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
          patch.object(setup_entry, "run_setup_tui", return_value=result), \
          patch.object(cli, "save_config") as save:
-        assert setup_entry.run_tui_setup_wizard() == 1
+        assert setup_entry.run_tui_setup_wizard() == 0
     save.assert_not_called()
-    assert "could not restore the background service" in capsys.readouterr().err.lower()
+    assert "could not restore the background service" not in capsys.readouterr().err.lower()
 
 
 def test_tui_setup_rollback_failure_does_not_prevent_service_restoration():
@@ -247,7 +251,7 @@ def test_tui_setup_rollback_failure_does_not_prevent_service_restoration():
          patch.object(setup_entry, "run_setup_tui", return_value=result), \
          patch.object(setup_entry, "restore_dpi", side_effect=OSError("disconnected")):
         assert setup_entry.run_tui_setup_wizard() == 0
-    restart.assert_called_once_with()
+    restart.assert_not_called()
 
 
 def test_tui_setup_cancel_does_not_start_initially_inactive_service():
@@ -273,7 +277,7 @@ def test_first_run_cancel_does_not_start_service_without_a_saved_configuration()
          patch.object(cli, "_load_setup_config", return_value={}), \
          patch.object(setup_entry, "run_setup_tui", return_value=result):
         assert setup_entry.run_tui_setup_wizard() == 0
-    stop.assert_called_once_with()
+    stop.assert_not_called()
     restart.assert_not_called()
 
 
@@ -294,11 +298,15 @@ def test_explicit_saved_disable_does_not_restore_established_service(tmp_path):
          patch.object(cli, "_apply_hardware"), \
          patch.object(cli, "merge_setup_config", return_value="updated config"), \
          patch.object(cli, "save_config", return_value=tmp_path / "config.toml") as save, \
-         patch.object(cli, "install_service") as install:
+         patch.object(cli, "install_service") as install, \
+         patch.object(cli, "disable_service") as disable, \
+         patch("mouse_control.foreground_session.record_service_preference") as preference:
         assert setup_entry.run_tui_setup_wizard() == 0
     save.assert_called_once_with("updated config")
     install.assert_not_called()
     restart.assert_not_called()
+    disable.assert_called_once_with()
+    preference.assert_called_once_with(False)
 
 
 def test_tui_wrapper_restores_temporary_dpi_when_curses_aborts(monkeypatch):

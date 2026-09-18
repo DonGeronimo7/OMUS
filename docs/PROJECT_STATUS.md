@@ -1,5 +1,37 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — externally supervised foreground lifecycle candidate
+
+- Interactive launches now enter one transient systemd user service. Its
+  `ExecStartPre` records and suspends a previously active background runtime;
+  its `ExecStopPost` restores that runtime after the foreground process exits,
+  including SIGTERM and terminal/window disappearance. The TUI process no
+  longer owns background-service restoration.
+- A saved service preference is distinct from temporary foreground suspension.
+  Saved Enable installs/enables without starting until teardown; saved Keep
+  disabled disables the user unit and suppresses restoration. Unsaved staged
+  choices do not change the supervisor record.
+- A packaged `mouse-control-launcher` now owns graphical terminal selection.
+  The desktop file uses `Terminal=false`; the helper prefers valid `$TERMINAL`,
+  opportunistically uses `xdg-terminal-exec`, then discovers common installed
+  emulators with their specific command syntax. No terminal is a package
+  dependency and there remains one canonical TUI.
+- Source and Fedora RPM automated gates pass 783 tests. Live G305 sessions
+  restored the active service after no-argument cancel, explicit `tui` cancel,
+  `python -m mouse_control` cancel, SIGTERM, and compositor-driven terminal
+  close; an initially inactive service remained inactive. Native HID and the
+  DPI watcher returned in the journal.
+- On the niri acceptance host, the real installed desktop entry launched
+  through `gtk-launch` with `$TERMINAL` unset and `xdg-terminal-exec` absent;
+  the helper selected installed Kitty and terminal disappearance restored the
+  service. An unchanged Save preserved the exact configuration SHA-256 and
+  restored the service. Wheel/sdist, RPM, and AppImage payloads contain the
+  helper. The user subsequently confirmed physical remaps, DPI-button
+  notifications, tray visibility, and battery behavior all work. The candidate
+  therefore has both automated/package evidence and user-observed physical
+  acceptance on the attached G305; that evidence does not generalize hardware
+  write authority to another model.
+
 ## 2026-09-18 — Redragon M724 and Ryunix Kyu Pro MX1 protocol knowledge
 
 - The discovery repertoire now recognizes the exact Redragon M724 K1NG 1K

@@ -56,7 +56,7 @@ def is_service_active() -> bool:
     return result.returncode == 0
 
 
-def install_service() -> None:
+def install_service(*, start: bool = True) -> None:
     exe = shutil.which("mouse-control")
     if not exe:
         raise RuntimeError("mouse-control executable not found")
@@ -91,10 +91,11 @@ def install_service() -> None:
         check=True,
     )
 
-    subprocess.run(
-        [SYSTEMCTL, "--user", "enable", "--now", SERVICE_NAME],
-        check=True,
-    )
+    command = [SYSTEMCTL, "--user", "enable"]
+    if start:
+        command.append("--now")
+    command.append(SERVICE_NAME)
+    subprocess.run(command, check=True)
 
 
 def start_service() -> None:
@@ -108,6 +109,15 @@ def start_service() -> None:
 def stop_service() -> None:
     subprocess.run(
         [SYSTEMCTL, "--user", "stop", SERVICE_NAME],
+        check=True,
+    )
+
+
+def disable_service() -> None:
+    if not service_path().is_file():
+        return
+    subprocess.run(
+        [SYSTEMCTL, "--user", "disable", SERVICE_NAME],
         check=True,
     )
 
