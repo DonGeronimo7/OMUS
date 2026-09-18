@@ -116,6 +116,36 @@ class DiscoveryEngine:
         if not self._phases or self._phases[-1] is not phase:
             self._phases.append(phase)
 
+    def _reset_session_state(self) -> None:
+        self._descriptors.clear()
+        self._feature_snapshots.clear()
+        self._repertoire_candidates = ()
+        self._observations.clear()
+        self._phases.clear()
+        self._profile_path = None
+        self._cached_profile_used = False
+
+    def restore_known_device(self, mouse: MouseDevice) -> DiscoveryResult | None:
+        """Restore an exactly rebound profile without entering deep discovery.
+
+        This is the setup/startup fast path. It reconstructs current topology so
+        persisted evidence is never trusted against stale live paths, then asks
+        the profile store to enforce model, instance, transport, and responder
+        identity. Missing, corrupt, ambiguous, or unbindable evidence abstains.
+        """
+
+        self._reset_session_state()
+        physical = self.build_topology(mouse)
+        if physical.ambiguous:
+            return None
+        restored = self._profile_store.restore_result(physical)
+        if restored is None:
+            return None
+        self._profile_path, result = restored
+        self._cached_profile_used = True
+        self._phases.extend((DiscoveryPhase.ENUMERATE, DiscoveryPhase.COMPLETE))
+        return result
+
     def discover(
         self,
         mouse: MouseDevice,
@@ -125,13 +155,7 @@ class DiscoveryEngine:
     ) -> DiscoveryResult:
         """Run automatic discovery for one selected mouse with optional stage progress."""
 
-        self._descriptors.clear()
-        self._feature_snapshots.clear()
-        self._repertoire_candidates = ()
-        self._observations.clear()
-        self._phases.clear()
-        self._profile_path = None
-        self._cached_profile_used = False
+        self._reset_session_state()
         report = progress or (lambda _event: None)
 
         def emit(

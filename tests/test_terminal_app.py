@@ -18,12 +18,30 @@ class TtyBuffer(io.StringIO):
         return True
 
 
-def test_no_argument_interactive_dispatches_to_tui_setup(monkeypatch):
+def test_no_argument_interactive_without_config_dispatches_to_tui_setup(monkeypatch):
     monkeypatch.setattr(cli.sys, "stdin", TtyBuffer())
     monkeypatch.setattr(cli.sys, "stdout", TtyBuffer())
-    with patch.object(cli, "run_setup_wizard", return_value=0) as setup:
+    with patch.object(cli, "_load_setup_config", return_value={}), \
+         patch.object(cli, "run_setup_wizard", return_value=0) as setup:
         assert cli.main([]) == 0
     setup.assert_called_once_with()
+
+
+def test_no_argument_interactive_with_valid_config_dispatches_to_home(monkeypatch):
+    monkeypatch.setattr(cli.sys, "stdin", TtyBuffer())
+    monkeypatch.setattr(cli.sys, "stdout", TtyBuffer())
+    existing = {
+        "device": {"vendor": 1, "product": 2, "phys": "usb-test"},
+        "dpi": {"active": 800, "stages": [800, 1600]},
+        "polling": {"rate_hz": 1000},
+        "remap": {"BTN_LEFT": "passthrough"},
+    }
+    with patch.object(cli, "_load_setup_config", return_value=existing), \
+         patch.object(cli, "run_home_screen", return_value=0) as home, \
+         patch.object(cli, "run_setup_wizard") as setup:
+        assert cli.main([]) == 0
+    home.assert_called_once_with()
+    setup.assert_not_called()
 
 
 def test_explicit_command_bypasses_home_screen():

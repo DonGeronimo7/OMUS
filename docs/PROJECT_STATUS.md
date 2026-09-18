@@ -1,5 +1,29 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — v0.9.6-2 lifecycle patch candidate
+
+- Unsaved setup sessions now restore and verify a previously active service
+  after cancellation, interruption, setup failure, or hardware rollback
+  failure. A restoration failure returns an error instead of false success;
+  an initially inactive service remains inactive.
+- Setup has a cache-only known-device initialization path. It rebuilds current
+  topology and reuses persisted evidence only after the existing exact model,
+  instance, transport, and responder checks pass. Missing, corrupt, ambiguous,
+  or mismatched evidence continues to require discovery, while explicit
+  Rediscover still forces the complete pipeline.
+- No-argument interactive launch opens the existing home screen for a valid
+  established configuration and retains setup for first run. Explicit setup,
+  run, service, diagnostics, research, update, and rediscovery commands remain
+  unchanged.
+- Automated validation passes 710 tests locally and in Fedora RPM `%check`.
+  Wheel/sdist, isolated wheel CLI/CPI smokes, and Fedora 44 RPM build/CLI smokes
+  pass. Local Debian/AppImage builds and Bandit/pip-audit are unavailable and
+  remain authoritative CI gates.
+- Live G305 acceptance confirmed cache reuse in setup, cancel-without-save
+  service restoration, Native HID/1000-DPI/DPI-watcher recovery, explicit full
+  Rediscover, and final active service state. Human observation of remaps and
+  popup appearance remains pending and is not inferred from logs.
+
 ## 2026-09-18 — v0.9.6 security hardening candidate
 
 - Direct GitHub RPM, DEB, and AppImage updates now require a strict official

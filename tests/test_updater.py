@@ -22,10 +22,10 @@ def future_release_version():
     return f"{major}.{minor}.{micro + 1}"
 
 
-def asset(name):
+def asset(name, version="0.8.0"):
     return {
         "name": name,
-        "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{name}",
+        "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v{version}/{name}",
     }
 
 
@@ -49,6 +49,21 @@ def test_asset_selection_requires_project_version_and_compatible_architecture(mo
     ]:
         with pytest.raises(updater.UpdateError, match="identify one"):
             updater.select_asset(release(assets=(asset(name),)), suffix)
+
+
+def test_incremental_release_tag_selects_matching_package_revision(monkeypatch):
+    monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
+    rpm = "mouse-control-0.9.6-2.fc44.noarch.rpm"
+    deb = "mouse-control_0.9.6-2_all.deb"
+    appimage = "Mouse-Control-0.9.6-2-x86_64.AppImage"
+    incremental = release(
+        "0.9.6-2",
+        assets=tuple(asset(name, "0.9.6-2") for name in (rpm, deb, appimage)),
+    )
+
+    assert updater.select_asset(incremental, ".rpm")["name"] == rpm
+    assert updater.select_asset(incremental, ".deb")["name"] == deb
+    assert updater.select_asset(incremental, ".appimage")["name"] == appimage
 
 
 def test_asset_selection_normalizes_architecture_and_rejects_ambiguity(monkeypatch):

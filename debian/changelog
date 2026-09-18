@@ -1,3 +1,11 @@
+mouse-control (0.9.6-2) unstable; urgency=medium
+
+  * Restore the prior service state after every unsaved setup exit.
+  * Reuse exact-device discovery evidence without repeating deep discovery.
+  * Route established no-argument launches to the application home screen.
+
+ -- Marc-Anthony Geronimo <dongeronimo7@users.noreply.github.com>  Fri, 18 Sep 2026 12:00:00 -0400
+
 mouse-control (0.9.6-1) unstable; urgency=medium
 
   * Verify direct-download updates with published SHA-256 manifests.

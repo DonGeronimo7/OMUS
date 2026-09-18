@@ -1,5 +1,38 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.6-2 incremental lifecycle patch candidate
+
+- Starting point: clean `9c76d3b` on `main`; work performed on
+  `codex/v0.9.6-2-lifecycle-fix` without rewriting prior history.
+- Root causes: setup cleanup logged service-restart failure after an earlier
+  return value was fixed, so false success was possible; the setup controller
+  could recognize cached evidence only by entering the Automatic Discovery
+  entrypoint; and no-argument launch unconditionally selected first-run setup.
+- Correction: setup now computes its result after rollback and verified service
+  restoration. Cache-only setup initialization rebuilds current topology and
+  delegates exact binding to `DeviceProfileStore`; it never parses descriptors,
+  probes protocols, or broadens write authority. Valid established launches use
+  the existing home screen; invalid/absent configurations retain first-run setup.
+- Safety: no hardware writer, evidence level, device identity, readback rule, or
+  remapping/runtime path changed. Missing, corrupt, ambiguous, incompatible, or
+  differently bound evidence abstains. Explicit Rediscover remains forced.
+- Automated/package validation: focused lifecycle/discovery/runtime/security/
+  release suites passed; full source suite passed 710 with the existing GLib
+  warning; compileall and whitespace checks passed. Python sdist/wheel build,
+  isolated wheel version/CPI smokes, Fedora RPM build, RPM `%check` (710 tests),
+  and packaged CLI smokes passed. Debian/AppImage and Bandit/pip-audit remain CI
+  gates because their local tooling is unavailable.
+- Physical G305 validation: setup displayed immediate known-device reuse;
+  cancel-without-save restored the service to active Native HID operation with
+  configured 1000 DPI and the DPI watcher ready. With the service stopped,
+  explicit Rediscover completed topology, four-interface descriptor collection,
+  HID++2 matching, capability validation, and evidence persistence; the service
+  was then restored active. Remap and popup appearance require human observation
+  and remain pending.
+- Release publication remains gated on commit/push, main integration, tag
+  `v0.9.6-2`, authoritative CI artifacts/security checks, checksum verification,
+  and published-asset inspection.
+
 ## 2026-09-18 — v0.9.6 release-wrap software and physical gates
 
 - Ubuntu 24.04 exposed a release-blocking Debian build incompatibility: its

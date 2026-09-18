@@ -260,6 +260,21 @@ def run_setup_wizard() -> int:
     return run_tui_setup_wizard()
 
 
+def _has_usable_setup_config() -> bool:
+    """Return whether no-argument launch belongs to an established user."""
+    try:
+        existing = _load_setup_config()
+        _initial_choices(existing)
+    except (OSError, ValueError, TypeError):
+        return False
+    device = existing.get("device")
+    return bool(
+        isinstance(device, dict)
+        and isinstance(device.get("vendor"), int)
+        and isinstance(device.get("product"), int)
+    )
+
+
 def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
                     stages: list[int], active_dpi: int, polling_rate_hz: int | None,
                     *, setup: bool = False) -> None:
@@ -547,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
     supplied_argv = sys.argv[1:] if argv is None else argv
     if not supplied_argv:
         if sys.stdin.isatty() and sys.stdout.isatty():
-            return run_setup_wizard()
+            return run_home_screen() if _has_usable_setup_config() else run_setup_wizard()
         _build_parser().print_help()
         return 0
 

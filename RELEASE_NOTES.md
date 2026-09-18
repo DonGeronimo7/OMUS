@@ -1,3 +1,38 @@
+# Mouse Control v0.9.6-2
+
+Small lifecycle bug-fix revision on top of v0.9.6.
+
+## Lifecycle corrections
+
+- Cancelling or otherwise leaving setup without saving now restores and verifies
+  the background service when it was running before setup began. Hardware DPI
+  rollback failure cannot suppress the service-restoration attempt, and a real
+  restoration failure is reported as an error instead of false success.
+- Setup now restores valid persisted discovery evidence through a cache-only,
+  exact-device topology binding. Known configured mice enter configuration
+  immediately without a deep Automatic Discovery transaction.
+- Missing, corrupt, ambiguous, incompatible, or differently bound evidence
+  continues to abstain and require discovery. Explicit Rediscover still forces
+  the full discovery pipeline.
+- No-argument launch opens the existing home screen for users with a valid
+  configuration, while first-run users still enter setup.
+
+## Safety and compatibility
+
+No hardware write authority or identity rule was relaxed. Remapping, macros,
+DPI/polling preferences, notifications, battery monitoring, reconnect behavior,
+and the complete v0.9.6 security hardening remain unchanged.
+
+## Downloads
+
+- RPM: `mouse-control-0.9.6-2.fc44.noarch.rpm`
+- DEB: `mouse-control_0.9.6-2_all.deb`
+- AppImage: `Mouse-Control-0.9.6-2-x86_64.AppImage`
+- Wheel: `mouse_control-0.9.6.post2-py3-none-any.whl`
+- Source: `mouse_control-0.9.6.post2.tar.gz`
+- Integrity manifest: `SHA256SUMS`
+
+---
 # Mouse Control v0.9.6
 
 Security hardening release focused on update integrity, supply-chain

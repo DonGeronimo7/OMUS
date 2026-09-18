@@ -133,19 +133,22 @@ jobs:
       - name: Verify tag and release assets
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          base_version=${version%-*}
+          package_release=${version##*-}
+          python_version=$(python3 -c 'import tomllib; v=tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]; base, release=v.rsplit("-", 1); print(f"{base}.post{release}")')
           test "$GITHUB_REF_NAME" = "v${version}"
-          test -f "release-assets/mouse-control-${version}-1.fc44.noarch.rpm"
-          test -f "release-assets/mouse-control_${version}-1_all.deb"
+          test -f "release-assets/mouse-control-${base_version}-${package_release}.fc44.noarch.rpm"
+          test -f "release-assets/mouse-control_${version}_all.deb"
           test -f "release-assets/Mouse-Control-${version}-x86_64.AppImage"
-          test -f "release-assets/mouse_control-${version}-py3-none-any.whl"
-          test -f "release-assets/mouse_control-${version}.tar.gz"
+          test -f "release-assets/mouse_control-${python_version}-py3-none-any.whl"
+          test -f "release-assets/mouse_control-${python_version}.tar.gz"
           find release-assets -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort > /tmp/release-files
           printf '%s\n' \
             "Mouse-Control-${version}-x86_64.AppImage" \
-            "mouse-control-${version}-1.fc44.noarch.rpm" \
-            "mouse-control_${version}-1_all.deb" \
-            "mouse_control-${version}-py3-none-any.whl" \
-            "mouse_control-${version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
+            "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
+            "mouse-control_${version}_all.deb" \
+            "mouse_control-${python_version}-py3-none-any.whl" \
+            "mouse_control-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
           diff -u /tmp/expected-files /tmp/release-files
           (cd release-assets && sha256sum * > SHA256SUMS)
           ls -lah release-assets

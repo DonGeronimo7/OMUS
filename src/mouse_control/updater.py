@@ -193,6 +193,13 @@ def _asset_matches(name: str, version: str, suffix: str, architecture: str) -> b
     escaped_version = re.escape(version.lstrip("vV"))
     if suffix == ".rpm":
         match = re.fullmatch(rf"mouse-control-{escaped_version}-.+\.([^.]+)\.rpm", name)
+        if match is None and re.search(r"-\d+$", version):
+            # Incremental tags already include RPM's package release and are
+            # followed only by an optional distro suffix and architecture.
+            match = re.fullmatch(
+                rf"mouse-control-{escaped_version}(?:\.[^.]+)*\.([^.]+)\.rpm",
+                name,
+            )
         return bool(match and (match.group(1) == "noarch"
                                or _normalize_architecture(match.group(1)) == architecture))
     if suffix == ".deb":
@@ -325,21 +332,21 @@ def _sudo(command: list[str]) -> list[str]:
 def _installed_package_version(installation: Installation, run_capture: Callable) -> str | None:
     """Return the installed upstream version, or ``None`` when unverified.
 
-    RPM's VERSION field deliberately excludes its packaging release.  Debian
-    versions can include an epoch and Debian revision; neither is part of the
-    Mouse Control release tag we compare against.
+    Incremental release tags include the package revision, so RPM and Debian
+    queries retain it. RPM's distro suffix is removed before PEP 440 ordering.
     """
     package = installation.package or "mouse-control"
-    command = (['rpm', '-q', '--qf', '%{VERSION}\\n', package]
+    command = (['rpm', '-q', '--qf', '%{VERSION}-%{RELEASE}\\n', package]
                if installation.kind == 'rpm'
                else ['dpkg-query', '-W', '-f=${Version}\\n', package])
     result = run_capture(command)
     if result.returncode:
         return None
     version = result.stdout.strip()
-    if installation.kind == "deb":
+    if installation.kind == "rpm":
+        version = re.sub(r"(?<=-\d)(?:\.[A-Za-z0-9_]+)+$", "", version)
+    else:
         version = version.partition(":")[2] if ":" in version else version
-        version = version.rsplit("-", 1)[0]
     return version or None
 
 

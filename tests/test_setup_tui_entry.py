@@ -149,6 +149,49 @@ def test_tui_setup_cancel_restores_dpi_config_and_running_service():
     restart.assert_called_once_with()
 
 
+def test_tui_setup_cancel_surfaces_failed_service_restoration(capsys):
+    choices = SetupChoices(original_dpi=800, mappings={"BTN_LEFT": "passthrough"})
+    result = SetupTuiResult(False, MOUSE, Mock(), choices)
+    with patch.object(cli, "is_service_active", side_effect=[True, False]), \
+         patch.object(cli, "stop_service"), \
+         patch.object(cli, "restart_service"), \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value={"remap": {}}), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result), \
+         patch.object(cli, "save_config") as save:
+        assert setup_entry.run_tui_setup_wizard() == 1
+    save.assert_not_called()
+    assert "could not restore the background service" in capsys.readouterr().err.lower()
+
+
+def test_tui_setup_rollback_failure_does_not_prevent_service_restoration():
+    choices = SetupChoices(original_dpi=800, mappings={"BTN_LEFT": "passthrough"})
+    result = SetupTuiResult(False, MOUSE, Mock(), choices)
+    with patch.object(cli, "is_service_active", return_value=True), \
+         patch.object(cli, "stop_service"), \
+         patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value={}), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result), \
+         patch.object(setup_entry, "restore_dpi", side_effect=OSError("disconnected")):
+        assert setup_entry.run_tui_setup_wizard() == 0
+    restart.assert_called_once_with()
+
+
+def test_tui_setup_cancel_does_not_start_initially_inactive_service():
+    choices = SetupChoices(original_dpi=800, mappings={"BTN_LEFT": "passthrough"})
+    result = SetupTuiResult(False, MOUSE, Mock(), choices)
+    with patch.object(cli, "is_service_active", return_value=False), \
+         patch.object(cli, "stop_service") as stop, \
+         patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value={}), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result):
+        assert setup_entry.run_tui_setup_wizard() == 0
+    stop.assert_not_called()
+    restart.assert_not_called()
+
+
 def test_tui_wrapper_restores_temporary_dpi_when_curses_aborts(monkeypatch):
     backend = FakeBackend()
     monkeypatch.setattr("mouse_control.setup_tui_curses.curses.wrapper", lambda _call: (_ for _ in ()).throw(KeyboardInterrupt()))

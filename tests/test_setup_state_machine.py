@@ -328,6 +328,22 @@ def test_tui_entry_interruptions_restore_running_service_and_do_not_save(interru
     save.assert_not_called()
 
 
+def test_tui_entry_handled_exception_restores_running_service_and_does_not_save():
+    with (
+        patch.object(cli, "is_service_active", return_value=True),
+        patch.object(cli, "stop_service"),
+        patch.object(cli, "restart_service") as restart,
+        patch.object(cli, "get_mouse_devices", return_value=[MOUSE1]),
+        patch.object(cli, "_load_setup_config", return_value={}),
+        patch.object(cli, "save_config") as save,
+        patch.object(setup_entry, "run_setup_tui", side_effect=RuntimeError("broken UI")),
+    ):
+        assert setup_entry.run_tui_setup_wizard() == 1
+
+    restart.assert_called_once()
+    save.assert_not_called()
+
+
 def test_tui_entry_eof_with_inactive_service_does_not_start_service():
     with (
         patch.object(cli, "is_service_active", return_value=False),

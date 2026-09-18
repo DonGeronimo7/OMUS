@@ -253,6 +253,39 @@ def test_second_discovery_reuses_profile_without_descriptor_or_protocol_probe(tm
     assert all(isinstance(event, DiscoveryProgress) for event in progress)
 
 
+def test_known_device_restore_is_cache_only_and_never_runs_deep_discovery(tmp_path):
+    physical = PhysicalDevice('Known', 1, 2, 3, None, [], [], 'stable-model', None)
+    store = DeviceProfileStore(tmp_path)
+    store.save(DiscoveryResult(physical, None, {}))
+    engine = DiscoveryEngine(
+        topology_builder=lambda _mouse: physical,
+        detectors=(lambda _physical: (_ for _ in ()).throw(AssertionError("detector ran")),),
+        probe_factory=lambda _node: (_ for _ in ()).throw(AssertionError("probe ran")),
+        profile_store=store,
+    )
+
+    restored = engine.restore_known_device(MouseDevice('Known', '/dev/input/event9'))
+
+    assert restored is not None
+    assert restored.device is physical
+    assert engine.cached_profile_used is True
+
+
+def test_known_device_restore_abstains_when_evidence_is_missing_or_unbindable(tmp_path):
+    current = PhysicalDevice('Known', 1, 2, 3, None, [], [], 'model', 'instance-b')
+    store = DeviceProfileStore(tmp_path)
+    stored = PhysicalDevice('Known', 1, 2, 3, None, [], [], 'model', 'instance-a')
+    store.save(DiscoveryResult(stored, None, {}))
+    engine = DiscoveryEngine(
+        topology_builder=lambda _mouse: current,
+        detectors=(),
+        profile_store=store,
+    )
+
+    assert engine.restore_known_device(MouseDevice('Known', '/dev/input/event9')) is None
+    assert engine.cached_profile_used is False
+
+
 def test_explicit_rediscovery_bypasses_known_profile(tmp_path):
     physical = PhysicalDevice('Known', 1, 2, 3, None, [], [], 'model', None)
     store = DeviceProfileStore(tmp_path)

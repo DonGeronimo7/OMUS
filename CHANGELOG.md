@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.6-2 — 2026-09-18
+
+### Lifecycle bug fixes
+
+- Restore and verify the previously active background service after every
+  unsaved setup exit, including rollback, discovery, capture, and interruption
+  failures; surface restoration failure instead of reporting success.
+- Load valid persisted discovery state through exact current topology without
+  initiating deep Automatic Discovery merely because setup was opened.
+- Route established no-argument launches to the home screen while retaining
+  first-run setup and every explicit command path.
+- Preserve exact-device binding, PROVEN-only writes, configuration, remapping,
+  notifications, battery behavior, reconnect behavior, and v0.9.6 security.
+
 ## 0.9.6 — 2026-09-18
 
 ### Security hardening

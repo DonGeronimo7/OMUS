@@ -1,7 +1,7 @@
 pkgbase = mouse-control
 	pkgdesc = Linux mouse remapping with Automatic Discovery and validated hardware control
 	pkgver = 0.9.6
-	pkgrel = 1
+	pkgrel = 2
 	url = https://github.com/DonGeronimo7/mouse-control
 	arch = any
 	license = GPL-3.0-or-later
@@ -14,7 +14,7 @@ pkgbase = mouse-control
 	depends = python-dbus-next
 	depends = python-packaging
 	depends = systemd
-	source = mouse-control::git+https://github.com/DonGeronimo7/mouse-control.git#tag=v0.9.6
+	source = mouse-control::git+https://github.com/DonGeronimo7/mouse-control.git#tag=v0.9.6-2
 	sha256sums = SKIP
 
 pkgname = mouse-control

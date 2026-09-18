@@ -14,7 +14,7 @@ import io
 from typing import Any, Callable
 
 from .calibrated_profiles import find_calibrated_profile
-from .guided_discovery import GuidedDiscoveryOutcome
+from .guided_discovery import GuidedDiscoveryOutcome, load_known_device_state
 from .hardware import HardwareError, get_backend
 from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
@@ -150,6 +150,7 @@ class SetupController:
         *,
         choices_factory: Callable[[dict[str, object]], SetupChoices],
         backend_factory: Callable[[Any], Any] = get_backend,
+        known_device_loader: Callable[[Any], Any | None] = load_known_device_state,
     ) -> None:
         if not devices:
             raise ValueError("setup requires at least one mouse")
@@ -157,6 +158,7 @@ class SetupController:
         self.existing_config = existing_config
         self._choices_factory = choices_factory
         self._backend_factory = backend_factory
+        self._known_device_loader = known_device_loader
 
         self.nav = NavigationState()
         self.row_cursor = 0
@@ -232,6 +234,14 @@ class SetupController:
         configured_phys = configured.get("phys")
         return not (configured_phys and device.phys and configured_phys != device.phys)
 
+    def _has_configured_identity(self) -> bool:
+        configured = self.existing_config.get("device", {})
+        return bool(
+            isinstance(configured, dict)
+            and isinstance(configured.get("vendor"), int)
+            and isinstance(configured.get("product"), int)
+        )
+
     def _bind_device(
         self,
         index: int,
@@ -275,6 +285,17 @@ class SetupController:
         self.polling_measurement = None
         self.observed_hardware = ObservedHardwareState()
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
+
+        if self._has_configured_identity() and self._configured_identity_matches(self.selected):
+            try:
+                known = self._known_device_loader(self.selected)
+            except Exception:
+                # Cached state is optional. Any topology, schema, corruption, or
+                # binding failure falls back to the normal explicit discovery
+                # path without trusting partial evidence.
+                known = None
+            if known is not None:
+                self._apply_discovery_outcome(known, rebind_backend=False)
 
         # Never silently apply a different mouse's persisted hardware rate. The
         # stage list/remaps remain reusable; live hardware preferences require a
@@ -372,8 +393,7 @@ class SetupController:
             profile_path=path,
         )
 
-    def apply_automatic_discovery(self, outcome: Any) -> None:
-        """Consume DiscoveryEngine output, then rebind the production backend."""
+    def _apply_discovery_outcome(self, outcome: Any, *, rebind_backend: bool) -> None:
         self.discovery_result = outcome.result if hasattr(outcome, "result") else outcome
         self.discovery_engine = getattr(outcome, "engine", None)
         self.research_plan = getattr(outcome, "research_plan", None)
@@ -383,12 +403,13 @@ class SetupController:
         # A discovery pass may have exposed an already-PROVEN exact-model store.
         # Rebind through the production registry so setup and runtime share the
         # exact same backend policy.
-        try:
-            self.backend.close()
-        except Exception:
-            pass
-        self.backend = self._backend_factory(self.selected)
-        self._discover_into_choices()
+        if rebind_backend:
+            try:
+                self.backend.close()
+            except Exception:
+                pass
+            self.backend = self._backend_factory(self.selected)
+            self._discover_into_choices()
         self._refresh_observed_profile()
         if cached:
             self.discovery_progress.clear()
@@ -400,6 +421,10 @@ class SetupController:
                 if self.no_write_path
                 else "Automatic Discovery complete. Review capabilities before configuration."
             )
+
+    def apply_automatic_discovery(self, outcome: Any) -> None:
+        """Consume fresh DiscoveryEngine output and rebind the production backend."""
+        self._apply_discovery_outcome(outcome, rebind_backend=True)
 
     def apply_discovery_error(self, message: str) -> None:
         self.discovery_error = message
@@ -663,7 +688,9 @@ class SetupController:
             if self.device_cursor != self.selected_index:
                 self._bind_device(self.device_cursor)
             self._go(SetupSection.HARDWARE)
-            return ControllerAction(ActionKind.AUTOMATIC_DISCOVERY)
+            return ControllerAction(
+                ActionKind.NONE if self.discovery_complete else ActionKind.AUTOMATIC_DISCOVERY
+            )
 
         if self.section is SetupSection.HARDWARE:
             # Row 0 always runs/retries the comprehensive safe pass.

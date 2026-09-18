@@ -69,7 +69,7 @@ def choices_factory(existing):
     )
 
 
-def controller(*, backends=None, existing=None):
+def controller(*, backends=None, existing=None, known_device_loader=lambda _device: None):
     backends = backends or {
         MOUSE1.path: FakeBackend(),
         MOUSE2.path: FakeBackend(),
@@ -79,7 +79,54 @@ def controller(*, backends=None, existing=None):
         existing or {},
         choices_factory=choices_factory,
         backend_factory=lambda device: backends[device.path],
+        known_device_loader=known_device_loader,
     ), backends
+
+
+def test_known_configured_device_loads_persisted_state_without_automatic_discovery():
+    result = SimpleNamespace(device=SimpleNamespace(), protocol=None, capabilities={})
+    outcome = SimpleNamespace(
+        result=result,
+        engine=SimpleNamespace(),
+        research_plan=None,
+        cached_profile_used=True,
+    )
+    loaded = []
+    existing = {
+        "device": {"vendor": 1, "product": 1, "phys": "usb-1"},
+        "dpi": {"active": 800, "stages": [800, 1600]},
+        "remap": {"BTN_LEFT": "passthrough"},
+    }
+    app, _ = controller(
+        existing=existing,
+        known_device_loader=lambda device: loaded.append(device) or outcome,
+    )
+
+    assert loaded == [MOUSE1]
+    assert app.discovery_complete is True
+    assert "Known device ready" in app.status
+    assert app.handle_key("ENTER").kind is ActionKind.NONE
+    assert app.section is SetupSection.HARDWARE
+
+    app.row_cursor = 0
+    assert app.handle_key("ENTER").kind is ActionKind.RETRY_DISCOVERY
+
+
+def test_different_physical_device_does_not_reuse_configured_discovery_state():
+    loaded = []
+    existing = {
+        "device": {"vendor": 1, "product": 1, "phys": "usb-other-instance"},
+        "dpi": {"active": 800, "stages": [800, 1600]},
+        "remap": {"BTN_LEFT": "passthrough"},
+    }
+    app, _ = controller(
+        existing=existing,
+        known_device_loader=lambda device: loaded.append(device),
+    )
+
+    assert loaded == []
+    assert app.discovery_complete is False
+    assert app.handle_key("ENTER").kind is ActionKind.AUTOMATIC_DISCOVERY
 
 
 def test_device_selection_restores_temporary_state_before_switch():

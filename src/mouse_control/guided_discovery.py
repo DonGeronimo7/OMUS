@@ -652,6 +652,25 @@ def run_automatic_discovery(
     )
 
 
+def load_known_device_state(
+    selected: Any,
+    *,
+    engine_factory: Callable[[], DiscoveryEngine] = DiscoveryEngine,
+) -> AutomaticDiscoveryOutcome | None:
+    """Load persisted exact-device evidence without starting discovery work."""
+
+    engine = engine_factory()
+    result = engine.restore_known_device(selected)
+    if result is None:
+        return None
+    return AutomaticDiscoveryOutcome(
+        result=result,
+        engine=engine,
+        research_plan=engine.research_plan(result),
+        cached_profile_used=True,
+    )
+
+
 def run_guided_discovery(
     selected: Any,
     *,

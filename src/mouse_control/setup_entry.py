@@ -44,6 +44,8 @@ def run_tui_setup_wizard() -> int:
     backend = None
     choices = None
     saved = False
+    status = 1
+    restoration_error: Exception | None = None
 
     if was_active:
         try:
@@ -56,86 +58,85 @@ def run_tui_setup_wizard() -> int:
         mice = cli.get_mouse_devices()
         if not mice:
             print("No mouse devices found. Check input permissions.", file=sys.stderr)
-            return 1
-
-        existing_config = cli._load_setup_config()
-        result = run_setup_tui(
-            mice,
-            existing_config,
-            choices_factory=cli._initial_choices,
-            backend_factory=cli.get_backend,
-        )
-        selected = result.selected
-        backend = result.backend
-        choices = result.choices
-
-        if not result.finished:
-            print("Setup cancelled; existing configuration left unchanged.")
-            return 0
-
-        apply_dpi = (
-            choices.dpi_changed
-            or not _preference_exists(existing_config, "dpi", "active", "stages")
-        )
-        apply_polling = (
-            choices.polling_changed
-            or not _preference_exists(existing_config, "polling", "rate_hz")
-        )
-
-        # Preferences are never write authority. A default/old config may be
-        # persisted for software behavior, but hardware application is strictly
-        # gated by the capability policy discovered for this exact device.
-        dpi_request = choices.active_dpi if (choices.dpi_writable and apply_dpi) else 0
-        polling_request = (
-            choices.polling_rate
-            if (choices.polling_writable and apply_polling)
-            else None
-        )
-        cli._apply_hardware(
-            backend,
-            selected,
-            choices.stages,
-            dpi_request,
-            polling_request,
-            setup=True,
-        )
-        content = cli.merge_setup_config(
-            existing_config,
-            selected,
-            mappings=choices.mappings,
-            dpi_stages=choices.stages,
-            active_dpi=choices.active_dpi,
-            polling_rate_hz=choices.polling_rate,
-            macros=choices.macros,
-        )
-        path = cli.save_config(content)
-        saved = True
-        print(f"Configuration saved to: {path}")
-
-        if choices.enable_service:
-            try:
-                cli.install_service()
-                service_restored = True
-                print("Mouse Control background service enabled and started.")
-            except Exception as exc:
-                print(f"Warning: could not enable background service: {exc}")
-                print("Your mouse configuration was still saved successfully.")
         else:
-            print(
-                "Background service not enabled. "
-                "You can enable it later with: mouse-control install-service"
+            existing_config = cli._load_setup_config()
+            result = run_setup_tui(
+                mice,
+                existing_config,
+                choices_factory=cli._initial_choices,
+                backend_factory=cli.get_backend,
             )
-        return 0
+            selected = result.selected
+            backend = result.backend
+            choices = result.choices
+
+            if not result.finished:
+                print("Setup cancelled; existing configuration left unchanged.")
+                status = 0
+            else:
+                apply_dpi = (
+                    choices.dpi_changed
+                    or not _preference_exists(existing_config, "dpi", "active", "stages")
+                )
+                apply_polling = (
+                    choices.polling_changed
+                    or not _preference_exists(existing_config, "polling", "rate_hz")
+                )
+
+                # Preferences are never write authority. A default/old config may be
+                # persisted for software behavior, but hardware application is strictly
+                # gated by the capability policy discovered for this exact device.
+                dpi_request = choices.active_dpi if (choices.dpi_writable and apply_dpi) else 0
+                polling_request = (
+                    choices.polling_rate
+                    if (choices.polling_writable and apply_polling)
+                    else None
+                )
+                cli._apply_hardware(
+                    backend,
+                    selected,
+                    choices.stages,
+                    dpi_request,
+                    polling_request,
+                    setup=True,
+                )
+                content = cli.merge_setup_config(
+                    existing_config,
+                    selected,
+                    mappings=choices.mappings,
+                    dpi_stages=choices.stages,
+                    active_dpi=choices.active_dpi,
+                    polling_rate_hz=choices.polling_rate,
+                    macros=choices.macros,
+                )
+                path = cli.save_config(content)
+                saved = True
+                print(f"Configuration saved to: {path}")
+
+                if choices.enable_service:
+                    try:
+                        cli.install_service()
+                        service_restored = True
+                        print("Mouse Control background service enabled and started.")
+                    except Exception as exc:
+                        print(f"Warning: could not enable background service: {exc}")
+                        print("Your mouse configuration was still saved successfully.")
+                else:
+                    print(
+                        "Background service not enabled. "
+                        "You can enable it later with: mouse-control install-service"
+                    )
+                status = 0
     except ButtonCaptureError:
         print("Setup failed; the existing configuration was not changed.", file=sys.stderr)
-        return 1
+        status = 1
     except (KeyboardInterrupt, EOFError):
         print("\nSetup cancelled; the existing configuration was not changed.")
-        return 1
+        status = 1
     except Exception as exc:
         print(f"Setup failed: {exc}", file=sys.stderr)
         print("The existing configuration was not changed.", file=sys.stderr)
-        return 1
+        status = 1
     finally:
         if not saved and selected is not None and backend is not None and choices is not None:
             try:
@@ -144,8 +145,21 @@ def run_tui_setup_wizard() -> int:
                 # Rollback can become impossible after a hardware disconnect;
                 # service restoration must still run.
                 logging.warning("Could not restore temporary DPI after setup: %s", exc)
-        if was_active and not service_restored:
+        restore_required = was_active and not service_restored and (
+            not saved or bool(choices and choices.enable_service)
+        )
+        if restore_required:
             try:
                 cli.restart_service()
+                if not cli.is_service_active():
+                    raise RuntimeError("service did not become active after restart")
             except Exception as exc:
-                logging.warning("Could not restart the background service after setup: %s", exc)
+                restoration_error = exc
+                logging.error("Could not restart the background service after setup: %s", exc)
+    if restoration_error is not None:
+        print(
+            f"Could not restore the background service after setup: {restoration_error}",
+            file=sys.stderr,
+        )
+        return 1
+    return status

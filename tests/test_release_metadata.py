@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 import tomllib
+from packaging.version import Version
 
 from mouse_control import __version__
 
@@ -19,18 +20,25 @@ def _project():
 
 def test_release_versions_are_synchronized():
     version = __version__
+    base_version, package_release = version.rsplit("-", 1)
+    python_version = str(Version(version))
     assert _project()["version"] == version
-    assert f"Version:        {version}" in _text("mouse-control.spec")
-    assert f"pkgver={version}" in _text("PKGBUILD")
+    assert f"Version:        {base_version}" in _text("mouse-control.spec")
+    assert f"Release:        {package_release}%{{?dist}}" in _text("mouse-control.spec")
+    assert f"%global python_version {python_version}" in _text("mouse-control.spec")
+    assert f"pkgver={base_version}" in _text("PKGBUILD")
+    assert f"pkgrel={package_release}" in _text("PKGBUILD")
     if (ROOT / ".SRCINFO").exists():
-        assert f"pkgver = {version}" in _text(".SRCINFO")
+        assert f"pkgver = {base_version}" in _text(".SRCINFO")
+        assert f"pkgrel = {package_release}" in _text(".SRCINFO")
         assert f"#tag=v{version}" in _text(".SRCINFO")
-    assert _text("debian/changelog").startswith(f"mouse-control ({version}-1)")
-    assert f"Version: {version}-1" in _text("packaging/debian-binary-control")
+    assert _text("debian/changelog").startswith(f"mouse-control ({version})")
+    assert f"Version: {version}" in _text("packaging/debian-binary-control")
     assert f"The current release is [v{version}]" in _text("README.md")
-    assert f"mouse-control-{version}-1.fc44.noarch.rpm" in _text("README.md")
-    assert f"mouse-control_{version}-1_all.deb" in _text("README.md")
+    assert f"mouse-control-{base_version}-{package_release}.fc44.noarch.rpm" in _text("README.md")
+    assert f"mouse-control_{version}_all.deb" in _text("README.md")
     assert f"Mouse-Control-{version}-x86_64.AppImage" in _text("README.md")
+    assert f"mouse_control-{python_version}-py3-none-any.whl" in _text("README.md")
     assert f"Mouse-Control-{version}-x86_64.AppImage" in _text(
         "packaging/appimage/README.md"
     )

@@ -1,9 +1,10 @@
 Name:           mouse-control
 Version:        0.9.6
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
-Source0:        mouse_control-%{version}.tar.gz
+%global python_version 0.9.6.post2
+Source0:        mouse_control-%{python_version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  python3-build
@@ -30,7 +31,7 @@ hardware DPI configuration through native protocol drivers. Includes an
 interactive setup wizard and commands for managing a systemd user service.
 
 %prep
-%autosetup -n mouse_control-%{version}
+%autosetup -n mouse_control-%{python_version}
 
 %build
 %pyproject_wheel
@@ -80,6 +81,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 %changelog
+* Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.6-2
+- Restore the prior service state after every unsaved setup exit.
+- Reuse exact-device discovery evidence when established users configure a mouse.
+- Route established no-argument launches to the application home screen.
+
 * Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.6-1
 - Require SHA-256 verification before direct release artifact installation.
 - Pin release workflow actions and AppImage runtime/tool inputs.
