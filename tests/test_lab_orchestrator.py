@@ -178,6 +178,30 @@ def test_completed_plan_can_feed_the_effect_persistence_verifier():
     assert experiment.write_authorized is False
 
 
+def test_completed_plan_can_feed_the_receiver_child_route_mapper():
+    _Session.calls = 0
+    hypothesis = LabHypothesis(
+        "only", "Which route changes?", "selected route", "routing",
+        {"OTHER_CHILD_ROUTE_CONTROL": "changed"},
+    )
+    plan = plan_next_experiment(
+        (hypothesis,), available_actions=(ACTION_TEMPLATES["OTHER_CHILD_ROUTE_CONTROL"],),
+    )
+    received = []
+
+    def route_mapper(experiment):
+        received.append(experiment.analysis is not None)
+        return replace(experiment, confidence="route-checked")
+
+    experiment = execute_lab_plan(
+        _physical(), {}, plan, prompt=lambda step: True,
+        session_factory=_Session, route_mapper=route_mapper,
+    )
+    assert received == [True]
+    assert experiment.confidence == "route-checked"
+    assert experiment.write_authorized is False
+
+
 def test_unresolved_ambiguity_recalculates_the_next_best_experiment():
     _Session.calls = 0
     plan = plan_next_experiment(_hypotheses())

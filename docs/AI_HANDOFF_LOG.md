@@ -1,5 +1,33 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab receiver/child routing mapper
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `b905564` and
+  extended the same experiment, topology, dialogue, timing, persistence,
+  differential, proof, planner, and TUI models.
+- Added canonical routing evidence and a generation-bound receiver/child graph
+  for physical receivers, logical children, receiver-local ownership,
+  interfaces/endpoints, channels/namespaces, reports, records, internal targets,
+  and asymmetric request/response or async routes.
+- Internal target candidates require repeated controlled cross-child contrast;
+  constant bytes, timing proximity, and structural namespace separation do not
+  establish ownership. Unrelated USB fingerprints are excluded and unowned
+  selected-device routes remain explicitly unmapped.
+- Route rediscovery compares old/new exact-device graphs without carrying old
+  authority across generations. Persistence and repeated timing can support but
+  never independently prove route ownership. Every routing run feeds the
+  existing Differential Analyzer.
+- Ambiguity now generates safe information-gain plans for another-child
+  controls, repeated selected-child actions, or mouse-only power cycling. The
+  TUI summarizes logical routes, receiver-local evidence, unresolved ownership,
+  and the next experiment.
+- Validation: 123 focused tests and 889 full-suite tests pass with the existing
+  GLib warning; compileall and diff checks pass. Physical validation remains
+  pending. No write, child-ID probe, receiver-slot scan, install, push, merge,
+  tag, or release occurred.
+- Next bounded milestone: battery/charging investigator using the same effect,
+  persistence, routing, timing, and authority boundaries.
+
 ## 2026-09-18 — Discovery Lab state/effect/persistence verification
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `d211361` and

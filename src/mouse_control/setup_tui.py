@@ -1129,6 +1129,27 @@ class SetupController:
                         rows.append(DisplayRow(
                             "Restore original state manually, then verify restoration."
                         ))
+                routing = getattr(experiment, "routing_analysis", None)
+                if routing is not None:
+                    rows.append(DisplayRow("Receiver / Device Routing", dim=True))
+                    for finding in routing.summary[:4]:
+                        rows.append(DisplayRow(finding))
+                    confirmed_routes = [
+                        item for item in routing.evidence
+                        if item.status.value == "confirmed_route"
+                    ]
+                    rows.append(DisplayRow(
+                        f"Confirmed logical routes: {len(confirmed_routes)}"
+                    ))
+                    if routing.ambiguities:
+                        rows.append(DisplayRow(
+                            f"Unresolved routing questions: {len(routing.ambiguities)}"
+                        ))
+                    if routing.next_plan is not None and routing.next_plan.selected_action is not None:
+                        rows.append(DisplayRow(
+                            "Best next routing experiment: "
+                            + routing.next_plan.selected_action.label
+                        ))
             rows.extend([
                 DisplayRow("Run Full Automatic Lab", 0),
                 DisplayRow(

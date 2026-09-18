@@ -146,6 +146,13 @@ ACTION_TEMPLATES: Mapping[str, ControlledAction] = {
         "Restore the original setting with the same physical or external tool used for the demonstration.",
         effort=2, duration=2, burden=1, tags=("restoration",),
     ),
+    "OTHER_CHILD_ROUTE_CONTROL": _action(
+        "OTHER_CHILD_ROUTE_CONTROL", ControlledActionType.CUSTOM_LABELLED_ACTION,
+        "analogous action on another paired child", ActionSafetyClass.PHYSICAL_ONLY,
+        "Leave the selected mouse idle and perform the prompted action only on the other paired device.",
+        effort=2, duration=2, equipment=1, burden=2,
+        tags=("routing", "other-child", "negative-control"),
+    ),
 }
 
 
@@ -382,6 +389,7 @@ def _stop_reason(updates: Sequence[HypothesisUpdate]) -> LabStopReason | None:
 
 Verifier = Callable[[LabExperimentPlan], Sequence[PhysicalEvidence]]
 EffectVerifier = Callable[[LabExperiment], LabExperiment]
+RouteMapper = Callable[[LabExperiment], LabExperiment]
 
 
 def execute_lab_plan(
@@ -395,6 +403,7 @@ def execute_lab_plan(
     session_factory: Callable[..., ReadOnlyLearningSession] = ReadOnlyLearningSession,
     verifier_runners: Mapping[LabInstrument, Verifier] | None = None,
     effect_verifier: EffectVerifier | None = None,
+    route_mapper: RouteMapper | None = None,
 ) -> LabExperiment:
     """Produce one canonical experiment from a plan using read-only capture callbacks."""
 
@@ -500,12 +509,18 @@ def execute_lab_plan(
         analyzed = effect_verifier(analyzed)
         if analyzed.write_authorized:
             raise PermissionError("effect verification cannot grant Lab write authority")
+    if route_mapper is not None:
+        analyzed = route_mapper(analyzed)
+        if analyzed.write_authorized:
+            raise PermissionError("routing analysis cannot grant Lab write authority")
     updates = update_hypotheses(plan.target_hypotheses, analyzed)
     completed += 1
     emit(LabProgressEvent(LabProgressStage.HYPOTHESIS_UPDATE, "Updating retained hypotheses", completed, total))
-    stop = _stop_reason(updates)
-    next_plan = None
-    if stop is None:
+    specialized_stop = analyzed.stop_reason
+    specialized_next_plan = analyzed.next_plan
+    stop = specialized_stop or _stop_reason(updates)
+    next_plan = specialized_next_plan
+    if stop is None and next_plan is None:
         dispositions = {item.hypothesis_id: item for item in updates}
         revised = tuple(
             replace(

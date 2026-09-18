@@ -203,6 +203,34 @@ class PersistenceLevel(IntEnum):
     HOST_SESSION_RESTART = 6
 
 
+class RoutingStatus(str, Enum):
+    UNMAPPED = "unmapped"
+    CANDIDATE_ROUTE = "candidate_route"
+    AMBIGUOUS_ROUTE = "ambiguous_route"
+    CONFIRMED_ROUTE = "confirmed_route"
+
+
+class RoutingRelationship(str, Enum):
+    RECEIVER_CHILD = "receiver_child"
+    ROUTE_OWNERSHIP = "route_ownership"
+    TARGET_FIELD_CANDIDATE = "target_field_candidate"
+    REQUEST_RESPONSE = "request_response"
+    ASYNC_RESPONSE = "async_response"
+    INTERFACE_NAMESPACE = "interface_namespace"
+    REPORT_ROUTE = "report_route"
+    REDISCOVERED_ROUTE = "rediscovered_route"
+
+
+class RoutingNodeKind(str, Enum):
+    PHYSICAL_RECEIVER = "physical_receiver"
+    LOGICAL_CHILD = "logical_child"
+    RECEIVER_LOCAL = "receiver_local"
+    INTERFACE = "interface"
+    NAMESPACE = "namespace"
+    REPORT = "report"
+    UNKNOWN_ROUTE = "unknown_route"
+
+
 class HypothesisDisposition(str, Enum):
     SUPPORTED = "supported"
     STRENGTHENED = "strengthened"
@@ -509,6 +537,133 @@ class PersistenceAssessment:
 
 
 @dataclass(frozen=True)
+class RouteEndpoint:
+    transport: str
+    interface_number: int | None = None
+    endpoint: int | None = None
+    channel: str | None = None
+    namespace: str | None = None
+    report_id: int | None = None
+    report_type: str | None = None
+    direction: str | None = None
+    logical_record_type: int | str | None = None
+    hid_collection: str | None = None
+
+    @property
+    def identity(self) -> tuple[object, ...]:
+        return (
+            self.transport, self.interface_number, self.endpoint, self.channel,
+            self.namespace, self.report_id, self.report_type, self.direction,
+            self.logical_record_type, self.hid_collection,
+        )
+
+
+@dataclass(frozen=True)
+class RoutingEvidence:
+    evidence_id: str
+    experiment_id: str
+    physical_device_context: Mapping[str, object]
+    connection_generation: int
+    receiver_identity: str | None
+    child_identity_candidate: bytes | int | str | None
+    source_route: RouteEndpoint
+    destination_route: RouteEndpoint | None
+    internal_target: bytes | int | str | None
+    route_tag: str | None
+    source_observation_ids: tuple[str, ...]
+    relationship: RoutingRelationship
+    status: RoutingStatus
+    confidence: str
+    proof_state: ProofState = ProofState.OBSERVED
+    contradictions: tuple[str, ...] = ()
+    ambiguity: tuple[str, ...] = ()
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.evidence_id or not self.experiment_id or not self.physical_device_context:
+            raise ValueError("routing evidence requires evidence, experiment, and physical identity")
+        if self.connection_generation < 0:
+            raise ValueError("routing evidence generation must be non-negative")
+        if not self.source_route.transport or not self.source_observation_ids:
+            raise ValueError("routing evidence requires an observed route and source observations")
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class TargetFieldCandidate:
+    stream_id: str
+    offset: int
+    values_by_child: Mapping[str, int]
+    observation_count: int
+    status: RoutingStatus
+    confidence: str
+    source_observation_ids: tuple[str, ...]
+    contradictions: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RouteNode:
+    node_id: str
+    kind: RoutingNodeKind
+    label: str
+    connection_generation: int
+    observed_identifier: bytes | int | str | None = None
+    confidence: str = "observed"
+
+
+@dataclass(frozen=True)
+class RouteEdge:
+    source_node_id: str
+    destination_node_id: str
+    relationship: RoutingRelationship
+    evidence_ids: tuple[str, ...]
+    status: RoutingStatus
+    confidence: str
+    asymmetric: bool = False
+
+
+@dataclass(frozen=True)
+class ReceiverChildGraph:
+    experiment_id: str
+    physical_device_context: Mapping[str, object]
+    connection_generation: int
+    nodes: tuple[RouteNode, ...]
+    edges: tuple[RouteEdge, ...]
+    contradictions: tuple[str, ...] = ()
+    ambiguities: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RouteRediscoveryComparison:
+    physical_device_context: Mapping[str, object]
+    old_generation: int
+    new_generation: int
+    stable_routes: tuple[str, ...]
+    remapped_routes: tuple[str, ...]
+    missing_routes: tuple[str, ...]
+    new_routes: tuple[str, ...]
+    automatically_carried_forward: bool = False
+
+
+@dataclass(frozen=True)
+class RoutingAnalysis:
+    evidence: tuple[RoutingEvidence, ...]
+    graph: ReceiverChildGraph
+    target_field_candidates: tuple[TargetFieldCandidate, ...]
+    contradictions: tuple[str, ...]
+    ambiguities: tuple[str, ...]
+    next_plan: LabExperimentPlan | None
+    summary: tuple[str, ...]
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
 class LabLifecycleEvent:
     kind: LifecycleEventKind
     timestamp_ns: int
@@ -722,6 +877,8 @@ class LabExperiment:
     effect_evidence: tuple[EffectEvidence, ...] = ()
     persistence_evidence: tuple[PersistenceEvidence, ...] = ()
     persistence_assessment: PersistenceAssessment | None = None
+    routing_evidence: tuple[RoutingEvidence, ...] = ()
+    routing_analysis: RoutingAnalysis | None = None
 
     def __post_init__(self) -> None:
         if not self.experiment_id or not self.purpose:
@@ -753,6 +910,10 @@ class LabExperiment:
             raise ValueError("effect evidence belongs to a different experiment")
         if any(item.experiment_id != self.experiment_id for item in self.persistence_evidence):
             raise ValueError("persistence evidence belongs to a different experiment")
+        if any(item.experiment_id != self.experiment_id for item in self.routing_evidence):
+            raise ValueError("routing evidence belongs to a different experiment")
+        if any(item.connection_generation != self.connection_generation for item in self.routing_evidence):
+            raise ValueError("routing evidence cannot silently cross connection generations")
 
     @property
     def write_authorized(self) -> bool:
@@ -783,6 +944,26 @@ class LabExperiment:
         replay_value = lambda value: (
             {"bytes_hex": value.hex()} if isinstance(value, bytes) else value
         )
+        replay_child = lambda value: (
+            replay_value(value)
+            if not isinstance(value, str) or value in {
+                "selected-mouse", "other-child", "receiver", "receiver-local",
+                "dongle", "dongle-local",
+            }
+            else redact_id(value)
+        )
+        replay_route = lambda route: {
+            "transport": route.transport,
+            "interface_number": route.interface_number,
+            "endpoint": route.endpoint,
+            "channel": route.channel,
+            "namespace": route.namespace,
+            "report_id": route.report_id,
+            "report_type": route.report_type,
+            "direction": route.direction,
+            "logical_record_type": route.logical_record_type,
+            "hid_collection": route.hid_collection,
+        }
         timing = self.timing_profile
         return {
             "schema": 1,
@@ -925,6 +1106,92 @@ class LabExperiment:
                     "timing_uncertainty": self.persistence_assessment.timing_uncertainty,
                 }
                 if self.persistence_assessment is not None else None
+            ),
+            "routing_evidence": [
+                {
+                    "evidence_id": item.evidence_id,
+                    "connection_generation": item.connection_generation,
+                    "receiver_identity": (
+                        redact_id(item.receiver_identity) if item.receiver_identity else None
+                    ),
+                    "child_identity_candidate": replay_child(item.child_identity_candidate),
+                    "source_route": replay_route(item.source_route),
+                    "destination_route": (
+                        replay_route(item.destination_route) if item.destination_route else None
+                    ),
+                    "internal_target": replay_value(item.internal_target),
+                    "route_tag": item.route_tag,
+                    "source_observation_ids": [
+                        redact_id(source) for source in item.source_observation_ids
+                    ],
+                    "relationship": item.relationship.value,
+                    "status": item.status.value,
+                    "confidence": item.confidence,
+                    "proof_state": item.proof_state.value,
+                    "contradictions": list(item.contradictions),
+                    "ambiguity": list(item.ambiguity),
+                    "reason": item.reason,
+                }
+                for item in sorted(self.routing_evidence, key=lambda item: item.evidence_id)
+            ],
+            "routing_analysis": (
+                {
+                    "nodes": [
+                        {
+                            "node_id": node.node_id,
+                            "kind": node.kind.value,
+                            "label": (
+                                node.label
+                                if node.kind is not RoutingNodeKind.LOGICAL_CHILD
+                                or not isinstance(node.observed_identifier, str)
+                                or node.observed_identifier in {"selected-mouse", "other-child"}
+                                else "child " + redact_id(node.observed_identifier)
+                            ),
+                            "connection_generation": node.connection_generation,
+                            "observed_identifier": replay_child(node.observed_identifier),
+                            "confidence": node.confidence,
+                        }
+                        for node in self.routing_analysis.graph.nodes
+                    ],
+                    "edges": [
+                        {
+                            "source_node_id": edge.source_node_id,
+                            "destination_node_id": edge.destination_node_id,
+                            "relationship": edge.relationship.value,
+                            "evidence_ids": list(edge.evidence_ids),
+                            "status": edge.status.value,
+                            "confidence": edge.confidence,
+                            "asymmetric": edge.asymmetric,
+                        }
+                        for edge in self.routing_analysis.graph.edges
+                    ],
+                    "target_field_candidates": [
+                        {
+                            "stream_id": redact_id(candidate.stream_id),
+                            "offset": candidate.offset,
+                            "values_by_child": {
+                                str(replay_child(child)): value
+                                for child, value in sorted(candidate.values_by_child.items())
+                            },
+                            "observation_count": candidate.observation_count,
+                            "status": candidate.status.value,
+                            "confidence": candidate.confidence,
+                            "source_observation_ids": [
+                                redact_id(source) for source in candidate.source_observation_ids
+                            ],
+                            "contradictions": list(candidate.contradictions),
+                        }
+                        for candidate in self.routing_analysis.target_field_candidates
+                    ],
+                    "contradictions": list(self.routing_analysis.contradictions),
+                    "ambiguities": list(self.routing_analysis.ambiguities),
+                    "next_plan": (
+                        self.routing_analysis.next_plan.replay_fixture()
+                        if self.routing_analysis.next_plan else None
+                    ),
+                    "summary": list(self.routing_analysis.summary),
+                }
+                if self.routing_analysis is not None else None
             ),
         }
 

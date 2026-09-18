@@ -545,3 +545,24 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
     assert "reconnect persistent" in effect_text
     assert "Strongest tested level: device reconnect" in effect_text
     assert "Restore original state manually" in effect_text
+
+    routing = SimpleNamespace(
+        summary=("child 0x01: high", "receiver-local: medium"),
+        evidence=(
+            SimpleNamespace(status=SimpleNamespace(value="confirmed_route")),
+        ),
+        ambiguities=("report 0x13 ownership",),
+        next_plan=SimpleNamespace(
+            selected_action=SimpleNamespace(label="power-cycle the selected mouse"),
+        ),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+        routing_analysis=routing,
+    ))
+    route_text = "\n".join(row.text for row in app.detail_rows())
+    assert "Receiver / Device Routing" in route_text
+    assert "child 0x01: high" in route_text
+    assert "Confirmed logical routes: 1" in route_text
+    assert "Unresolved routing questions: 1" in route_text
+    assert "Best next routing experiment: power-cycle the selected mouse" in route_text

@@ -1,5 +1,34 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab receiver/child routing milestone
+
+- `LabExperiment` now retains canonical generation-bound routing evidence and a
+  derived receiver/child graph. Physical receiver identity, logical child
+  candidates, receiver-local ownership, interfaces, endpoints, channels,
+  namespaces, reports, record types, internal targets, and asymmetric routes
+  remain distinct.
+- Target-field inference requires repeated controlled cross-child contrast.
+  Constant bytes are not treated as device IDs, indistinguishable children stay
+  ambiguous, and selected-device USB routes without child evidence stay
+  explicitly unmapped. Unrelated physical fingerprints are excluded.
+- Existing dialogue and pushed-state associations map cross-interface request/
+  response and asynchronous routes without requiring transport symmetry.
+  Repeated timing may strengthen an existing correlation but cannot establish
+  ownership by itself. Every routing analysis first feeds the Differential
+  Analyzer.
+- Route graphs support one or many children, many interfaces per child, shared
+  interfaces, receiver-local namespaces, and shared VID:PID with observed
+  internal targets. Old-generation routes are never carried forward; explicit
+  rediscovery comparison reports stable, remapped, missing, and new routes.
+- Ambiguity produces a bounded other-child control, repeated selected-child
+  action, or mouse-only power-cycle plan through the existing information-gain
+  and human-cost machinery. Persistence evidence may support a route candidate
+  but never proves ownership or storage location by itself.
+- Focused Lab/discovery/protocol/TUI/security validation passes 123 tests; the
+  complete suite passes 889 with the existing GLib warning. Compileall and diff
+  checks pass. Physical hardware validation remains pending. No hardware write,
+  slot scan, routing probe, install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — Discovery Lab state/effect/persistence verification milestone
 
 - `LabExperiment` now retains canonical effect evidence, cross-generation

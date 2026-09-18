@@ -174,6 +174,49 @@ experiment. Deterministic replay retains effect and persistence findings while
 hashing source identifiers and omitting live device paths and unrelated human
 activity.
 
+## Receiver and child routing
+
+Routing evidence remains attached to `LabExperiment` and reuses its exact
+physical identity and connection generation. The receiver/child graph keeps the
+physical USB/HID receiver separate from logical child candidates, receiver-local
+ownership, interfaces, endpoints, channels, namespaces, reports, logical record
+types, internal targets, and route tags.
+
+The mapper projects existing selected-device USB observations, logical records,
+dialogues, pushed-state associations, timing, persistence, and differential
+findings. It supports:
+
+- one or multiple children behind one receiver;
+- many interfaces for one child or several routed children on one interface;
+- mouse-local and receiver-local namespaces with otherwise similar grammar;
+- shared VID:PID where an observed internal target is required;
+- asymmetric Output/Feature request to Input response routes;
+- controlled action to asynchronous state on another interface.
+
+An internal target candidate requires repeated controlled cross-child contrast.
+A constant byte is not a child ID. Timing can strengthen an already justified
+dialogue but cannot establish ownership. USB routes without logical evidence
+stay `UNMAPPED`; weaker evidence stays `CANDIDATE_ROUTE`; collisions become
+`AMBIGUOUS_ROUTE`; only repeated discriminating evidence becomes
+`CONFIRMED_ROUTE`.
+
+Route evidence cannot cross a connection generation. Old and newly rediscovered
+graphs may be compared for stable, remapped, missing, or new routes, but old
+ownership is never automatically carried forward. Persistence observations may
+support a mouse-versus-receiver hypothesis without proving either route or
+storage location.
+
+Routing ambiguity feeds the same information-gain planner. Depending on
+available evidence, the next experiment may keep the selected mouse idle while
+another paired child acts, repeat a selected-child control, or power-cycle only
+the mouse to distinguish mouse-local from receiver-local state. No arbitrary
+target IDs are transmitted and no receiver slots are scanned.
+
+The Lab page provides a concise receiver/device routing summary, confirmed route
+count, unresolved ownership count, and next routing experiment. Advanced replay
+retains interfaces, endpoints, report IDs, internal targets, asymmetric edges,
+generation, contradictions, and redacted source IDs.
+
 ## Safety and privacy
 
 - Capture is restricted to the physical mouse selected by Automatic Discovery.
@@ -189,8 +232,7 @@ activity.
 
 ## Deferred master-Lab milestones
 
-The receiver/child routing mapper, battery/charging investigator, vendor capture
-importer,
+The battery/charging investigator, vendor capture importer,
 `ProtocolKnowledgePackage`, automatic positive/negative contribution fixtures,
 repository contribution pipeline, and blind-device v1 acceptance suite remain
 bounded future milestones.
