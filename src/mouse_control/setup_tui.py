@@ -16,6 +16,7 @@ from typing import Any, Callable
 from .calibrated_profiles import find_calibrated_profile
 from .guided_discovery import GuidedDiscoveryOutcome
 from .hardware import HardwareError, get_backend
+from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 
 
@@ -163,7 +164,7 @@ class SetupController:
         self.discovery_complete = False
         self.discovery_result: Any | None = None
         self.discovery_error: str | None = None
-        self.discovery_progress: list[str] = []
+        self.discovery_progress: list[DiscoveryProgress] = []
         self.guided_outcome: GuidedDiscoveryOutcome | None = None
         self.deep_learning_outcome: Any | None = None
         self.research_plan: Any | None = None
@@ -320,11 +321,11 @@ class SetupController:
         except (HardwareError, AttributeError, OSError):
             return False
 
-    def record_discovery_progress(self, message: str) -> None:
-        message = str(message).strip()
-        if message:
-            self.discovery_progress.append(message)
-            self.status = message
+    def record_discovery_progress(self, event: DiscoveryProgress) -> None:
+        if not isinstance(event, DiscoveryProgress):
+            return
+        self.discovery_progress.append(event)
+        self.status = event.message
 
     def _refresh_observed_profile(self) -> None:
         """Load validated read-only evidence for the discovered physical device."""
@@ -378,6 +379,7 @@ class SetupController:
         self.research_plan = getattr(outcome, "research_plan", None)
         self.discovery_complete = True
         self.discovery_error = None
+        cached = bool(getattr(outcome, "cached_profile_used", False))
         # A discovery pass may have exposed an already-PROVEN exact-model store.
         # Rebind through the production registry so setup and runtime share the
         # exact same backend policy.
@@ -388,16 +390,21 @@ class SetupController:
         self.backend = self._backend_factory(self.selected)
         self._discover_into_choices()
         self._refresh_observed_profile()
-        self.status = (
-            "Automatic Discovery complete. No verified host-accessible DPI/polling write path; "
-            "continue with DPI-stage observation and button remapping."
-            if self.no_write_path
-            else "Automatic Discovery complete. Review capabilities before configuration."
-        )
+        if cached:
+            self.discovery_progress.clear()
+            self.status = "Known device ready; learned discovery evidence was reused."
+        else:
+            self.status = (
+                "Automatic Discovery complete. No verified host-accessible DPI/polling write path; "
+                "continue with DPI-stage observation and button remapping."
+                if self.no_write_path
+                else "Automatic Discovery complete. Review capabilities before configuration."
+            )
 
     def apply_discovery_error(self, message: str) -> None:
         self.discovery_error = message
         self.discovery_complete = False
+        self.discovery_progress.clear()
         self.status = message
 
     @property
@@ -826,7 +833,14 @@ class SetupController:
             rows.extend(DisplayRow(line) for line in self.hardware_lines())
             if self.discovery_progress:
                 rows.extend((DisplayRow(""), DisplayRow("Recent discovery progress", dim=True)))
-                rows.extend(DisplayRow(line, dim=True) for line in self.discovery_progress[-4:])
+                for event in self.discovery_progress[-4:]:
+                    if event.determinate:
+                        width = 20
+                        filled = min(width, round(width * event.completed / event.total))
+                        indicator = "[" + "█" * filled + "░" * (width - filled) + "]"
+                    else:
+                        indicator = "⠋"
+                    rows.append(DisplayRow(f"{indicator} {event.message}", dim=True))
             rows.append(DisplayRow(""))
             rows.append(
                 DisplayRow(

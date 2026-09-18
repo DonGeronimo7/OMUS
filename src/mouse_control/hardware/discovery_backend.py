@@ -179,16 +179,9 @@ class DiscoveryBackend(HardwareBackend):
         )
 
     def _run_passive_discovery(self, device: MouseDevice) -> PhysicalDevice | None:
-        """Run read-only Discovery; failure must not disable evdev remapping."""
+        """Rebind current members without repeating the learning pipeline."""
         try:
-            from ..discovery_engine import DiscoveryEngine
-
-            engine = DiscoveryEngine(
-                topology_builder=self._topology_builder,
-                detectors=(),
-                save_profiles=False,
-            )
-            return engine.discover(device).device
+            return self._topology_builder(device)
         except Exception:
             return None
 

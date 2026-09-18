@@ -1,5 +1,27 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — Persistent discovery fast path and semantic progress
+
+- Normal backend startup now rebuilds the current physical/member graph directly;
+  it no longer invokes the comprehensive discovery engine before proven protocol
+  adapters perform their own bounded initialization.
+- Automatic Discovery profiles can be restored only after fresh stable model,
+  transport, VID:PID, true-instance (when available), and exact responder-member
+  matching. Live `/dev` nodes always come from the current graph. Corrupt,
+  ambiguous, changed-member, and different-instance records fall back safely.
+- A healthy known-device profile skips HID descriptor parsing, protocol detection,
+  feature baselines, and learning. `mouse-control rediscover` and the TUI retry
+  action explicitly force the full pipeline; the prior record remains until the
+  replacement is atomically saved.
+- Discovery emits frontend-neutral semantic progress with determinate milestone
+  counts and indeterminate states for observation work. The TUI renders this only
+  for genuine discovery and clears it cleanly on failure; cache hits render as
+  immediately ready.
+- Automated validation passes 669 tests with the existing GLib warning. A
+  controlled three-interface benchmark measured the learned-profile path at
+  0.188 ms versus 91.367 ms for forced descriptor work. Physical startup and
+  reconnect timing remain pending on installed hardware.
+
 ## 2026-09-17 — v0.9.4 integrated release-candidate closure
 
 - Canonical usbmon evidence now retains optional extended binary-header fields

@@ -105,6 +105,28 @@ def test_left_right_and_back_navigate_sections_without_terminal():
     assert app.section is SetupSection.DEVICE
 
 
+def test_normal_navigation_reuses_session_without_hardware_queries():
+    backend = FakeBackend()
+    calls = {
+        name: 0 for name in (
+            'get_dpi', 'get_polling_rate', 'get_dpi_values', 'get_polling_rates'
+        )
+    }
+    for name in calls:
+        original = getattr(backend, name)
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] += 1
+            return _original(*args, **kwargs)
+        setattr(backend, name, counted)
+    app, _ = controller(backends={MOUSE1.path: backend, MOUSE2.path: FakeBackend()})
+    baseline = dict(calls)
+
+    for key in ('RIGHT', 'RIGHT', 'LEFT', 'RIGHT', 'RIGHT', 'BACK', 'LEFT', 'RIGHT'):
+        assert app.handle_key(key).kind is ActionKind.NONE
+
+    assert calls == baseline
+
+
 def test_dpi_edit_is_verified_before_state_changes():
     app, backends = controller()
     app.section_index = SECTIONS.index(SetupSection.DPI)

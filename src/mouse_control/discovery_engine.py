@@ -13,6 +13,7 @@ from .discovery_models import (
     DiscoveredCapability,
     DiscoveryEvidence,
     DiscoveryPhase,
+    DiscoveryProgress,
     DiscoveryResult,
     EvidenceLevel,
     PhysicalDevice,
@@ -79,6 +80,7 @@ class DiscoveryEngine:
         self._observations: list[DiscoveryEvidence] = []
         self._phases: list[DiscoveryPhase] = []
         self._profile_path: Path | None = None
+        self._cached_profile_used = False
 
     @property
     def descriptors(self) -> dict[DeviceNode, ParsedHidDescriptor]:
@@ -106,12 +108,20 @@ class DiscoveryEngine:
 
         return self._profile_path
 
+    @property
+    def cached_profile_used(self) -> bool:
+        return self._cached_profile_used
+
     def _phase(self, phase: DiscoveryPhase) -> None:
         if not self._phases or self._phases[-1] is not phase:
             self._phases.append(phase)
 
     def discover(
-        self, mouse: MouseDevice, *, progress: Callable[[str], None] | None = None
+        self,
+        mouse: MouseDevice,
+        *,
+        progress: Callable[[DiscoveryProgress], None] | None = None,
+        force: bool = False,
     ) -> DiscoveryResult:
         """Run automatic discovery for one selected mouse with optional stage progress."""
 
@@ -121,29 +131,67 @@ class DiscoveryEngine:
         self._observations.clear()
         self._phases.clear()
         self._profile_path = None
-        report = progress or (lambda _message: None)
+        self._cached_profile_used = False
+        report = progress or (lambda _event: None)
 
-        report("• Establishing physical-device topology…")
+        def emit(
+            phase: DiscoveryPhase,
+            message: str,
+            completed: int | None = None,
+            total: int | None = None,
+            *,
+            cached: bool = False,
+        ) -> None:
+            report(DiscoveryProgress(phase, message, completed, total, cached))
+
+        emit(DiscoveryPhase.ENUMERATE, "Establishing physical-device topology…", 0, 6)
         self._phase(DiscoveryPhase.ENUMERATE)
         physical = self.build_topology(mouse)
-        report("✓ Physical mouse identified")
-        self._phase(DiscoveryPhase.CORRELATE)
-        report(f"✓ {len(physical.hidraw_nodes)} HID interface(s) correlated")
+        if not force and not physical.ambiguous:
+            restored = self._profile_store.restore_result(physical)
+            if restored is not None:
+                self._profile_path, result = restored
+                self._cached_profile_used = True
+                emit(
+                    DiscoveryPhase.COMPLETE,
+                    "Known device profile matched; learned evidence reused",
+                    1,
+                    1,
+                    cached=True,
+                )
+                return result
 
-        report("• Reading HID descriptors safely…")
+        emit(DiscoveryPhase.ENUMERATE, "Physical mouse identified", 1, 6)
+        self._phase(DiscoveryPhase.CORRELATE)
+        emit(
+            DiscoveryPhase.CORRELATE,
+            f"{len(physical.hidraw_nodes)} HID interface(s) correlated",
+            2,
+            6,
+        )
+
+        emit(DiscoveryPhase.DESCRIPTORS, "Reading HID descriptors safely…", 2, 6)
         self._phase(DiscoveryPhase.DESCRIPTORS)
         self.inspect_descriptors(physical)
-        report(f"✓ {len(self._descriptors)} HID descriptor(s) collected")
+        emit(
+            DiscoveryPhase.DESCRIPTORS,
+            f"{len(self._descriptors)} HID descriptor(s) collected",
+            3,
+            6,
+        )
 
-        report("• Searching known protocol teachers and repertoire…")
+        emit(DiscoveryPhase.PROTOCOL, "Searching known protocol teachers and repertoire…", 3, 6)
         self._phase(DiscoveryPhase.PROTOCOL)
         protocol = self.detect_protocol(physical)
 
         if protocol is not None:
-            report(f"✓ Known protocol matched: {protocol.name}")
+            emit(DiscoveryPhase.PROTOCOL, f"Known protocol matched: {protocol.name}", 4, 6)
             capabilities = self.query_known_protocol(protocol)
         else:
-            report("• No proven protocol match; observing unknown hardware read-only…")
+            emit(
+                DiscoveryPhase.OBSERVE,
+                "Observing unknown hardware read-only…",
+            )
             self._phase(DiscoveryPhase.OBSERVE)
             capabilities = self.observe_unknown_device(physical)
 
@@ -151,12 +199,13 @@ class DiscoveryEngine:
         result = self.validate(physical, protocol, capabilities)
         for name, capability in sorted(result.capabilities.items()):
             mode = "read/write" if capability.writable else "read-only" if capability.readable else "unknown"
-            report(f"✓ {name.replace('_', ' ')} capability: {mode}")
+            emit(DiscoveryPhase.VALIDATE, f"{name.replace('_', ' ')} capability: {mode}", 5, 6)
         self._phase(DiscoveryPhase.COMPLETE)
         result.phases = list(self._phases)
 
         if self._save_profiles and not physical.ambiguous:
             self._profile_path = self.save_profile(result)
+        emit(DiscoveryPhase.COMPLETE, "Discovery evidence persisted", 6, 6)
         return result
 
     def build_topology(self, mouse: MouseDevice) -> PhysicalDevice:

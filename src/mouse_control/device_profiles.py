@@ -16,7 +16,16 @@ import re
 from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
 
-from .discovery_models import DiscoveryEvidence, DiscoveryResult
+from .discovery_models import (
+    DeviceNode,
+    DiscoveredCapability,
+    DiscoveryEvidence,
+    DiscoveryPhase,
+    DiscoveryResult,
+    EvidenceLevel,
+    PhysicalDevice,
+    ProtocolMatch,
+)
 
 
 PROFILE_SCHEMA_VERSION = 1
@@ -301,9 +310,125 @@ class DeviceProfileStore:
                 return exact[0]
             if len(exact) > 1:
                 return None
+            # A cache bound to another true device-unique identifier must not
+            # become model-wide merely because the current instance differs.
+            matches = [
+                item for item in matches
+                if item[1]["fingerprints"].get("instance") is None
+            ]
         model = [
             item
             for item in matches
             if item[1]["fingerprints"].get("model") == model_fingerprint
         ]
         return model[0] if len(model) == 1 else None
+
+    @staticmethod
+    def _evidence(items: Any) -> list[DiscoveryEvidence]:
+        result: list[DiscoveryEvidence] = []
+        if not isinstance(items, list):
+            return result
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            try:
+                level = EvidenceLevel[str(item["level"]).upper()]
+            except (KeyError, TypeError):
+                continue
+            details = item.get("details")
+            result.append(DiscoveryEvidence(
+                level=level,
+                code=str(item.get("code", "cached-evidence")),
+                message=str(item.get("message", "")),
+                source=(None if item.get("source") is None else str(item["source"])),
+                details=details if isinstance(details, Mapping) else {},
+            ))
+        return result
+
+    def restore_result(
+        self,
+        physical: PhysicalDevice,
+    ) -> tuple[Path, DiscoveryResult] | None:
+        """Restore proven/static discovery facts for an exactly rebound model.
+
+        The caller supplies a freshly reconstructed physical graph. Live node
+        paths therefore never come from persistence. A responder is restored
+        only when exactly one current member matches all persisted interface
+        evidence.
+        """
+        found = self.find(
+            model_fingerprint=physical.model_fingerprint,
+            instance_fingerprint=physical.instance_fingerprint,
+        )
+        if found is None:
+            return None
+        path, profile = found
+        identity = profile.get("identity", {})
+        if not isinstance(identity, Mapping) or any(
+            expected is not None and current is not None and expected != current
+            for expected, current in (
+                (identity.get("vendor_id"), physical.vendor_id),
+                (identity.get("product_id"), physical.product_id),
+                (identity.get("bus"), physical.bus),
+            )
+        ):
+            return None
+
+        capabilities: dict[str, DiscoveredCapability] = {}
+        raw_capabilities = profile.get("capabilities", {})
+        if not isinstance(raw_capabilities, Mapping):
+            return None
+        for name, raw in raw_capabilities.items():
+            if not isinstance(raw, Mapping):
+                return None
+            values = raw.get("values")
+            try:
+                capability = DiscoveredCapability(
+                    name=str(name),
+                    readable=bool(raw.get("readable")),
+                    writable=bool(raw.get("writable")),
+                    values=(None if values is None else tuple(int(value) for value in values)),
+                    minimum=(None if raw.get("minimum") is None else int(raw["minimum"])),
+                    maximum=(None if raw.get("maximum") is None else int(raw["maximum"])),
+                    step=(None if raw.get("step") is None else int(raw["step"])),
+                    evidence=self._evidence(raw.get("evidence")),
+                ).normalized()
+            except (TypeError, ValueError):
+                return None
+            capabilities[str(name)] = capability
+
+        protocol = None
+        raw_protocol = profile.get("protocol")
+        if isinstance(raw_protocol, Mapping):
+            responder = None
+            raw_responder = profile.get("responder")
+            if isinstance(raw_responder, Mapping):
+                candidates: list[DeviceNode] = [
+                    node for node in physical.hidraw_nodes
+                    if all(current == raw_responder.get(key) for key, current in (
+                        ("interface_number", node.interface_number),
+                        ("descriptor_sha256", node.descriptor_sha256),
+                        ("bus", node.bus),
+                        ("vendor_id", node.vendor_id),
+                        ("product_id", node.product_id),
+                    ))
+                ]
+                if len(candidates) != 1:
+                    return None
+                responder = candidates[0]
+            protocol = ProtocolMatch(
+                name=str(raw_protocol.get("name", "Learned protocol")),
+                version=(None if raw_protocol.get("version") is None else str(raw_protocol["version"])),
+                responder=responder,
+                evidence=self._evidence(raw_protocol.get("evidence")),
+                metadata={"cached_profile": True},
+            )
+
+        result = DiscoveryResult(
+            device=physical,
+            protocol=protocol,
+            capabilities=capabilities,
+            observations=self._evidence(profile.get("observations")),
+            phases=[DiscoveryPhase.ENUMERATE, DiscoveryPhase.COMPLETE],
+        )
+        return path, result

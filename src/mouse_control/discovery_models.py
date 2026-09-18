@@ -28,6 +28,33 @@ class DiscoveryPhase(Enum):
     COMPLETE = auto()
 
 
+@dataclass(frozen=True)
+class DiscoveryProgress:
+    """Frontend-neutral progress emitted by genuine discovery work.
+
+    ``total=None`` means the current operation is not truthfully measurable.
+    Cached-profile reuse is reported separately and is never presented as a
+    discovery progress bar by interactive frontends.
+    """
+
+    phase: DiscoveryPhase
+    message: str
+    completed: int | None = None
+    total: int | None = None
+    cached: bool = False
+
+    @property
+    def determinate(self) -> bool:
+        return (
+            self.completed is not None
+            and self.total is not None
+            and self.total > 0
+        )
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class EvidenceLevel(Enum):
     """Strength of a discovery claim.
 

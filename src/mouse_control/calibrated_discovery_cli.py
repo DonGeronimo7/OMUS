@@ -248,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     profile_path = None
     engine = DiscoveryEngine(detectors=(), save_profiles=False)
     try:
-        result = engine.discover(selected)
+        result = engine.discover(selected, force=True)
         session = ReadOnlyLearningSession(result.device, engine.descriptors)
         readable, unreadable = session.hidraw_access_report()
         if args.full_access and unreadable:

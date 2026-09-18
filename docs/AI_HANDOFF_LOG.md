@@ -1,5 +1,25 @@
 # AI handoff log
 
+## 2026-09-17 — Persistent discovery and responsive TUI fast path
+
+- Baseline `v0.9.4` (`97c391f`) repeated comprehensive passive discovery while
+  constructing the universal backend, then initialized proven adapters and live
+  setup capabilities. TUI navigation itself was already session-backed and
+  measured at roughly 0.002–0.008 ms in the controller benchmark.
+- Runtime binding now performs one current topology reconstruction without
+  descriptor/protocol learning. Automatic Discovery rehydrates static facts only
+  after stable identity and exact current-member checks; node renumbering is
+  accepted, ambiguity/different unique instances/corrupt records are refused.
+- Added semantic discovery progress events, determinate and indeterminate TUI
+  rendering, cache-hit suppression, clean failure teardown, explicit forced TUI
+  retry, and `mouse-control rediscover`. Existing evidence is replaced only after
+  a successful atomic save.
+- Controlled benchmark: known-profile restore 0.188 ms; forced three-interface
+  descriptor path 91.367 ms with 30 ms per-interface injected I/O. CLI import/help
+  remained 0.12 s. Focused discovery/lifecycle suite passed 139 tests; full suite
+  passed 669 tests with the existing GLib warning. No physical hardware timing or
+  acceptance was performed.
+
 ## 2026-09-17 — v0.9.4 integration and software release gates
 
 - Starting checkpoint `49a2f1571a011ebe166d9d8a3be045b1b4f9399d` was clean and exactly matched the requested discovery foundation.

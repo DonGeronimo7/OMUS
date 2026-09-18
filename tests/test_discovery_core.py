@@ -6,7 +6,7 @@ import pytest
 from mouse_control.discovery import MouseDevice
 from mouse_control.discovery_models import (
     DeviceNode, DiscoveredCapability, DiscoveryEvidence, DiscoveryResult,
-    EvidenceLevel, PhysicalDevice, ProtocolMatch,
+    DiscoveryProgress, EvidenceLevel, PhysicalDevice, ProtocolMatch,
 )
 from mouse_control.device_topology import (
     build_device_graph, calculate_instance_fingerprint, calculate_model_fingerprint,
@@ -205,3 +205,74 @@ def test_engine_exposes_saved_profile_path(tmp_path):
     payload = result_to_dict(result, profile_path=engine.profile_path)
     assert payload['profile_path'] == str(engine.profile_path)
     assert payload['device']['ambiguous'] is False
+
+
+def test_second_discovery_reuses_profile_without_descriptor_or_protocol_probe(tmp_path):
+    old_hid = node('/dev/hidraw8', 'hidraw')
+    physical = PhysicalDevice(
+        'Known', 0x046D, 0x4074, 3, None, [], [old_hid], 'stable-model', None
+    )
+    result = DiscoveryResult(
+        physical,
+        ProtocolMatch('known-protocol', '1', old_hid, [
+            DiscoveryEvidence(EvidenceLevel.PROVEN, 'protocol', 'proven')
+        ]),
+        {'dpi': DiscoveredCapability(
+            'dpi', True, True, values=(800, 1600),
+            evidence=[DiscoveryEvidence(EvidenceLevel.PROVEN, 'dpi', 'proven')],
+        )},
+    )
+    store = DeviceProfileStore(tmp_path)
+    store.save(result)
+
+    rebound_hid = node('/dev/hidraw19', 'hidraw')
+    rebound = PhysicalDevice(
+        'Known', 0x046D, 0x4074, 3, None, [], [rebound_hid], 'stable-model', None
+    )
+    probe_calls = []
+    detector_calls = []
+    engine = DiscoveryEngine(
+        topology_builder=lambda _mouse: rebound,
+        detectors=(lambda _physical: detector_calls.append(True),),
+        probe_factory=lambda candidate: probe_calls.append(candidate),
+        profile_store=store,
+    )
+    progress = []
+    restored = engine.discover(
+        MouseDevice('Known', '/dev/input/event20', vendor=0x046D, product=0x4074),
+        progress=progress.append,
+    )
+
+    assert engine.cached_profile_used is True
+    assert restored.protocol is not None
+    assert restored.protocol.responder == rebound_hid
+    assert restored.capabilities['dpi'].writable is True
+    assert probe_calls == []
+    assert detector_calls == []
+    assert progress[-1].cached is True
+    assert all(isinstance(event, DiscoveryProgress) for event in progress)
+
+
+def test_explicit_rediscovery_bypasses_known_profile(tmp_path):
+    physical = PhysicalDevice('Known', 1, 2, 3, None, [], [], 'model', None)
+    store = DeviceProfileStore(tmp_path)
+    store.save(DiscoveryResult(physical, None, {}))
+    engine = DiscoveryEngine(
+        topology_builder=lambda _mouse: physical,
+        detectors=(),
+        profile_store=store,
+        save_profiles=False,
+    )
+
+    engine.discover(MouseDevice('Known', '/dev/input/event1'), force=True)
+
+    assert engine.cached_profile_used is False
+
+
+def test_profile_with_different_unique_instance_is_not_reused(tmp_path):
+    stored = PhysicalDevice('Mouse', 1, 2, 3, None, [], [], 'model', 'instance-a')
+    store = DeviceProfileStore(tmp_path)
+    store.save(DiscoveryResult(stored, None, {}))
+    current = PhysicalDevice('Mouse', 1, 2, 3, None, [], [], 'model', 'instance-b')
+
+    assert store.restore_result(current) is None

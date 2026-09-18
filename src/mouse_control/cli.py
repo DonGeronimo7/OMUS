@@ -77,6 +77,11 @@ def _build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--device", type=int, metavar="N")
     discover.add_argument("--output", type=Path, required=True, metavar="FILE")
     discover.add_argument("--generic-only", action="store_true")
+    rediscover = sub.add_parser(
+        "rediscover",
+        help="intentionally replace persisted discovery evidence for one mouse",
+    )
+    rediscover.add_argument("--device", type=int, metavar="N")
     from .sensor_calibration_cli import configure_parser as configure_cpi_parser
     configure_cpi_parser(sub.add_parser(
         "cpi",
@@ -584,6 +589,43 @@ def main(argv: list[str] | None = None) -> int:
         if args.generic_only:
             command.append("--generic-only")
         return discovery_main(command)
+
+    if args.command == "rediscover":
+        from .discovery_models import DiscoveryProgress
+        from .guided_discovery import run_automatic_discovery
+
+        mice = get_mouse_devices()
+        if not mice:
+            print("No mouse devices found. Check input permissions.", file=sys.stderr)
+            return 1
+        if args.device is None:
+            selected = select_mouse_device(mice)
+            if selected is None:
+                return 0
+        elif args.device < 1 or args.device > len(mice):
+            print(f"--device must be between 1 and {len(mice)}", file=sys.stderr)
+            return 2
+        else:
+            selected = mice[args.device - 1]
+
+        def show_progress(event: DiscoveryProgress) -> None:
+            if event.determinate:
+                percent = round(100 * event.completed / event.total)
+                print(f"[{percent:3d}%] {event.message}")
+            else:
+                print(f"[ • ] {event.message}")
+
+        print(f"Rediscovering {selected.name}; existing evidence remains until success.")
+        try:
+            outcome = run_automatic_discovery(selected, progress=show_progress, force=True)
+        except Exception as exc:
+            print(f"Rediscovery failed; existing learned evidence was retained: {exc}", file=sys.stderr)
+            return 1
+        path = outcome.engine.profile_path
+        print("Automatic discovery complete; replacement evidence saved.")
+        if path is not None:
+            print(f"Profile: {path}")
+        return 0
 
     if args.command == "cpi":
         from .sensor_calibration_cli import run_calibration

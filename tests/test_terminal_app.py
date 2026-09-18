@@ -43,6 +43,26 @@ def test_cpi_subcommand_dispatches_to_packaged_calibration(monkeypatch):
     assert seen[0].known_dpi == 1600
 
 
+def test_rediscover_is_explicit_and_forces_full_engine(monkeypatch):
+    from types import SimpleNamespace
+    from mouse_control.discovery import MouseDevice
+    from mouse_control import guided_discovery
+
+    mouse = MouseDevice('Known', '/dev/input/event1')
+    engine = SimpleNamespace(profile_path=Path('/tmp/profile.json'))
+    seen = []
+    monkeypatch.setattr(cli, 'get_mouse_devices', lambda: [mouse])
+    monkeypatch.setattr(
+        guided_discovery,
+        'run_automatic_discovery',
+        lambda selected, **kwargs: seen.append((selected, kwargs)) or SimpleNamespace(engine=engine),
+    )
+
+    assert cli.main(['rediscover', '--device', '1']) == 0
+    assert seen[0][0] == mouse
+    assert seen[0][1]['force'] is True
+
+
 def test_no_argument_non_tty_prints_help_without_waiting(monkeypatch, capsys):
     monkeypatch.setattr(cli.sys, "stdin", io.StringIO())
     monkeypatch.setattr(cli.sys, "stdout", io.StringIO())

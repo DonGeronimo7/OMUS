@@ -379,17 +379,22 @@ class CursesSetupApp:
         self.controller.status = message
         self._draw()
 
-    def _run_automatic(self) -> None:
+    def _run_automatic(self, *, force: bool = False) -> None:
         self.controller.discovery_progress.clear()
 
-        def progress(message: str) -> None:
-            self.controller.record_discovery_progress(message)
-            self._draw()
+        def progress(event) -> None:
+            self.controller.record_discovery_progress(event)
+            # Topology matching is also the known-device fast path. Do not show
+            # a discovery screen unless the engine advances into genuine deep
+            # discovery work.
+            if not event.cached and event.phase.name not in {"ENUMERATE"}:
+                self._draw()
 
         try:
             outcome = run_automatic_discovery(
                 self.controller.selected,
                 progress=progress,
+                force=force,
             )
         except PermissionError as exc:
             self.controller.apply_discovery_error(
@@ -969,7 +974,7 @@ class CursesSetupApp:
                 ):
                     return False
             elif action.kind in {ActionKind.AUTOMATIC_DISCOVERY, ActionKind.RETRY_DISCOVERY}:
-                self._run_automatic()
+                self._run_automatic(force=action.kind is ActionKind.RETRY_DISCOVERY)
             elif action.kind is ActionKind.GUIDED_DISCOVERY:
                 self._run_guided()
             elif action.kind is ActionKind.MEASURE_POLLING:

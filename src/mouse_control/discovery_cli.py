@@ -259,7 +259,9 @@ def main(argv: list[str] | None = None) -> int:
         save_profiles=not args.no_save,
     )
     try:
-        result = engine.discover(selected)
+        # This command is an explicit research/discovery request, not normal
+        # startup. It must collect fresh evidence instead of consuming cache.
+        result = engine.discover(selected, force=True)
         if args.full_access:
             access_session = ReadOnlyLearningSession(result.device, engine.descriptors)
             readable = _full_access_preflight(access_session)
