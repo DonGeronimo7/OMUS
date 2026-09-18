@@ -48,7 +48,9 @@ def run_tui_setup_wizard() -> int:
         return 1
     established_config = bool(existing_config)
     was_active = cli.is_service_active()
+    service_suspended = False
     service_restored = False
+    explicitly_disabled = False
     selected = None
     backend = None
     choices = None
@@ -56,14 +58,19 @@ def run_tui_setup_wizard() -> int:
     status = 1
     restoration_error: Exception | None = None
 
-    if was_active:
-        try:
-            cli.stop_service()
-        except Exception as exc:
-            print(f"Could not stop the background service: {exc}", file=sys.stderr)
-            return 1
-
     try:
+        # The foreground TUI is the sole temporary owner of this suspension.
+        # Keep acquisition inside the same try/finally that restores it, so no
+        # normal TUI path can escape after a successful stop without reaching
+        # the one authoritative restoration decision below.
+        if was_active:
+            try:
+                cli.stop_service()
+                service_suspended = True
+            except Exception as exc:
+                print(f"Could not stop the background service: {exc}", file=sys.stderr)
+                return 1
+
         mice = cli.get_mouse_devices()
         if not mice:
             print("No mouse devices found. Check input permissions.", file=sys.stderr)
@@ -130,6 +137,9 @@ def run_tui_setup_wizard() -> int:
                         print(f"Warning: could not enable background service: {exc}")
                         print("Your mouse configuration was still saved successfully.")
                 else:
+                    # A saved choice is explicit.  A merely staged choice is
+                    # discarded with the rest of an unsaved TUI session.
+                    explicitly_disabled = True
                     print(
                         "Background service not enabled. "
                         "You can enable it later with: mouse-control install-service"
@@ -153,10 +163,15 @@ def run_tui_setup_wizard() -> int:
                 # Rollback can become impossible after a hardware disconnect;
                 # service restoration must still run.
                 logging.warning("Could not restore temporary DPI after setup: %s", exc)
-        # An established runtime remains enabled across every normal setup
-        # termination.  "Keep disabled" is a first-run choice; it must not
-        # turn an already active service into an accidental TUI side effect.
-        restore_required = was_active and established_config and not service_restored
+        # Configuration save/cancel is separate from runtime restoration.  An
+        # established service returns after every ordinary TUI exit unless the
+        # user explicitly saved the persistent-service disable choice.
+        restore_required = (
+            service_suspended
+            and established_config
+            and not service_restored
+            and not explicitly_disabled
+        )
         if restore_required:
             try:
                 cli.restart_service()

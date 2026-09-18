@@ -179,6 +179,48 @@ def test_tui_cancel_discards_transient_choices_without_changing_established_conf
     restart.assert_called_once_with()
 
 
+def test_tui_cancel_restores_established_service_even_when_disable_was_staged():
+    choices = SetupChoices(original_dpi=800, enable_service=False)
+    result = SetupTuiResult(False, MOUSE, Mock(), choices)
+    with patch.object(cli, "is_service_active", return_value=True), \
+         patch.object(cli, "stop_service"), \
+         patch.object(cli, "restart_service") as restart, \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result):
+        assert setup_entry.run_tui_setup_wizard() == 0
+    restart.assert_called_once_with()
+
+
+def test_established_cancel_service_operations_finish_active_without_a_late_stop():
+    choices = SetupChoices(original_dpi=800)
+    result = SetupTuiResult(False, MOUSE, Mock(), choices)
+    operations = []
+    state = {"active": True}
+
+    def is_active():
+        operations.append("active" if state["active"] else "inactive")
+        return state["active"]
+
+    def stop():
+        operations.append("stop")
+        state["active"] = False
+
+    def restart():
+        operations.append("restart")
+        state["active"] = True
+
+    with patch.object(cli, "is_service_active", side_effect=is_active), \
+         patch.object(cli, "stop_service", side_effect=stop), \
+         patch.object(cli, "restart_service", side_effect=restart), \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
+         patch.object(setup_entry, "run_setup_tui", return_value=result):
+        assert setup_entry.run_tui_setup_wizard() == 0
+    assert operations == ["active", "stop", "restart", "active"]
+    assert state["active"] is True
+
+
 def test_tui_setup_cancel_surfaces_failed_service_restoration(capsys):
     choices = SetupChoices(original_dpi=800, mappings={"BTN_LEFT": "passthrough"})
     result = SetupTuiResult(False, MOUSE, Mock(), choices)
@@ -235,7 +277,7 @@ def test_first_run_cancel_does_not_start_service_without_a_saved_configuration()
     restart.assert_not_called()
 
 
-def test_established_service_is_restored_after_saved_keep_disabled_choice(tmp_path):
+def test_explicit_saved_disable_does_not_restore_established_service(tmp_path):
     choices = SetupChoices(
         stages=[800, 1500, 2000, 2500, 3000],
         active_dpi=800,
@@ -256,7 +298,7 @@ def test_established_service_is_restored_after_saved_keep_disabled_choice(tmp_pa
         assert setup_entry.run_tui_setup_wizard() == 0
     save.assert_called_once_with("updated config")
     install.assert_not_called()
-    restart.assert_called_once_with()
+    restart.assert_not_called()
 
 
 def test_tui_wrapper_restores_temporary_dpi_when_curses_aborts(monkeypatch):

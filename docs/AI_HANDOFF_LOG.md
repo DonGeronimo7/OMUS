@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.7-1 scoped TUI service-suspension correction
+
+- Follow-up evidence: a direct user-manager trace showed the running service
+  being stopped for TUI ownership and receiving no later start request. The
+  earlier adjacent `restart`/`stop` journal jobs were not evidence of a TUI
+  cleanup callsite; this checkout has one persistent-service stop callsite.
+- Root cause: that initial stop was outside the `try/finally` that made the
+  restoration decision. The lifecycle was consequently not represented as one
+  authoritative scoped ownership operation.
+- Correction: the successful service suspension is now acquired inside the
+  setup transaction's `try` block and recorded explicitly. The same finalizer
+  restores an established previously active service exactly once on save,
+  cancel, EOF/interrupt, or recoverable failure. A staged `Keep disabled`
+  choice is discarded on cancel; a saved explicit disable remains respected.
+- Regression coverage records actual service state transitions and requires
+  `active → stop → restart → active` on established cancellation, with no
+  stop after the final restart. Focused lifecycle/TUI tests passed 90; complete
+  suite passed 746 with one existing GLib deprecation warning; compileall and
+  whitespace checks passed.
+- Physical validation: a real Logitech G305 session opened the canonical TUI,
+  showed its cancel confirmation, exited with status 0, and restored the
+  enabled `mouse-control.service` to active. The service's Native HID backend,
+  DPI watcher, and tray path returned. An unchanged-config scripted Save
+  navigation did not reach Review/Save and was not counted; it was terminated
+  and the enabled service restored. No package install, push, merge, tag, or
+  release was performed.
+
 ## 2026-09-18 — v0.9.7-1 established-runtime TUI restoration fix
 
 - Goal: preserve an already active Mouse Control runtime when its established
