@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from mouse_control.config import load_config
@@ -95,3 +98,33 @@ def test_config_load_reports_only_when_instrumentation_is_active(tmp_path):
     with recorder.activate():
         assert load_config(path)["device"]["event_path"] == "/dev/input/event1"
     assert len(recorder.samples("config_load")) == 1
+
+
+def test_cold_help_does_not_import_runtime_research_or_updater_subsystems():
+    script = """
+import contextlib
+import io
+import sys
+from mouse_control import app
+try:
+    with contextlib.redirect_stdout(io.StringIO()):
+        app.main([\"--help\"])
+except SystemExit as exc:
+    assert exc.code == 0
+for name in (
+    \"mouse_control.hardware.discovery_backend\",
+    \"mouse_control.sensor_calibration\",
+    \"mouse_control.updater\",
+    \"mouse_control.calibrated_discovery\",
+):
+    assert name not in sys.modules, name
+"""
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+    subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )

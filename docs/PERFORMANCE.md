@@ -80,3 +80,4 @@ explanation.
 | Change | Operation | Before | After | Absolute | Percent | Tests / safety |
 |---|---|---:|---:|---:|---:|---|
 | Baseline only | — | — | — | — | — | 728-test updater checkpoint; performance gate pending |
+| Lazy command-specific imports | Cold `mouse_control.app` import | 113.328 ms | 16.527 ms | -96.801 ms | -85.4% | Runtime/research/updater imports stay absent from cold help; full regression gate required |

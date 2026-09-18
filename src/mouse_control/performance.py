@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
-import statistics
 import time
 from typing import ParamSpec, TypeVar
 
@@ -64,12 +63,19 @@ class PerformanceRecorder:
     def summaries(self) -> tuple[TimingSummary, ...]:
         result = []
         for name, values in sorted(self._samples.items()):
+            ordered = sorted(values)
+            middle = len(ordered) // 2
+            median = (
+                ordered[middle]
+                if len(ordered) % 2
+                else (ordered[middle - 1] + ordered[middle]) // 2
+            )
             result.append(TimingSummary(
                 name=name,
                 count=len(values),
                 total_ns=sum(values),
                 minimum_ns=min(values),
-                median_ns=int(statistics.median(values)),
+                median_ns=median,
                 maximum_ns=max(values),
             ))
         return tuple(result)

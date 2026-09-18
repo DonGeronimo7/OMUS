@@ -3,38 +3,152 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import os
 from pathlib import Path
 import sys
-import threading
 
-from .config import (DEFAULT_DPI, DEFAULT_DPI_STAGES, get_config_path,
-                     load_config, merge_setup_config, save_config)
-from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
-from .hardware import (DesiredHardwareState, HardwareBackend, HardwareError,
-                       HardwareSupervisor, get_backend)
-from .hardware.discovery_backend import DiscoveryBackend
-from .remapper import DpiCycler, MouseRemapper, parse_macros
-from .notifications import DpiMonitorSupervisor
-from .battery import BatteryMonitorSupervisor
-from .hidpp_debug import debug_dpi
-from .generic_hid import capture_input_reports, discover_hid_devices
-from .setup_flow import SetupChoices
-
-from .service import (install_service, is_service_active, start_service, stop_service,
-                      restart_service, status_service, ServiceNotInstalled)
-from .permissions import permission_report
-from .doctor import doctor_fix, print_doctor
 from . import __version__
-from .branding import print_banner, style
-from .updater import run_update
 
 
-LOG = logging.getLogger(__name__)
+# Keep command-specific subsystems out of cold ``--help``/``--version`` startup.
+# These tiny compatibility seams also retain the established patch points used
+# by deterministic tests and downstream callers.
+def get_mouse_devices():
+    from .discovery import get_mouse_devices as operation
+    return operation()
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def select_mouse_device(mice):
+    from .discovery import select_mouse_device as operation
+    return operation(mice)
+
+
+def get_backend(*args, **kwargs):
+    from .hardware.registry import get_backend as operation
+    return operation(*args, **kwargs)
+
+
+def parse_macros(*args, **kwargs):
+    from .remapper import parse_macros as operation
+    return operation(*args, **kwargs)
+
+
+def MouseRemapper(*args, **kwargs):
+    from .remapper import MouseRemapper as implementation
+    return implementation(*args, **kwargs)
+
+
+def DpiCycler(*args, **kwargs):
+    from .remapper import DpiCycler as implementation
+    return implementation(*args, **kwargs)
+
+
+def DpiMonitorSupervisor(*args, **kwargs):
+    from .notifications import DpiMonitorSupervisor as implementation
+    return implementation(*args, **kwargs)
+
+
+def BatteryMonitorSupervisor(*args, **kwargs):
+    from .battery import BatteryMonitorSupervisor as implementation
+    return implementation(*args, **kwargs)
+
+
+def HardwareSupervisor(*args, **kwargs):
+    from .hardware import HardwareSupervisor as implementation
+    return implementation(*args, **kwargs)
+
+
+def DesiredHardwareState(*args, **kwargs):
+    from .hardware import DesiredHardwareState as implementation
+    return implementation(*args, **kwargs)
+
+
+def discover_hid_devices(*args, **kwargs):
+    from .generic_hid import discover_hid_devices as operation
+    return operation(*args, **kwargs)
+
+
+def capture_input_reports(*args, **kwargs):
+    from .generic_hid import capture_input_reports as operation
+    return operation(*args, **kwargs)
+
+
+def debug_dpi(*args, **kwargs):
+    from .hidpp_debug import debug_dpi as operation
+    return operation(*args, **kwargs)
+
+
+def permission_report(*args, **kwargs):
+    from .permissions import permission_report as operation
+    return operation(*args, **kwargs)
+
+
+def doctor_fix(*args, **kwargs):
+    from .doctor import doctor_fix as operation
+    return operation(*args, **kwargs)
+
+
+def print_doctor(*args, **kwargs):
+    from .doctor import print_doctor as operation
+    return operation(*args, **kwargs)
+
+
+def run_update(*args, **kwargs):
+    from .updater import run_update as operation
+    return operation(*args, **kwargs)
+
+
+def get_config_path(*args, **kwargs):
+    from .config import get_config_path as operation
+    return operation(*args, **kwargs)
+
+
+def load_config(*args, **kwargs):
+    from .config import load_config as operation
+    return operation(*args, **kwargs)
+
+
+def merge_setup_config(*args, **kwargs):
+    from .config import merge_setup_config as operation
+    return operation(*args, **kwargs)
+
+
+def save_config(*args, **kwargs):
+    from .config import save_config as operation
+    return operation(*args, **kwargs)
+
+
+def is_service_active(*args, **kwargs):
+    from .service import is_service_active as operation
+    return operation(*args, **kwargs)
+
+
+def install_service(*args, **kwargs):
+    from .service import install_service as operation
+    return operation(*args, **kwargs)
+
+
+def start_service(*args, **kwargs):
+    from .service import start_service as operation
+    return operation(*args, **kwargs)
+
+
+def stop_service(*args, **kwargs):
+    from .service import stop_service as operation
+    return operation(*args, **kwargs)
+
+
+def restart_service(*args, **kwargs):
+    from .service import restart_service as operation
+    return operation(*args, **kwargs)
+
+
+def status_service(*args, **kwargs):
+    from .service import status_service as operation
+    return operation(*args, **kwargs)
+
+
+def _build_parser(*, configure_cpi: bool = False) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mouse-control")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
@@ -82,11 +196,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="intentionally replace persisted discovery evidence for one mouse",
     )
     rediscover.add_argument("--device", type=int, metavar="N")
-    from .sensor_calibration_cli import configure_parser as configure_cpi_parser
-    configure_cpi_parser(sub.add_parser(
+    cpi_parser = sub.add_parser(
         "cpi",
         help="measure physical mouse CPI and polling from ruler-guided motion",
-    ))
+    )
+    if configure_cpi:
+        from .sensor_calibration_cli import configure_parser as configure_cpi_parser
+        configure_cpi_parser(cpi_parser)
 
     sub.add_parser("install-service", help="install and enable the systemd user service")
     sub.add_parser("start", help="start the background service")
@@ -132,6 +248,9 @@ def _initial_mappings(existing: dict[str, object]) -> dict[str, str]:
 
 
 def _initial_choices(existing: dict[str, object]) -> SetupChoices:
+    from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES
+    from .setup_flow import SetupChoices
+
     dpi = existing.get("dpi", {})
     polling = existing.get("polling", {})
     if not isinstance(dpi, dict) or not isinstance(polling, dict):
@@ -199,6 +318,7 @@ def debug_hid(seconds: float = 10.0) -> int:
 
 def run_support(*, guided: bool = False) -> int:
     """Create an explicitly requested local report without hardware writes."""
+    from .branding import print_banner, style
     from .support import capture_button, probe, render_report
 
     print_banner()
@@ -264,6 +384,10 @@ def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
                     stages: list[int], active_dpi: int, polling_rate_hz: int | None,
                     *, setup: bool = False) -> None:
     """Apply independent capabilities; a hardware failure never blocks remapping."""
+    import logging
+
+    from .hardware import HardwareError
+
     try:
         if active_dpi > 0 and backend.supports_dpi(device):
             applied_directly = False
@@ -340,6 +464,16 @@ def _resolve_runtime_device(configured: MouseDevice) -> MouseDevice:
 
 
 def run_from_config(path: Path | None = None) -> int:
+    import logging
+    import threading
+
+    from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES
+    from .discovery import MouseDevice
+    from .hardware import HardwareError
+    from .hardware.discovery_backend import DiscoveryBackend
+
+    log = logging.getLogger(__name__)
+
     try:
         config = load_config(path)
     except OSError as exc:
@@ -409,8 +543,8 @@ def run_from_config(path: Path | None = None) -> int:
         identity = (f"{mouse.vendor:04x}:{mouse.product:04x}"
                     if mouse.vendor is not None and mouse.product is not None
                     else "identity unavailable")
-        LOG.info("Selected mouse: %s (%s, %s)", mouse.name, mouse.path, identity)
-        LOG.info("Selected hardware backend: %s (%s)", initial_backend.name,
+        log.info("Selected mouse: %s (%s, %s)", mouse.name, mouse.path, identity)
+        log.info("Selected hardware backend: %s (%s)", initial_backend.name,
                  type(initial_backend).__name__)
     hardware.reconcile()
     try:
@@ -418,7 +552,7 @@ def run_from_config(path: Path | None = None) -> int:
             hardware.supports_dpi_cycle_trigger(hardware_device) is True
         )
     except HardwareError as exc:
-        LOG.warning("Learned DPI-cycle trigger unavailable: %s", exc)
+        log.warning("Learned DPI-cycle trigger unavailable: %s", exc)
         learned_cycle_trigger = False
     if "dpi-cycle" in mappings.values() or g305_hidpp or learned_cycle_trigger:
         dpi_cycler = DpiCycler(hardware, hardware_device, dpi_stages, active_dpi,
@@ -433,15 +567,15 @@ def run_from_config(path: Path | None = None) -> int:
                                        dpi_stages, active_dpi, shutdown_event, **monitor_kwargs)
         if dpi_cycler is not None:
             dpi_cycler.notifier = monitor
-        LOG.info("DPI notification monitor: %s", type(monitor).__name__)
+        log.info("DPI notification monitor: %s", type(monitor).__name__)
     else:
-        LOG.info("DPI notification monitor: disabled")
+        log.info("DPI notification monitor: disabled")
 
     battery_monitor = BatteryMonitorSupervisor(
         hardware, hardware_device, lambda _selected: hardware, shutdown_event)
 
     if monitor is not None:
-        LOG.info("Starting DPI notification monitor")
+        log.info("Starting DPI notification monitor")
         monitor.start()
     battery_monitor.start()
     try:
@@ -457,16 +591,20 @@ def run_from_config(path: Path | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO,
-                        format="%(levelname)s %(name)s: %(message)s")
     supplied_argv = sys.argv[1:] if argv is None else argv
     if not supplied_argv:
         if sys.stdin.isatty() and sys.stdout.isatty():
+            import logging
+            logging.basicConfig(level=logging.INFO,
+                                format="%(levelname)s %(name)s: %(message)s")
             return run_setup_wizard()
         _build_parser().print_help()
         return 0
 
-    args = _build_parser().parse_args(supplied_argv)
+    args = _build_parser(configure_cpi=supplied_argv[0] == "cpi").parse_args(supplied_argv)
+    import logging
+    logging.basicConfig(level=logging.INFO,
+                        format="%(levelname)s %(name)s: %(message)s")
 
     if args.command in {"setup", "tui"}:
         return run_setup_wizard()
@@ -557,28 +695,29 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "update":
         return run_update(check=args.check, assume_yes=args.yes)
 
-    try:
-        if args.command == "install-service":
-            install_service()
-            return 0
+    if args.command in {"install-service", "start", "stop", "restart", "status"}:
+        from .service import ServiceNotInstalled
+        try:
+            if args.command == "install-service":
+                install_service()
+                return 0
 
-        if args.command == "start":
-            start_service()
-            return 0
+            if args.command == "start":
+                start_service()
+                return 0
 
-        if args.command == "stop":
-            stop_service()
-            return 0
+            if args.command == "stop":
+                stop_service()
+                return 0
 
-        if args.command == "restart":
-            restart_service()
-            return 0
+            if args.command == "restart":
+                restart_service()
+                return 0
 
-        if args.command == "status":
             return status_service()
-    except ServiceNotInstalled as exc:
-        print(exc, file=sys.stderr)
-        return 1
+        except ServiceNotInstalled as exc:
+            print(exc, file=sys.stderr)
+            return 1
 
     _build_parser().print_help()
     return 0
