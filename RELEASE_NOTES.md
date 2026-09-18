@@ -17,12 +17,12 @@ startup, HID parsing/decoding, and idle UI work.
 
 ## Measured Python performance
 
-- Cold `mouse_control.app` import fell from 113.328 ms to 16.527 ms (-85.4%).
+- Cold `mouse_control.app` import fell from 113.328 ms to 15.471 ms (-86.3%).
 - Immutable descriptor reuse reduced repeated parse work from 0.0209 ms to
-  0.000150 ms (-99.3%).
+  0.000140 ms (-99.3%).
 - Cached descriptor field layouts reduced representative 1,000-report decode
-  from 66.552 ms to 28.196 ms (-57.6%).
-- Snapshot reuse reduced forced Rediscover from 0.577 ms to 0.407 ms (-29.4%).
+  from 66.552 ms to 28.388 ms (-57.3%).
+- Snapshot reuse reduced forced Rediscover from 0.577 ms to 0.411 ms (-28.8%).
 - Event-driven UI queues reduced idle notifier CPU from 1.031 ms/s to 0.016
   ms/s and voluntary context switches from 20/s to 1/s in the same probe.
 - Reconnect, Rediscover, and setup enter/exit retained-memory checks remain

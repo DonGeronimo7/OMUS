@@ -82,11 +82,13 @@ explanation.
 | Change | Operation | Before | After | Absolute | Percent | Tests / safety |
 |---|---|---:|---:|---:|---:|---|
 | Baseline only | — | — | — | — | — | 728-test updater checkpoint; performance gate pending |
-| Lazy command-specific imports | Cold `mouse_control.app` import | 113.328 ms | 16.527 ms | -96.801 ms | -85.4% | Runtime/research/updater imports stay absent from cold help; full regression gate required |
-| Bounded immutable descriptor reuse | Descriptor parse/reuse | 0.0209 ms | 0.000150 ms | -0.0208 ms | -99.3% | Exact descriptor bytes key a 128-entry cache; topology snapshots retain bytes in memory only |
-| Cached descriptor field identities/layout | Single HID decode | 0.0652 ms | 0.0281 ms | -0.0371 ms | -56.9% | Immutable descriptor/field facts only; packet semantics and authority unchanged |
-| Cached descriptor field identities/layout | 1,000 HID decodes | 66.552 ms | 28.196 ms | -38.356 ms | -57.6% | Same decoded values and diagnostics; no write path involved |
-| Snapshot plus parsed-knowledge reuse | Explicit Rediscover | 0.577 ms | 0.407 ms | -0.170 ms | -29.4% | Forced discovery still executes descriptor, protocol, observation, and validation phases |
+| Lazy command-specific imports | Cold `mouse_control.app` import | 113.328 ms | 15.471 ms | -97.857 ms | -86.3% | Runtime/research/updater imports stay absent from cold help; full regression gate passed |
+| Known-path preservation | Persisted-evidence lookup | 0.0308 ms | 0.0309 ms | +0.0001 ms | +0.4% | Statistically neutral; exact identity/evidence validation was not removed |
+| Known-path preservation | Known-device startup/restore | 0.0341 ms | 0.0342 ms | +0.0001 ms | +0.4% | Statistically neutral; already-cheap path still skips discovery work |
+| Bounded immutable descriptor reuse | Descriptor parse/reuse | 0.0209 ms | 0.000140 ms | -0.0208 ms | -99.3% | Exact descriptor bytes key a 128-entry cache; topology snapshots retain bytes in memory only |
+| Cached descriptor field identities/layout | Single HID decode | 0.0652 ms | 0.0284 ms | -0.0368 ms | -56.4% | Immutable descriptor/field facts only; packet semantics and authority unchanged |
+| Cached descriptor field identities/layout | 1,000 HID decodes | 66.552 ms | 28.388 ms | -38.164 ms | -57.3% | Same decoded values and diagnostics; no write path involved |
+| Snapshot plus parsed-knowledge reuse | Explicit Rediscover | 0.577 ms | 0.411 ms | -0.166 ms | -28.8% | Forced discovery still executes descriptor, protocol, observation, and validation phases |
 | Event-driven notification wakeup | Idle notifier process CPU / second | 1.031 ms | 0.016 ms | -1.015 ms | -98.4% | Cross-thread queue tests preserve ordered delivery and prohibit timer sleeps |
 | Event-driven notification wakeup | Idle voluntary context switches / second | 20 | 1 | -19 | -95.0% | Remaining switch is the measurement thread's one-second sleep |
 

@@ -1,5 +1,24 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — v0.9.7-1 updater and measured Python performance candidate
+
+- `origin/main` now contains the canonical full-screen TUI correction at
+  `1e21f89`; v0.9.7 work is isolated on `codex/v0.9.7-python-performance`.
+- Release versions are explicitly separated across display/tag, PEP 440, RPM
+  Version/Release, distribution suffix, and architecture. The verified DNF
+  fallback recognizes the real `0.9.6` to `0.9.6-2` asset shape and freezes
+  previous-updater compatibility for the `0.9.7-1` generated RPM.
+- Command-specific imports are deferred; immutable descriptor bytes and bounded
+  parsed field knowledge are reused; notification/tray queues are event-driven.
+  Exact measurements and stable-cycle memory results are in `docs/PERFORMANCE.md`.
+- The full source and RPM `%check` gates pass 738 tests with the existing GLib
+  warning. Wheel/sdist, isolated wheel import/help, Fedora RPM build/content,
+  AppImage shell syntax, desktop validation, and focused security checks pass.
+- Current read-only doctor evidence found no safely readable mouse. This
+  candidate therefore has automated/package evidence only; current-version
+  G305 physical acceptance, DEB build/install, and AppImage build/smoke remain
+  final pre-tag gates. No tag or release was created.
+
 ## 2026-09-18 — v0.9.6-2 canonical TUI regression correction
 
 - The desktop launcher, no-argument `mouse-control`, explicit `setup`/`tui`,

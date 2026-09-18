@@ -1,5 +1,53 @@
 # AI handoff log
 
+## 2026-09-18 — v0.9.7-1 integration, updater, and Python performance
+
+- Goal: integrate the canonical TUI checkpoint, correct the incremental-RPM
+  updater bootstrap failure, and reduce measured Python work without changing
+  features or hardware authority. Starting product commit was `1e21f89` after
+  its validated fast-forward to and push on `origin/main`.
+- Git: work continued on `codex/v0.9.7-python-performance`. Commits are
+  `933e7c8` updater compatibility, `a59aa9f` baselines/instrumentation,
+  `95991a5` lazy command imports, `f24ef80` immutable descriptor reuse,
+  `3b677fd` event-driven UI wakeups, and `e2983a5` release metadata, followed
+  by the final documentation/gate commit containing this entry. Main received
+  only the authorized canonical-TUI fast-forward. No tag or release was made.
+- Updater: `ReleaseVersion` separates tag/display, PEP 440, RPM Version, RPM
+  Release, distro suffix, and architecture. Strict selection still requires an
+  official release, safe exact filename, one compatible architecture, manifest
+  SHA-256 verification, DNF installation/ownership, and post-install version
+  verification. Focused updater/release coverage passed 79 tests.
+- Performance: cold app import measured 113.328 to 15.471 ms (-86.3%);
+  descriptor parse/reuse 0.0209 to 0.000140 ms (-99.3%); one representative
+  decode 0.0652 to 0.0284 ms (-56.4%); 1,000 decodes 66.552 to 28.388 ms
+  (-57.3%); explicit Rediscover 0.577 to 0.411 ms (-28.8%). Persisted lookup
+  (0.0308 to 0.0309 ms) and known-device restore (0.0341 to 0.0342 ms) remained
+  statistically neutral and already skip the expensive discovery path.
+- Runtime: replacing 50/100 ms notification/tray polling with cross-thread
+  event wakeups reduced the controlled idle probe from 1.031 to 0.016 ms CPU/s
+  and 20 to 1 voluntary context switches/s. At 1,000 post-warmup cycles,
+  reconnect retained 120 bytes, Rediscover 6,037 bytes, and setup enter/exit 32
+  bytes; the bounded descriptor caches are limited to 128 entries.
+- Safety: no hardware writer or write authority was added. Current topology and
+  exact identity still bind persisted facts; ambiguous/stale/corrupt evidence
+  abstains; generic HID remains read-only; explicit Rediscover still forces all
+  discovery phases; observed events do not invent desired hardware state.
+- Validation: `git diff --check` and compileall passed; the full source suite
+  passed 738 tests with one existing GLib deprecation warning. The focused
+  security/updater/service/release suite passed 89 tests. Wheel/sdist built,
+  an isolated wheel install reported `0.9.7-1` and passed CLI help, and Fedora
+  RPM `mouse-control-0.9.7-1.fc44.noarch.rpm` built with `%check` passing all
+  738 tests plus packaged CLI smokes. AppImage shell syntax and desktop-file
+  validation passed (one non-failing category hint). Local DEB/AppImage builds
+  were not available in this environment and are pending their release jobs.
+- Physical validation: read-only doctor reported no safely readable mouse and
+  warned that the service was stopped. No current-branch G305 write, remap,
+  notification, battery, reconnect, or interactive TUI observation was made;
+  validation level is automated/package only. Prior-version physical evidence
+  is not promoted to v0.9.7-1 evidence.
+- Next bounded task: run the v0.9.7-1 DEB/AppImage release jobs and the complete
+  installed G305 acceptance checklist, then tag/publish only if both pass.
+
 ## 2026-09-18 — v0.9.6-2 canonical TUI launcher correction
 
 - Root cause: the desktop file correctly invoked `mouse-control`, but the
