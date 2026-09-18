@@ -1,5 +1,38 @@
 # AI handoff log
 
+## 2026-09-17 — v0.9.5 macro and release gate
+
+- Starting point: `e0a1041` on `codex/persistent-discovery-fast-tui`, clean
+  working tree. Macro checkpoint: `4a47212` (`Add safe sequential macro
+  actions`).
+- Macros are structured named TOML lists of existing key, chord, and
+  mouse-button actions plus bounded millisecond delays. A small queued worker
+  keeps evdev input responsive; playback is press-only and releases synthetic
+  input after every step and on failure, interruption, disconnect, or shutdown.
+  Setup can select or create basic macros without adding scripting, commands,
+  loops, conditions, recording, or any hardware-protocol operation.
+- v0.9.5 metadata, README, changelog, release notes, package manifests, and
+  current download names are synchronized. Historical v0.9.4 records remain
+  unchanged.
+- Automated validation: focused macro/remapper/setup suite passed 79 tests;
+  focused release/config suite passed 33 tests; full source suite passed 684
+  tests with the existing GLib deprecation warning; compileall and
+  `git diff --check` passed.
+- Packaging: sdist and wheel built with correct 0.9.5 names; an isolated wheel
+  install reported 0.9.5 and passed primary/CPI CLI smoke. Fedora RPM built as
+  `mouse-control-0.9.5-1.fc44.noarch.rpm`; `%check` passed all 684 tests,
+  compileall, and every packaged CLI smoke. The AppDir payload built and passed
+  version/help/CPI smoke, but this host could not run AppImageKit's final Qt
+  wrapper headlessly; the official Ubuntu release workflow remains the
+  authoritative AppImage and Debian build/publish gate.
+- Safety: macro execution is software-input only. Generic HID remains
+  read-only, persisted discovery does not grant write authority, and PROVEN
+  exact-model hardware policy is unchanged.
+- Physical validation: the task report supplies prior G305 evidence for direct
+  native reconnect after the affinity correction. No new v0.9.5 physical macro
+  execution was performed in this automated session; that item remains
+  unverified and is not inferred from tests.
+
 ## 2026-09-17 — Reconnect affinity and additive Vim navigation
 
 - Physical pre-fix evidence: a G305 previously using Native HID rebound through

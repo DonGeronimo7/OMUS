@@ -28,7 +28,7 @@ def generate_config(
     stages = DEFAULT_DPI_STAGES if dpi_stages is None else dpi_stages
     lines = [
         "# mouse-control configuration",
-        "# Actions: passthrough, disable, dpi-cycle, mouse:BTN_*, key:KEY_*, chord:KEY_*+KEY_*",
+        "# Actions: passthrough, disable, dpi-cycle, mouse:BTN_*, key:KEY_*, chord:KEY_*+KEY_*, macro:NAME",
         "",
         "[device]",
         f'name = {device_info.name!r}',

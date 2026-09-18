@@ -1,5 +1,5 @@
 Name:           mouse-control
-Version:        0.9.4
+Version:        0.9.5
 Release:        1%{?dist}
 Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
@@ -80,6 +80,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 %changelog
+* Thu Sep 17 2026 Marc-Anthony Geronimo - 0.9.5-1
+- Add persistent known-device startup, progress reporting, and reconnect affinity.
+- Add responsive TUI navigation, Vim controls, and basic sequential macros.
+- Preserve evidence-driven discovery and PROVEN-only hardware writes.
+
 * Thu Sep 17 2026 Marc-Anthony Geronimo - 0.9.4-1
 - Add the pre-v1 temporal dialogue, proof-state, experiment, and report foundations.
 - Keep generic discovery read-only and operation writes PROVEN-only.

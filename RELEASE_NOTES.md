@@ -1,3 +1,115 @@
+# Mouse Control v0.9.5
+
+## Persistent Automatic Discovery
+
+Mouse Control includes an evidence-driven automatic HID discovery engine
+designed to learn unsupported gaming mice without requiring vendor-specific
+Linux software. It correlates physical devices and HID interfaces, interprets
+descriptors and observed reports, uses known protocol evidence where available,
+and persists only proven device knowledge. Unknown-device inspection remains
+read-only, and hardware writes still require independent PROVEN exact-model
+authority.
+
+Once a physical device has been successfully learned, Mouse Control reuses its
+persisted proven knowledge instead of rediscovering it every launch. The fast
+path validates stable model, transport, VID:PID, true instance identity when
+available, and the exact responder interface against the freshly enumerated
+device. Live `/dev` paths are rebound rather than treated as identity. Corrupt,
+ambiguous, or changed records safely fall back instead of being trusted.
+
+Use `mouse-control rediscover` when you intentionally want to replace the
+persisted evidence for a device.
+
+## Faster startup and interaction
+
+- Known devices avoid repeated descriptor parsing, protocol detection,
+  feature baselines, and learning work.
+- Ordinary TUI/menu transitions perform no discovery work.
+- Automatic Discovery reports real semantic progress while it is active and
+  clears that progress cleanly on completion or failure.
+- Reconnect logic remembers backend affinity: exact native adapters outrank
+  PROVEN learned adapters, which outrank topology-only bindings. Partial
+  enumeration no longer causes avoidable adapter thrash.
+- Setup navigation is more responsive while retaining the existing safe
+  hardware transaction boundaries.
+
+## Vim-style TUI navigation
+
+The existing arrow, Home/End, Enter, and Escape controls remain available.
+The TUI also supports:
+
+```text
+h = left
+j = down
+k = up
+l = right
+g = first
+G = last
+```
+
+## Basic software-input macros
+
+Buttons can now run small ordered macros composed from the same keyboard-key,
+keyboard-chord, and mouse-button actions used by ordinary remapping, with
+optional explicit millisecond delays. The setup TUI can select an existing
+macro or create and assign a basic one.
+
+Macro playback uses the existing uinput output path, runs outside the input
+loop, and is interrupted on disconnect or shutdown. Synthetic keys and buttons
+are released after each step and during cleanup, including failure paths.
+Macros are deliberately not a scripting engine: there is no command execution,
+Python, recording, looping, branching, application awareness, or
+hardware-protocol access.
+
+Example configuration:
+
+```toml
+[macros]
+copy_paste = [
+  { type = "chord", value = "KEY_LEFTCTRL+KEY_C" },
+  { type = "delay", milliseconds = 100 },
+  { type = "chord", value = "KEY_LEFTCTRL+KEY_V" },
+]
+
+[remap]
+BTN_EXTRA = "macro:copy_paste"
+```
+
+## Compatibility and safety
+
+This release preserves the complete v0.8.2 behavior contract and the existing
+v0.9.x Automatic Discovery, remapping, DPI, polling, notification, HID++,
+learned-operation, reconnect, setup, service, and updater paths. Optional
+hardware discovery/control failures still cannot prevent ordinary remapping
+from starting.
+
+Generic HID discovery remains read-only. Persistent evidence never turns a
+read-side observation into write authority, and macros are software input only;
+they cannot invoke hardware operations.
+
+## Known limitations
+
+- Some mice expose no usable host-visible DPI state or safe control and remain
+  remapping-only.
+- New or changed hardware may need an explicit discovery pass.
+- Macro timing is intended for ordinary human-scale sequences, not
+  high-resolution real-time guarantees.
+- Macro steps are sequential taps plus delays; held-step scripting, loops,
+  conditions, recording, and application-aware behavior are intentionally out
+  of scope.
+- G305 physical evidence applies only to the tested Logitech G305 path and does
+  not imply universal Logitech support.
+
+## Downloads
+
+- [RPM: mouse-control-0.9.5-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse-control-0.9.5-1.fc44.noarch.rpm)
+- [DEB: mouse-control_0.9.5-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse-control_0.9.5-1_all.deb)
+- [AppImage: Mouse-Control-0.9.5-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/Mouse-Control-0.9.5-x86_64.AppImage)
+- [Wheel: mouse_control-0.9.5-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse_control-0.9.5-py3-none-any.whl)
+- [Source: mouse_control-0.9.5.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse_control-0.9.5.tar.gz)
+
+
+---
 # Mouse Control v0.9.4
 
 ## Pre-v1 discovery architecture milestone

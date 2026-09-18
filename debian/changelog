@@ -1,3 +1,11 @@
+mouse-control (0.9.5-1) unstable; urgency=medium
+
+  * Reuse proven discovery knowledge for faster known-device startup.
+  * Add semantic discovery progress, reconnect adapter affinity, and Vim navigation.
+  * Add basic ordered software-input macros with interrupt-safe cleanup.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Thu, 17 Sep 2026 23:00:00 +0000
+
 mouse-control (0.9.4-1) unstable; urgency=medium
 
   * Add the pre-v1 temporal dialogue, proof-state, experiment, and report foundations.

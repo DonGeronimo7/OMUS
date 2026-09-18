@@ -1,5 +1,22 @@
 # Mouse Control Project Status
 
+## 2026-09-17 — v0.9.5 macro and release candidate
+
+- Button remaps can reference structured named macros containing ordered key,
+  chord, mouse-button, and explicit millisecond-delay steps. Playback reuses
+  the established uinput path on a small worker and is interrupted on
+  disconnect/shutdown with synthetic-input cleanup.
+- Setup can select or create a basic macro using the existing modal menu
+  patterns and Vim/arrow navigation. The format is declarative only: no
+  commands, scripts, loops, branching, recording, or hardware operations.
+- This release candidate retains the persistent learned-device fast path,
+  semantic progress, reconnect adapter affinity, and Vim navigation described
+  below. Generic HID remains read-only and all hardware writes remain
+  independently PROVEN and exact-model scoped.
+- Automated and packaging results are recorded in the final handoff entry once
+  the release gate completes. v0.9.5-specific physical acceptance is separate
+  and must not be inferred from automated coverage.
+
 ## 2026-09-17 — Reconnect adapter affinity and Vim navigation
 
 - `HardwareSupervisor` now remembers the strongest accepted universal

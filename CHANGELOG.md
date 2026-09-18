@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.9.5 — 2026-09-17
+
+### Persistent discovery and runtime performance
+
+- Reuse persisted proven device knowledge after fresh exact identity and
+  responder-interface validation, avoiding comprehensive rediscovery during
+  normal known-device startup.
+- Add explicit `mouse-control rediscover` and semantic Automatic Discovery
+  progress while keeping ordinary menu transitions free of hardware work.
+- Preserve exact native/learned backend affinity through partial reconnect
+  enumeration without weakening generation isolation or write authority.
+
+### TUI and macros
+
+- Add Vim-style `h/j/k/l` direction aliases and `g/G` first/last navigation
+  while retaining arrows, Home/End, Enter, and Escape.
+- Add structured, ordered software-input macros composed of existing key,
+  chord, and mouse-button actions plus millisecond delays.
+- Run macros outside the input loop and release synthetic input on completion,
+  failure, interruption, disconnect, and shutdown.
+
+### Safety and compatibility
+
+- Keep generic discovery read-only and hardware writes restricted to
+  independently PROVEN exact-model operations.
+- Preserve the full v0.8.2 compatibility contract and all established v0.9.x
+  remapping, hardware, notification, reconnect, service, and updater behavior.
+
 ## 0.9.4 — 2026-09-17
 
 ### Pre-v1 discovery architecture foundation

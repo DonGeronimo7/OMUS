@@ -6,7 +6,7 @@ Open-source Linux gaming mouse remapping and hardware discovery: map mouse
 buttons to keyboard keys, configure proven DPI and polling rates, and safely
 help expand support for new hardware.
 
-[![Current release: v0.9.4](https://img.shields.io/badge/current%20release-v0.9.4-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.4)
+[![Current release: v0.9.5](https://img.shields.io/badge/current%20release-v0.9.5-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.5)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
@@ -22,14 +22,15 @@ polling/report-rate control. Native Logitech HID++ support is built in,
 exact-model native Razer support is built in, and Automatic Discovery can safely gather evidence for
 unknown hardware without guessing write commands.
 
-## Current release: v0.9.4
+## Current release: v0.9.5
 
-The current release is [v0.9.4](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.4).
+The current release is [v0.9.5](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.5).
 
-Mouse Control v0.9.4 promotes the validated Automatic Hardware Discovery
-checkpoint: learned HID state is persisted with descriptor-backed semantic
-identity, rebound conservatively after reconnect, and exposed through the
-normal setup and runtime paths without guessing unknown-device writes.
+Mouse Control v0.9.5 makes Automatic Discovery persistent and faster. Once an
+exact physical device has been learned successfully, Mouse Control reuses its
+persisted proven knowledge after a fresh identity/interface match instead of
+repeating comprehensive discovery at every launch. Explicit
+`mouse-control rediscover` remains available when hardware or evidence changes.
 
 Run:
 
@@ -52,6 +53,11 @@ Running `mouse-control` without a command from an interactive terminal opens
 this same TUI immediately. Redirected or otherwise noninteractive setup is
 rejected with a clear error before curses starts; there is no legacy prompt
 wizard fallback.
+
+Automatic Discovery reports real semantic progress while it is running. Known
+devices that pass the persisted-profile checks take the fast path without
+showing artificial discovery work. Ordinary menu transitions never start
+hardware discovery.
 
 If the selected mouse already has proven hardware support, setup simply shows
 those capabilities and lets you configure them. If the mouse is unknown,
@@ -111,6 +117,8 @@ is already proven for the selected mouse.
 ## What Mouse Control does
 
 - Remaps gaming-mouse buttons to mouse actions, keyboard keys, or keyboard chords.
+- Runs basic ordered software-input macros made from those same actions and
+  explicit millisecond delays.
 - Passes through or disables buttons.
 - Supports a configurable `dpi-cycle` action.
 - Configures DPI only through validated writable capabilities.
@@ -127,19 +135,19 @@ and unrelated hardware features.
 
 ## Get Mouse Control
 
-Release page: [Mouse Control v0.9.4](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.4)
+Release page: [Mouse Control v0.9.5](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.5)
 
-- **Fedora / Nobara / RPM:** [mouse-control-0.9.4-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control-0.9.4-1.fc44.noarch.rpm)
-- **Debian / Ubuntu / Mint:** [mouse-control_0.9.4-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse-control_0.9.4-1_all.deb)
-- **Other distributions:** [Mouse-Control-0.9.4-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/Mouse-Control-0.9.4-x86_64.AppImage)
+- **Fedora / Nobara / RPM:** [mouse-control-0.9.5-1.fc44.noarch.rpm](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse-control-0.9.5-1.fc44.noarch.rpm)
+- **Debian / Ubuntu / Mint:** [mouse-control_0.9.5-1_all.deb](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse-control_0.9.5-1_all.deb)
+- **Other distributions:** [Mouse-Control-0.9.5-x86_64.AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/Mouse-Control-0.9.5-x86_64.AppImage)
 - **Arch Linux:** included [`PKGBUILD`](PKGBUILD)
-- **Python wheel:** [mouse_control-0.9.4-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4-py3-none-any.whl)
-- **Source:** [mouse_control-0.9.4.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.4/mouse_control-0.9.4.tar.gz)
+- **Python wheel:** [mouse_control-0.9.5-py3-none-any.whl](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse_control-0.9.5-py3-none-any.whl)
+- **Source:** [mouse_control-0.9.5.tar.gz](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.5/mouse_control-0.9.5.tar.gz)
 
 ### Fedora, Nobara, and other RPM systems
 
 ```bash
-sudo dnf install ./mouse-control-0.9.4-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.9.5-1.fc44.noarch.rpm
 ```
 
 The RPM installs the Python/runtime dependencies, desktop launcher, icons, and
@@ -148,14 +156,14 @@ Mouse Control udev rules. It does not silently enable the background service.
 ### Debian, Ubuntu, Mint, and other DEB systems
 
 ```bash
-sudo apt install ./mouse-control_0.9.4-1_all.deb
+sudo apt install ./mouse-control_0.9.5-1_all.deb
 ```
 
 ### AppImage
 
 ```bash
-chmod +x Mouse-Control-0.9.4-x86_64.AppImage
-./Mouse-Control-0.9.4-x86_64.AppImage setup
+chmod +x Mouse-Control-0.9.5-x86_64.AppImage
+./Mouse-Control-0.9.5-x86_64.AppImage setup
 ```
 
 The AppImage bundles user-space application components but does not replace host
@@ -179,7 +187,7 @@ mouse-control update
 ```
 
 Use `mouse-control update --check` for a non-modifying check and
-`mouse-control update --yes` for a non-interactive update. v0.9.4 retains
+`mouse-control update --yes` for a non-interactive update. v0.9.5 retains
 visible interactive package-manager confirmation input instead of waiting for
 an unseen prompt.
 
@@ -195,17 +203,18 @@ Install Mouse Control, then run setup as your normal logged-in desktop user:
 mouse-control setup
 ```
 
-You will see a full-screen setup screen. Use the arrow keys to move, Left/Right
-to switch sections, Enter to select or edit, and `?` whenever you want help.
-Nothing is saved until you choose **Review / Save**.
+You will see a full-screen setup screen. Arrows remain available; Vim-style
+`h/j/k/l` move left/down/up/right, `g/G` jump to the first/last item, Enter
+selects, and Escape goes back. Nothing is saved until you choose
+**Review / Save**.
 
 The usual path is simple:
 
 1. Choose your mouse in **Device**.
 2. Open **Buttons** and press each extra button you want to change.
 3. Choose what it should do: keep its normal action, act like another mouse
-   button, send a keyboard key or shortcut, disable it, or cycle configured DPI
-   stages.
+   button, send a keyboard key or shortcut, run a basic macro, disable it, or
+   cycle configured DPI stages.
 4. In **DPI** and **Polling**, choose settings when Mouse Control has already
    proved that it can safely control those features on this mouse.
 5. Choose whether to start Mouse Control automatically when you sign in, then
@@ -213,6 +222,34 @@ The usual path is simple:
 
 Your button mappings work independently of DPI and polling support. An unknown
 mouse can therefore be useful immediately.
+
+### Basic macros
+
+Choose **Macro** in the button-action menu to reuse an existing macro or build
+one from keyboard keys, keyboard chords, mouse buttons, and explicit delays.
+Macros run in order on button press without blocking TUI navigation. Playback
+is interrupted on shutdown or device disconnect, and synthetic keys/buttons are
+released during cleanup.
+
+The saved configuration is structured TOML rather than a scripting language:
+
+```toml
+[macros]
+copy_paste = [
+  { type = "chord", value = "KEY_LEFTCTRL+KEY_C" },
+  { type = "delay", milliseconds = 100 },
+  { type = "chord", value = "KEY_LEFTCTRL+KEY_V" },
+]
+
+[remap]
+BTN_EXTRA = "macro:copy_paste"
+```
+
+Macro action types are `key`, `chord`, and `mouse`; delays are whole
+milliseconds from 0 through 60000. Macros do not execute commands, Python, or
+arbitrary scripts and do not contain loops, branching, conditions, recording,
+or hardware-protocol operations. Invalid or missing macro definitions stop
+startup with a clear error instead of partially executing.
 
 After saving, install the user service once if you want Mouse Control to run
 automatically after you sign in:
@@ -425,7 +462,7 @@ without risking a guessed hardware command.
 ## Safety and compatibility contract
 
 The complete v0.8.2 stability contract, plus the v0.9.0 runtime behavior and
-v0.9.1 TUI, remains the compatibility baseline for v0.9.4 and future releases.
+v0.9.1 TUI, remains the compatibility baseline for v0.9.5 and future releases.
 In particular, development must not regress:
 
 - ordinary evdev/uinput remapping;
@@ -449,11 +486,12 @@ PYTHONPATH=src pytest -q
 python -m compileall -q src tests
 ```
 
-The v0.9.4 release checkpoint passes 664 automated tests with one known GLib
-deprecation warning. Compile and whitespace checks, Python sdist/wheel, Fedora
-RPM (including `%check` and packaged CLI smoke), Debian package, and AppImage
-build/smoke validation pass. Final v0.9.4 G305 physical acceptance passed on
-the installed RPM; published-asset validation remains the final release gate.
+The v0.9.5 release checkpoint passes the full automated suite with one known
+GLib deprecation warning. Compile and whitespace checks plus Python
+sdist/wheel, Fedora RPM, Debian package, and AppImage build/smoke validation
+are release gates. The native G305 path retains its previously completed
+physical acceptance; v0.9.5-specific physical results are reported separately
+from automated validation.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions and hardware reports.
 See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for release-specific details.
