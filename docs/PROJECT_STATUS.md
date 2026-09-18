@@ -1,5 +1,29 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab differential analyzer milestone
+
+- The canonical setup TUI now exposes `Hardware Discovery → Discovery Lab →
+  Run Full Automatic Lab — Differential Analyzer milestone`. It runs a bounded
+  selected-device baseline/action/post-action/negative-control workflow with
+  three automatically chosen positive repeats.
+- `LabExperiment` is the common generation-isolated evidence record for Lab
+  instruments. It retains exact stable physical context, interval/repeat
+  identity, path-independent HID and Feature evidence, optional canonical USB,
+  logical-record and dialogue evidence, physical CPI/polling evidence,
+  provenance, confidence/proof state, analysis, and next recommendation.
+- The analyzer ranks constant, changed, action-correlated, counter, length,
+  status, integrity, and trailing padding/stale candidates. It also compares
+  timing, request/response transactions and echoes, reuses dependency and
+  integrity inference, retains contradictions, produces conservative labelled-
+  action hypotheses, and uses the existing information-gain planner.
+- Deterministic replay fixtures exclude volatile paths, evdev history, keyboard
+  history, clipboard content, and screen data. The Lab remains local-only and
+  read-only; ambiguity is refused, generation mixing is rejected, recognition
+  never grants writes, and `write_authorized` is always false.
+- Focused Lab/discovery/protocol/security validation passes 176 tests; the
+  complete suite passes 841 with the existing GLib warning. No physical
+  validation, hardware write, install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — fixed-frame logical-record reassembly milestone
 
 - Discovery now separates fixed HID transport reports from variable logical

@@ -92,6 +92,7 @@ def test_setup_order_is_discovery_then_dpi_polling_buttons():
     assert SECTIONS == (
         SetupSection.DEVICE,
         SetupSection.HARDWARE,
+        SetupSection.LAB,
         SetupSection.DPI,
         SetupSection.POLLING,
         SetupSection.BUTTONS,

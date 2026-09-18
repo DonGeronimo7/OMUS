@@ -1,5 +1,37 @@
 # AI handoff log
 
+## 2026-09-18 — first-class Discovery Lab differential analyzer
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `c7ca4d0` and
+  added the first bounded master-Lab milestone without replacing the existing
+  capture, logical-record, dialogue, inference, proof, or provenance layers.
+- Added a canonical generation-isolated `LabExperiment` with explicit baseline,
+  action, post-action, negative-control, and repeat identity. It retains stable
+  device context, HID/Feature, USB, logical-record, dialogue, timing, physical
+  CPI/polling, provenance, confidence/proof, contradiction, analysis, and next-
+  experiment evidence. Deterministic replay output redacts volatile paths and
+  excludes evdev/keyboard history.
+- The Differential Protocol Analyzer ranks constant, changed, action-specific,
+  counter, length, status, integrity, and padding/stale fields; compares timing
+  and request/response transactions; reuses dependency, integrity, semantic,
+  and information-gain machinery; and keeps invalid records and negative-
+  control collisions as contradictions.
+- The setup TUI now has `Hardware Discovery → Discovery Lab → Run Full
+  Automatic Lab — Differential Analyzer milestone`. It automatically selects
+  baseline, three labelled-action repeats, post-action, and ordinary-use
+  negative control, then displays known/uncertain/learned state, the next useful
+  experiment, and whether that experiment requires a write.
+- Security boundary: selected-device existing read-only acquisition only; no
+  output/Feature write, setter, generic fuzzing, upload, telemetry, or write-
+  authority transition. Ambiguous physical identity is refused and evidence
+  cannot cross a connection generation.
+- Validation: 176 focused Lab/discovery/protocol/TUI/security tests and 841
+  complete-suite tests pass with the existing GLib warning; compileall and diff
+  checks pass. No physical validation, hardware write, installation, push,
+  merge, tag, or release.
+- Next bounded milestone: Protocol Timing Profiler using the same experiment
+  record, interval model, TUI page, and read-only authority boundary.
+
 ## 2026-09-18 — generic fixed-frame logical-record reassembly
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `ec7d88f` and

@@ -24,6 +24,7 @@ from .performance import timed
 class SetupSection(Enum):
     DEVICE = "Device"
     HARDWARE = "Hardware Discovery"
+    LAB = "Discovery Lab"
     DPI = "DPI"
     POLLING = "Polling"
     BUTTONS = "Buttons"
@@ -41,6 +42,7 @@ class ActionKind(Enum):
     AUTOMATIC_DISCOVERY = auto()
     RETRY_DISCOVERY = auto()
     GUIDED_DISCOVERY = auto()
+    RUN_DISCOVERY_LAB = auto()
     MEASURE_POLLING = auto()
     EDIT_DPI = auto()
     CAPTURE_BUTTONS = auto()
@@ -129,7 +131,10 @@ class NavigationState:
             return
         index = SECTIONS.index(self.current)
         if index > 0:
-            self.current = SECTIONS[index - 1]
+            previous = SECTIONS[index - 1]
+            # The Lab is an instrument launched from Hardware Discovery, not a
+            # required configuration step between Hardware and DPI.
+            self.current = SetupSection.HARDWARE if previous is SetupSection.LAB else previous
 
     def edit_from_review(self, target: SetupSection) -> None:
         self.return_to = SetupSection.REVIEW
@@ -175,6 +180,7 @@ class SetupController:
         self.research_plan: Any | None = None
         self.research_probe_outcome: Any | None = None
         self.discovery_engine: Any | None = None
+        self.lab_experiment: Any | None = None
         self.polling_measurement: Any | None = None
         self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
@@ -312,6 +318,7 @@ class SetupController:
         self.research_plan = None
         self.research_probe_outcome = None
         self.discovery_engine = None
+        self.lab_experiment = None
         self.polling_measurement = None
         self.observed_hardware = ObservedHardwareState()
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
@@ -462,6 +469,22 @@ class SetupController:
         self.discovery_progress.clear()
         self.status = message
 
+    def apply_lab_experiment(self, experiment: Any) -> None:
+        """Retain one canonical Lab result for progressive TUI inspection."""
+
+        self.lab_experiment = experiment
+        analysis = getattr(experiment, "analysis", None)
+        correlated = 0
+        if analysis is not None:
+            correlated = sum(
+                1 for item in analysis.ranked_fields
+                if any(signal.value == "action_correlated" for signal in item.signals)
+            )
+        self.status = (
+            f"Differential analysis retained {correlated} action-correlated field(s); "
+            "write authority remains unchanged."
+        )
+
     @property
     def guided_discovery_available(self) -> bool:
         # Deeper learning is specifically the fallback for an unknown protocol
@@ -595,6 +618,8 @@ class SetupController:
             if self.choices.polling_writable:
                 return SetupSection.POLLING
             return SetupSection.BUTTONS
+        if section is SetupSection.LAB:
+            return self._next_configuration_section(SetupSection.HARDWARE)
         if section is SetupSection.DPI:
             return SetupSection.POLLING if self.choices.polling_writable else SetupSection.BUTTONS
         if section is SetupSection.POLLING:
@@ -610,6 +635,8 @@ class SetupController:
             if self.choices.dpi_writable:
                 return SetupSection.DPI
             return SetupSection.HARDWARE
+        if section is SetupSection.LAB:
+            return SetupSection.HARDWARE
         if section is SetupSection.POLLING:
             return SetupSection.DPI if self.choices.dpi_writable else SetupSection.HARDWARE
         if section is SetupSection.DPI:
@@ -620,8 +647,10 @@ class SetupController:
         if self.section is SetupSection.DEVICE:
             return len(self.devices)
         if self.section is SetupSection.HARDWARE:
-            # Automatic/retry, optional deeper discovery, continue.
-            return 3 if self.guided_discovery_available else 2
+            # Automatic/retry, Discovery Lab, optional deeper discovery, continue.
+            return 4 if self.guided_discovery_available else 3
+        if self.section is SetupSection.LAB:
+            return 2
         if self.section is SetupSection.DPI:
             return len(self.choices.stages) if self.choices.dpi_writable else 1
         if self.section is SetupSection.POLLING:
@@ -693,7 +722,7 @@ class SetupController:
             }:
                 self.nav.current = SetupSection.REVIEW
                 self.nav.return_to = None
-            elif self.section in {SetupSection.HARDWARE, SetupSection.DPI, SetupSection.POLLING}:
+            elif self.section in {SetupSection.HARDWARE, SetupSection.LAB, SetupSection.DPI, SetupSection.POLLING}:
                 self._go(self._next_configuration_section())
             else:
                 self.nav.sequential(1)
@@ -728,12 +757,24 @@ class SetupController:
                 return ControllerAction(
                     ActionKind.RETRY_DISCOVERY if self.discovery_complete else ActionKind.AUTOMATIC_DISCOVERY
                 )
+            if self.row_cursor == 1:
+                self._go(SetupSection.LAB)
+                return ControllerAction()
             if self.guided_discovery_available:
-                if self.row_cursor == 1:
+                if self.row_cursor == 2:
                     return ControllerAction(ActionKind.GUIDED_DISCOVERY)
                 self._go(self._next_configuration_section(SetupSection.HARDWARE))
                 return ControllerAction()
             self._go(self._next_configuration_section(SetupSection.HARDWARE))
+            return ControllerAction()
+
+        if self.section is SetupSection.LAB:
+            if self.row_cursor == 0:
+                if not self.discovery_complete or self.discovery_result is None:
+                    self.status = "Run Automatic Discovery before starting a Lab experiment."
+                    return ControllerAction()
+                return ControllerAction(ActionKind.RUN_DISCOVERY_LAB)
+            self._go(self._next_configuration_section(SetupSection.LAB))
             return ControllerAction()
 
         if self.section is SetupSection.DPI:
@@ -922,17 +963,69 @@ class SetupController:
             )
             next_section = self._next_configuration_section(SetupSection.HARDWARE)
             next_label = f"Continue to {next_section.value.lower()} configuration"
+            rows.append(DisplayRow("Open Discovery Lab", 1))
             if self.guided_discovery_available:
-                rows.append(DisplayRow(self.deep_learning_label, 1))
-                rows.append(DisplayRow(next_label, 2))
+                rows.append(DisplayRow(self.deep_learning_label, 2))
+                rows.append(DisplayRow(next_label, 3))
             else:
-                rows.append(DisplayRow(next_label, 1))
+                rows.append(DisplayRow(next_label, 2))
             rows.append(
                 DisplayRow(
                     "Unknown hardware remains read-only until exact write semantics are PROVEN.",
                     dim=True,
                 )
             )
+            return rows
+
+        if self.section is SetupSection.LAB:
+            rows = [
+                DisplayRow("Discovery Lab — Differential Protocol Analyzer"),
+                DisplayRow("Selected-device capture is local, bounded, and read-only."),
+            ]
+            experiment = self.lab_experiment
+            analysis = getattr(experiment, "analysis", None)
+            if analysis is None:
+                rows.extend([
+                    DisplayRow("What is known: no Lab experiment has been run yet."),
+                    DisplayRow("What is uncertain: action-specific protocol fields."),
+                ])
+            else:
+                fields = analysis.ranked_fields
+                correlated = [
+                    item for item in fields
+                    if any(signal.value == "action_correlated" for signal in item.signals)
+                ]
+                rows.append(DisplayRow(
+                    f"Just learned: {len(correlated)} action-correlated field(s) across "
+                    f"{len(experiment.observations)} protocol observation(s)."
+                ))
+                for item in fields[:4]:
+                    labels = ", ".join(signal.value.replace("_", " ") for signal in item.signals)
+                    rows.append(DisplayRow(
+                        f"{item.stream_id[-12:]} byte {item.offset}: {labels} (rank {item.score:g})"
+                    ))
+                recommendation = analysis.next_recommended_experiment
+                if recommendation is not None:
+                    rows.append(DisplayRow(
+                        f"Next: {recommendation.experiment.replace('_', ' ')} — "
+                        f"{recommendation.reason}"
+                    ))
+                    rows.append(DisplayRow(
+                        "Hardware write required: yes" if recommendation.requires_hardware_write
+                        else "Hardware write required: no"
+                    ))
+                if analysis.contradictions:
+                    rows.append(DisplayRow(
+                        f"Uncertain: {len(analysis.contradictions)} negative-control contradiction(s)."
+                    ))
+            rows.extend([
+                DisplayRow("Run Full Automatic Lab — Differential Analyzer milestone", 0),
+                DisplayRow(
+                    f"Continue to {self._next_configuration_section(SetupSection.LAB).value.lower()} configuration",
+                    1,
+                ),
+                DisplayRow("Recognition and correlation never grant hardware write authority.", dim=True),
+            ])
             return rows
 
         if self.section is SetupSection.DPI:

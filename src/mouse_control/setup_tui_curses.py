@@ -12,6 +12,11 @@ from evdev import InputDevice, ecodes
 
 from . import __version__
 from .device_topology import TopologyError
+from .discovery_lab import (
+    DiscoveryLabCancelled,
+    FieldSignal,
+    run_read_only_differential_lab,
+)
 from .guided_discovery import (
     GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_deep_dpi_stage_learning,
 )
@@ -452,6 +457,19 @@ class CursesSetupApp:
             no="b Cancel learning",
         )
 
+    def _lab_prompt(self, step: Any) -> bool:
+        return self._confirm(
+            f"Discovery Lab — {step.title} {step.current}/{step.total}",
+            [
+                step.instruction,
+                "",
+                "Capture is bounded to the selected mouse and stays local.",
+                "No unknown configuration command will be sent.",
+            ],
+            yes="Enter Begin capture",
+            no="b Cancel Lab",
+        )
+
     def _guided_progress(self, message: str) -> None:
         if message.startswith("Captured "):
             message = "✓ Sample captured"
@@ -642,6 +660,46 @@ class CursesSetupApp:
             lines.append("? No runtime stage profile was promoted")
         lines.append("Write authority remains unchanged by deeper read-side learning.")
         self._confirm("Deeper discovery result", lines, yes="Enter Continue", no="Esc Continue")
+
+    def _run_discovery_lab(self) -> None:
+        """Run the first bounded Lab instrument over existing read-only capture."""
+
+        if self.controller.discovery_result is None or self.controller.discovery_engine is None:
+            self.controller.status = "Run Automatic Discovery before starting the Discovery Lab."
+            return
+        result = self.controller.discovery_result
+        engine = self.controller.discovery_engine
+        generation = int(getattr(self.controller.backend, "generation", 0) or 0)
+        try:
+            experiment = run_read_only_differential_lab(
+                result.device,
+                engine.descriptors,
+                prompt=self._lab_prompt,
+                progress=self._guided_progress,
+                connection_generation=generation,
+            )
+        except DiscoveryLabCancelled:
+            self.controller.status = "Discovery Lab cancelled; retained evidence and authority are unchanged."
+            return
+        except (TopologyError, PermissionError, OSError, HardwareError, ValueError) as exc:
+            self.controller.status = f"Discovery Lab stopped safely: {exc}"
+            return
+        self.controller.apply_lab_experiment(experiment)
+        assert experiment.analysis is not None
+        correlated = [
+            item for item in experiment.analysis.ranked_fields
+            if FieldSignal.ACTION_CORRELATED in item.signals
+        ]
+        lines = [
+            f"✓ {len(experiment.observations)} selected-device protocol observation(s) retained",
+            f"✓ {len(correlated)} action-correlated field(s) ranked against the negative control",
+            f"• {len(experiment.analysis.integrity)} stream(s) checked for bounded integrity schemes",
+        ]
+        recommendation = experiment.analysis.next_recommended_experiment
+        if recommendation is not None:
+            lines.append(f"→ Next recommended experiment: {recommendation.experiment.replace('_', ' ')}")
+        lines.append("No hardware write was attempted or authorized.")
+        self._confirm("Differential Protocol Analyzer", lines, yes="Enter Inspect result", no="Esc Inspect result")
 
     def _suspend_curses(self, function: Callable[[], Any]) -> Any:
         assert self.stdscr is not None
@@ -1220,6 +1278,8 @@ class CursesSetupApp:
                     self._run_automatic(force=action.kind is ActionKind.RETRY_DISCOVERY)
                 elif action.kind is ActionKind.GUIDED_DISCOVERY:
                     self._run_guided()
+                elif action.kind is ActionKind.RUN_DISCOVERY_LAB:
+                    self._run_discovery_lab()
                 elif action.kind is ActionKind.MEASURE_POLLING:
                     self._run_polling_measurement()
                 elif action.kind is ActionKind.EDIT_DPI:

@@ -328,9 +328,9 @@ def test_unknown_device_offers_deeper_learning_only_after_automatic_research_pla
     app.discovery_complete = True
     app.research_plan = SimpleNamespace(deeper_learning_recommended=True)
     assert app.guided_discovery_available is True
-    app.row_cursor = 1
-    assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
     app.row_cursor = 2
+    assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
+    app.row_cursor = 3
     assert app.handle_key("ENTER").kind is ActionKind.NONE
     # No verified write path is a successful result; skip non-configurable pages.
     assert app.section is SetupSection.BUTTONS
@@ -482,3 +482,33 @@ def test_device_switch_clears_exact_device_observed_evidence():
     app.handle_key("ENTER")
     assert app.selected is MOUSE2
     assert not app.observed_hardware.has_physical_calibration
+
+
+def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
+    app, _ = controller()
+    app.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    app.discovery_complete = True
+    app.discovery_result = SimpleNamespace(device=SimpleNamespace())
+    app.row_cursor = 1
+    assert app.handle_key("ENTER").kind is ActionKind.NONE
+    assert app.section is SetupSection.LAB
+    rows = app.detail_rows()
+    assert any("Run Full Automatic Lab" in row.text for row in rows)
+    assert app.handle_key("ENTER").kind is ActionKind.RUN_DISCOVERY_LAB
+
+    analysis = SimpleNamespace(
+        ranked_fields=(SimpleNamespace(
+            stream_id="stream", offset=2,
+            signals=(SimpleNamespace(value="action_correlated"),), score=105,
+        ),),
+        next_recommended_experiment=SimpleNamespace(
+            experiment="alternate-negative-control",
+            reason="separate candidates",
+            requires_hardware_write=False,
+        ),
+        contradictions=(),
+    )
+    app.apply_lab_experiment(SimpleNamespace(analysis=analysis, observations=(1, 2, 3)))
+    text = "\n".join(row.text for row in app.detail_rows())
+    assert "Just learned: 1 action-correlated field" in text
+    assert "Hardware write required: no" in text
