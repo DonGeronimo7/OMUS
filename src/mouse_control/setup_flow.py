@@ -19,6 +19,7 @@ class SetupChoices:
     active_dpi: int = DEFAULT_DPI
     polling_rate: int | None = None
     mappings: dict[str, str] = field(default_factory=dict)
+    macros: dict[str, list[dict[str, object]]] = field(default_factory=dict)
     enable_service: bool = True
 
     # Device-specific discovery state. reset_device_state() MUST be called when

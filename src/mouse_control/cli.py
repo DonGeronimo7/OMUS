@@ -16,7 +16,7 @@ from .discovery import MouseDevice, get_mouse_devices, select_mouse_device
 from .hardware import (DesiredHardwareState, HardwareBackend, HardwareError,
                        HardwareSupervisor, get_backend)
 from .hardware.discovery_backend import DiscoveryBackend
-from .remapper import DpiCycler, MouseRemapper
+from .remapper import DpiCycler, MouseRemapper, parse_macros
 from .notifications import DpiMonitorSupervisor
 from .battery import BatteryMonitorSupervisor
 from .hidpp_debug import debug_dpi
@@ -145,8 +145,10 @@ def _initial_choices(existing: dict[str, object]) -> SetupChoices:
     rate = polling.get("rate_hz")
     if rate is not None and (not isinstance(rate, int) or rate <= 0):
         raise ValueError("Existing polling configuration is invalid")
+    macros = existing.get("macros", {})
+    parse_macros(macros)
     return SetupChoices(stages=list(stages), active_dpi=active, polling_rate=rate,
-                        mappings=_initial_mappings(existing))
+                        mappings=_initial_mappings(existing), macros=macros)
 
 
 def debug_hid(seconds: float = 10.0) -> int:
@@ -345,6 +347,12 @@ def run_from_config(path: Path | None = None) -> int:
         return 1
     device = config.get("device", {})
     mappings = config.get("remap", {})
+    macros = config.get("macros", {})
+    try:
+        parse_macros(macros)
+    except ValueError as exc:
+        print(f"Invalid macro configuration: {exc}", file=sys.stderr)
+        return 1
     event_path = device.get("event_path")
     if not event_path:
         print("Configuration is missing [device].event_path", file=sys.stderr)
@@ -439,7 +447,7 @@ def run_from_config(path: Path | None = None) -> int:
     try:
         MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
                       target_device=mouse or configured_mouse,
-                      event_observer=hardware).run()
+                      event_observer=hardware, macros=macros).run()
     finally:
         if monitor is not None:
             monitor.stop()

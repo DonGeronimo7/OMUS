@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import errno
+import queue
 import select
 import signal
 import threading
@@ -27,6 +28,51 @@ class Action:
     codes: tuple[int, ...] = ()
 
 
+@dataclass(frozen=True)
+class MacroStep:
+    action: Action | None = None
+    delay_ms: int = 0
+
+
+def parse_macros(value: object) -> dict[str, tuple[MacroStep, ...]]:
+    """Validate structured macro configuration without accepting executable text."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("[macros] must be a table")
+    parsed: dict[str, tuple[MacroStep, ...]] = {}
+    for name, raw_steps in value.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Macro names must be non-empty strings")
+        if not isinstance(raw_steps, list) or not raw_steps:
+            raise ValueError(f"Macro {name!r} must contain at least one step")
+        steps: list[MacroStep] = []
+        for index, raw in enumerate(raw_steps, 1):
+            if not isinstance(raw, dict) or not isinstance(raw.get("type"), str):
+                raise ValueError(f"Macro {name!r} step {index} must be a table with a type")
+            kind = raw["type"].strip()
+            if kind == "delay":
+                milliseconds = raw.get("milliseconds")
+                if (not isinstance(milliseconds, int) or isinstance(milliseconds, bool)
+                        or not 0 <= milliseconds <= 60_000):
+                    raise ValueError(
+                        f"Macro {name!r} step {index} delay must be 0..60000 milliseconds"
+                    )
+                if set(raw) != {"type", "milliseconds"}:
+                    raise ValueError(f"Macro {name!r} step {index} has unknown fields")
+                steps.append(MacroStep(delay_ms=milliseconds))
+                continue
+            action_value = raw.get("value")
+            if not isinstance(action_value, str) or set(raw) != {"type", "value"}:
+                raise ValueError(f"Macro {name!r} step {index} requires one string value")
+            action = parse_action(f"{kind}:{action_value}")
+            if action.kind not in {"key", "chord", "mouse"}:
+                raise ValueError(f"Macro {name!r} step {index} uses unsupported action {kind!r}")
+            steps.append(MacroStep(action=action))
+        parsed[name] = tuple(steps)
+    return parsed
+
+
 def parse_action(value: str) -> Action:
     value = value.strip()
     if value == "passthrough":
@@ -35,6 +81,11 @@ def parse_action(value: str) -> Action:
         return Action("disable")
     if value == "dpi-cycle":
         return Action("dpi-cycle")
+    if value.startswith("macro:"):
+        name = value.split(":", 1)[1].strip()
+        if not name:
+            raise ValueError(f"Invalid macro action: {value}")
+        return Action("macro", codes=(), code=None)
     if value.startswith("mouse:"):
         name = value.split(":", 1)[1]
         code = getattr(ecodes, name, None)
@@ -156,7 +207,8 @@ class MouseRemapper:
                  dpi_cycler: DpiCycler | None = None,
                  target_device: MouseDevice | None = None,
                  retry_interval: float = 0.5,
-                 event_observer: Any | None = None) -> None:
+                 event_observer: Any | None = None,
+                 macros: object = None) -> None:
         self.device_path = device_path
         # An evdev event node is disposable.  Keep the selected mouse's
         # discovery identity separately so a changed eventN can be rebound.
@@ -169,6 +221,15 @@ class MouseRemapper:
                 raise ValueError(f"Invalid remap source button: {name}")
             parsed[code] = parse_action(action)
         self.mappings = parsed
+        self.macros = parse_macros(macros)
+        self._macro_names = {
+            code: mappings[name].split(":", 1)[1].strip()
+            for name, code in ((name, getattr(ecodes, name, None)) for name in mappings)
+            if code is not None and parsed[code].kind == "macro"
+        }
+        missing = sorted({name for name in self._macro_names.values() if name not in self.macros})
+        if missing:
+            raise ValueError("Undefined macro(s): " + ", ".join(missing))
         self.ui: UInput | None = None
         self.shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
         self.dpi_cycler = dpi_cycler
@@ -178,6 +239,10 @@ class MouseRemapper:
         self._held_chords: set[int] = set()
         self._chord_key_counts: dict[int, int] = {}
         self._ambiguity_logged = False
+        self._output_lock = threading.RLock()
+        self._macro_queue: queue.Queue[tuple[MacroStep, ...] | None] = queue.Queue()
+        self._macro_cancel = threading.Event()
+        self._macro_thread: threading.Thread | None = None
 
     def _capabilities(self) -> dict[int, list[int]]:
         assert self.device is not None
@@ -198,20 +263,87 @@ class MouseRemapper:
             if action.code is not None and action.kind in {"mouse", "key"}:
                 keys.add(action.code)
             keys.update(action.codes)
+        for steps in self.macros.values():
+            for step in steps:
+                if step.action is not None:
+                    if step.action.code is not None:
+                        keys.add(step.action.code)
+                    keys.update(step.action.codes)
         capabilities[ecodes.EV_KEY] = sorted(keys)
         return capabilities
 
     def _emit(self, event_type: int, code: int, value: int) -> None:
-        assert self.ui is not None
-        self.ui.write(event_type, code, value)
-        if event_type == ecodes.EV_KEY:
-            pressed_keys = getattr(self, "_pressed_keys", None)
-            if pressed_keys is None:
-                pressed_keys = self._pressed_keys = set()
-            if value:
-                pressed_keys.add(code)
-            else:
-                pressed_keys.discard(code)
+        output_lock = getattr(self, "_output_lock", None)
+        if output_lock is None:
+            output_lock = self._output_lock = threading.RLock()
+        with output_lock:
+            assert self.ui is not None
+            self.ui.write(event_type, code, value)
+            if event_type == ecodes.EV_KEY:
+                pressed_keys = getattr(self, "_pressed_keys", None)
+                if pressed_keys is None:
+                    pressed_keys = self._pressed_keys = set()
+                if value:
+                    pressed_keys.add(code)
+                else:
+                    pressed_keys.discard(code)
+
+    def _tap_action(self, action: Action) -> None:
+        codes = action.codes if action.kind == "chord" else (action.code,)
+        emitted: list[int] = []
+        with self._output_lock:
+            try:
+                for code in codes:
+                    assert code is not None
+                    # Do not release a key/button already held by an ordinary
+                    # mapping when this short macro action finishes.
+                    if code in self._pressed_keys:
+                        continue
+                    self._emit(ecodes.EV_KEY, code, 1)
+                    emitted.append(code)
+                if emitted and self.ui is not None:
+                    self.ui.syn()
+            finally:
+                for code in reversed(emitted):
+                    self._emit(ecodes.EV_KEY, code, 0)
+                if emitted and self.ui is not None:
+                    self.ui.syn()
+
+    def _play_macro(self, steps: tuple[MacroStep, ...]) -> None:
+        for step in steps:
+            if self._macro_cancel.is_set() or self.shutdown_event.is_set():
+                return
+            if step.action is not None:
+                self._tap_action(step.action)
+            elif self._macro_cancel.wait(step.delay_ms / 1000):
+                return
+
+    def _macro_worker(self) -> None:
+        while not self.shutdown_event.is_set():
+            steps = self._macro_queue.get()
+            if steps is None:
+                return
+            try:
+                self._play_macro(steps)
+            except Exception as exc:
+                LOG.warning("Macro playback failed: %s", exc)
+                self._release_pressed_keys()
+
+    def _start_macro_worker(self) -> None:
+        if self._macro_thread is None or not self._macro_thread.is_alive():
+            self._macro_cancel.clear()
+            self._macro_queue = queue.Queue()
+            self._macro_thread = threading.Thread(
+                target=self._macro_worker, name="mouse-control-macros", daemon=True
+            )
+            self._macro_thread.start()
+
+    def _stop_macros(self) -> None:
+        self._macro_cancel.set()
+        self._macro_queue.put(None)
+        if self._macro_thread is not None and self._macro_thread is not threading.current_thread():
+            self._macro_thread.join(timeout=1)
+        self._macro_thread = None
 
     @staticmethod
     def _is_disconnect(exc: OSError) -> bool:
@@ -260,21 +392,25 @@ class MouseRemapper:
             return None
 
     def _release_pressed_keys(self) -> None:
-        if self.ui is None:
+        output_lock = getattr(self, "_output_lock", None)
+        if output_lock is None:
+            output_lock = self._output_lock = threading.RLock()
+        with output_lock:
+            if self.ui is None:
+                self._pressed_keys.clear()
+                self._held_chords.clear()
+                self._chord_key_counts.clear()
+                return
+            had_pressed_keys = bool(self._pressed_keys)
+            for source in tuple(self._held_chords):
+                self._handle_chord(source, self.mappings[source], 0)
+            for code in tuple(self._pressed_keys):
+                self.ui.write(ecodes.EV_KEY, code, 0)
+            if had_pressed_keys:
+                self.ui.syn()
             self._pressed_keys.clear()
             self._held_chords.clear()
             self._chord_key_counts.clear()
-            return
-        had_pressed_keys = bool(self._pressed_keys)
-        for source in tuple(self._held_chords):
-            self._handle_chord(source, self.mappings[source], 0)
-        for code in tuple(self._pressed_keys):
-            self.ui.write(ecodes.EV_KEY, code, 0)
-        if had_pressed_keys:
-            self.ui.syn()
-        self._pressed_keys.clear()
-        self._held_chords.clear()
-        self._chord_key_counts.clear()
 
     def _handle_chord(self, source: int, action: Action, value: int) -> None:
         if value == 1:
@@ -327,6 +463,11 @@ class MouseRemapper:
         if action.kind == "dpi-cycle":
             if value == 1 and self.dpi_cycler is not None:
                 self.dpi_cycler.cycle()
+            return
+        if action.kind == "macro":
+            if value == 1:
+                self._start_macro_worker()
+                self._macro_queue.put(self.macros[self._macro_names[code]])
             return
         if action.kind == "passthrough":
             self._emit(event_type, code, value)
@@ -382,6 +523,7 @@ class MouseRemapper:
                 except OSError as exc:
                     if not self._is_disconnect(exc):
                         raise
+                    self._stop_macros()
                     self._release_pressed_keys()
                     invalidate = getattr(
                         self.event_observer, "invalidate_observer_continuity", None
@@ -392,6 +534,7 @@ class MouseRemapper:
                     disconnected = True
                     LOG.warning("Mouse disconnected; waiting for reconnect")
         finally:
+            self._stop_macros()
             self._release_pressed_keys()
             self._close_device()
             if self.ui is not None:

@@ -106,6 +106,7 @@ def run_tui_setup_wizard() -> int:
             dpi_stages=choices.stages,
             active_dpi=choices.active_dpi,
             polling_rate_hz=choices.polling_rate,
+            macros=choices.macros,
         )
         path = cli.save_config(content)
         saved = True

@@ -579,10 +579,10 @@ class CursesSetupApp:
                 pass
             self.stdscr.refresh()
 
-    def _read_text(self, title: str, *, hint: str = "") -> str | None:
+    def _read_text(self, title: str, *, hint: str = "", label: str = "Action") -> str | None:
         value = ""
         while True:
-            lines = ([hint] if hint else []) + [f"Action: {value or ' '}" ]
+            lines = ([hint] if hint else []) + [f"{label}: {value or ' '}" ]
             self._modal(
                 title,
                 lines,
@@ -601,6 +601,126 @@ class CursesSetupApp:
             elif 32 <= key <= 126 and len(value) < 120:
                 value += chr(key)
 
+    @staticmethod
+    def _move_menu(key: int, cursor: int, size: int) -> int | None:
+        if key in (curses.KEY_UP, ord("k")):
+            return (cursor - 1) % size
+        if key in (curses.KEY_DOWN, ord("j")):
+            return (cursor + 1) % size
+        if key in (curses.KEY_HOME, ord("g")):
+            return 0
+        if key in (curses.KEY_END, ord("G")):
+            return size - 1
+        return None
+
+    def _create_macro(self) -> str | None:
+        name = self._read_text(
+            "Create macro", hint="Use a short descriptive name.", label="Name"
+        )
+        if name is None:
+            return None
+        if name in self.controller.choices.macros:
+            self.controller.status = f"Macro {name!r} already exists."
+            return None
+        steps: list[dict[str, object]] = []
+        options = [
+            ("Add keyboard key", "key"),
+            ("Add keyboard chord", "chord"),
+            ("Add left click", "mouse:BTN_LEFT"),
+            ("Add right click", "mouse:BTN_RIGHT"),
+            ("Add middle click", "mouse:BTN_MIDDLE"),
+            ("Add delay", "delay"),
+            ("Save macro", "save"),
+        ]
+        cursor = 0
+        while True:
+            summary = [
+                f"{index}. " + (
+                    f"wait {step['milliseconds']} ms" if step["type"] == "delay"
+                    else f"{step['type']}:{step['value']}"
+                )
+                for index, step in enumerate(steps, 1)
+            ] or ["No steps yet."]
+            lines = summary + [""] + [
+                ("▶ " if index == cursor else "  ") + label
+                for index, (label, _value) in enumerate(options)
+            ]
+            self._modal(
+                f"Macro: {name}", lines,
+                prompt="↑↓/jk Navigate   g/G First/Last   Enter Select   Esc Cancel",
+            )
+            key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
+            moved = self._move_menu(key, cursor, len(options))
+            if moved is not None:
+                cursor = moved
+                continue
+            if key == 27:
+                return None
+            if key not in (10, 13, curses.KEY_ENTER):
+                continue
+            choice = options[cursor][1]
+            if choice == "save":
+                if not steps:
+                    self.controller.status = "A macro needs at least one step."
+                    continue
+                self.controller.choices.macros[name] = steps
+                return f"macro:{name}"
+            if choice == "key":
+                value = capture_keyboard_key(
+                    exclude_paths=(self.controller.selected.path,),
+                    manage_terminal=False, reporter=None,
+                )
+                if value is not None:
+                    steps.append({"type": "key", "value": value})
+            elif choice == "chord":
+                value = capture_keyboard_chord(
+                    exclude_paths=(self.controller.selected.path,),
+                    manage_terminal=False, reporter=None,
+                )
+                if value is not None:
+                    steps.append({"type": "chord", "value": value.split(":", 1)[1]})
+            elif choice.startswith("mouse:"):
+                steps.append({"type": "mouse", "value": choice.split(":", 1)[1]})
+            elif choice == "delay":
+                raw = self._read_text(
+                    "Add delay", hint="Whole milliseconds from 0 to 60000.",
+                    label="Milliseconds",
+                )
+                try:
+                    milliseconds = int(raw) if raw is not None else None
+                    if milliseconds is None or not 0 <= milliseconds <= 60_000:
+                        raise ValueError
+                except ValueError:
+                    self.controller.status = "Delay must be 0..60000 milliseconds."
+                else:
+                    steps.append({"type": "delay", "milliseconds": milliseconds})
+
+    def _choose_macro(self) -> str | None:
+        names = list(self.controller.choices.macros)
+        options = [(f"Use {name}", f"macro:{name}") for name in names]
+        options.append(("Create new macro", "__create__"))
+        cursor = 0
+        while True:
+            lines = [
+                ("▶ " if index == cursor else "  ") + label
+                for index, (label, _value) in enumerate(options)
+            ]
+            self._modal(
+                "Choose macro", lines,
+                prompt="↑↓/jk Navigate   g/G First/Last   Enter Select   Esc Cancel",
+            )
+            key = self.stdscr.getch()
+            moved = self._move_menu(key, cursor, len(options))
+            if moved is not None:
+                cursor = moved
+            elif key == 27:
+                return None
+            elif key in (10, 13, curses.KEY_ENTER):
+                action = options[cursor][1]
+                return self._create_macro() if action == "__create__" else action
+
     def _choose_button_action(self, button: str) -> str | None:
         options = [
             ("Passthrough", "passthrough"),
@@ -609,6 +729,7 @@ class CursesSetupApp:
             ("Mouse: middle button", "mouse:BTN_MIDDLE"),
             ("Keyboard key", "__key__"),
             ("Keyboard chord", "__chord__"),
+            ("Macro", "__macro__"),
             ("Manual Linux action", "__manual__"),
             ("Disable", "disable"),
             ("Cycle configured DPI stages", "dpi-cycle"),
@@ -619,14 +740,13 @@ class CursesSetupApp:
                 ("▶ " if index == cursor else "  ") + label
                 for index, (label, _action) in enumerate(options)
             ]
-            self._modal("Choose button action", lines, prompt="↑↓ Navigate   Enter Select   Esc Cancel")
+            self._modal("Choose button action", lines, prompt="↑↓/jk Navigate   g/G First/Last   Enter Select   Esc Cancel")
             key = self.stdscr.getch()
             if key == curses.KEY_RESIZE:
                 continue
-            if key == curses.KEY_UP:
-                cursor = (cursor - 1) % len(options)
-            elif key == curses.KEY_DOWN:
-                cursor = (cursor + 1) % len(options)
+            moved = self._move_menu(key, cursor, len(options))
+            if moved is not None:
+                cursor = moved
             elif key == 27:
                 return None
             elif key in (10, 13, curses.KEY_ENTER):
@@ -668,6 +788,8 @@ class CursesSetupApp:
                     if chord is None:
                         self.controller.status = "Keyboard chord capture cancelled or unavailable."
                     return chord
+                if action == "__macro__":
+                    return self._choose_macro()
                 if action == "__manual__":
                     raw = self._read_text(
                         "Manual Linux action",
