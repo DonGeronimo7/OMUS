@@ -299,6 +299,63 @@ Factory/profile reset, identity/descriptor mutation, pairing, DFU, flash erase,
 firmware control, arbitrary target enumeration, and unknown command probing are
 explicitly non-experimentable.
 
+## Vendor Capture Importer
+
+The Lab can ingest legitimate public/vendor protocol observations offline from
+the normal `Discovery Lab → Import Vendor Capture` action. Importing never opens
+a HID device, transmits a captured frame, contacts a network service, or changes
+runtime capabilities. It is an evidence-staging path, not packet replay.
+
+Version 1 supports the canonical `mouse-control-vendor-capture:1` JSON form and
+an equivalent JSONL stream with a `capture_header` followed by `record` objects.
+Adapters implement deterministic `detect` and `parse` behavior; a future vendor
+or trace exporter can add an adapter without changing normalization, evidence,
+persistence, or the TUI. Ambiguous detection abstains. Raw PCAP/PCAPNG is not
+claimed by v1 and can be added later through the same bounded adapter boundary.
+
+Each source retains its SHA-256 digest, basename, source/provenance category,
+optional vendor/model/VID:PID/receiver/family/version/date/reference metadata,
+notes, import date, and importer version. Allowed provenance includes official
+public vendor packages, public documentation, open-source implementations, and
+personally recorded captures. Material represented as private, leaked,
+exfiltrated, NDA-restricted, or authentication-bypassed is refused. Unknown
+metadata remains unknown.
+
+Normalization preserves the physical frame, original length and sequence,
+normalized order, known direction and timestamp, report/transport/interface/
+endpoint/channel/control metadata, transaction relationship, parser warnings,
+and source reference. Unknown frames remain evidence. Known repertoire grammar
+may additionally supply a normalized payload and decoded fields, but never
+replaces the raw bytes. The Aurora fixture uses its existing family module for
+Feature-0 alignment/status, Input-4 events, routed identity, battery/power, and
+dangerous-operation classification; no LAMZU-specific import side channel was
+added.
+
+Imported records are wrapped around the existing `DiscoveryEvidence` type and
+projected into existing `ProtocolObservation`, `DialogueRecord`,
+`PushedStateRecord`, timing, Routing Mapper, and Power Investigator structures
+when the capture has sufficient facts. The review lifecycle is
+`IMPORTED_UNREVIEWED`, `ACCEPTED`, or `REJECTED`. Acceptance means only that the
+prior knowledge may be consulted; evidence remains `OBSERVED` or `DECODED` and
+can never become `PROVEN`, experiment-eligible, or write-authorizing through
+this pipeline.
+
+The local content-addressed store keeps one JSON staging document per source
+digest under the Mouse Control discovery data directory. It retains the
+manifest, provenance, normalized records, warnings, conflicts, review state,
+and stable relationships to generated evidence. Exact duplicate imports are
+recognized by source digest. Exact duplicate observations within one source are
+collapsed, temporally distinct repeats remain, and identical bytes from an
+independent source remain separate corroboration. Conflicting meanings,
+families, and report lengths are retained as conflict evidence rather than
+resolved by import order.
+
+Capture files are untrusted input. File size, record count, frame size, nesting,
+node count, timestamps, byte values, and stored paths are bounded and checked.
+Persistence filenames are derived only from validated SHA-256 digests. The
+importer does not evaluate scripts, execute vendor JavaScript, load pickles, or
+make external requests.
+
 ## Safety and privacy
 
 - Capture is restricted to the physical mouse selected by Automatic Discovery.

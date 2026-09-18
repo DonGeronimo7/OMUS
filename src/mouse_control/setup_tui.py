@@ -54,6 +54,7 @@ class ActionKind(Enum):
     RETRY_DISCOVERY = auto()
     GUIDED_DISCOVERY = auto()
     RUN_DISCOVERY_LAB = auto()
+    IMPORT_VENDOR_CAPTURE = auto()
     MEASURE_POLLING = auto()
     EDIT_DPI = auto()
     CAPTURE_BUTTONS = auto()
@@ -192,6 +193,7 @@ class SetupController:
         self.research_probe_outcome: Any | None = None
         self.discovery_engine: Any | None = None
         self.lab_experiment: Any | None = None
+        self.vendor_capture_import: Any | None = None
         self.polling_measurement: Any | None = None
         self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
@@ -330,6 +332,7 @@ class SetupController:
         self.research_probe_outcome = None
         self.discovery_engine = None
         self.lab_experiment = None
+        self.vendor_capture_import = None
         self.polling_measurement = None
         self.observed_hardware = ObservedHardwareState()
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
@@ -496,6 +499,21 @@ class SetupController:
             "write authority remains unchanged."
         )
 
+    def apply_vendor_capture_import(self, imported: Any) -> None:
+        """Retain an offline import summary without changing runtime capabilities."""
+
+        self.vendor_capture_import = imported
+        manifest = imported.manifest
+        self.status = (
+            f"Imported {manifest.accepted_records} offline evidence record(s); "
+            "review state is unreviewed and write authority remains unchanged."
+        )
+
+    def cancel_vendor_capture_import(self) -> None:
+        """Cancellation changes no previously staged evidence or runtime state."""
+
+        self.status = "Vendor capture import cancelled; existing evidence is unchanged."
+
     @property
     def guided_discovery_available(self) -> bool:
         # Deeper learning is specifically the fallback for an unknown protocol
@@ -661,7 +679,7 @@ class SetupController:
             # Automatic/retry, Discovery Lab, optional deeper discovery, continue.
             return 4 if self.guided_discovery_available else 3
         if self.section is SetupSection.LAB:
-            return 2
+            return 3
         if self.section is SetupSection.DPI:
             return len(self.choices.stages) if self.choices.dpi_writable else 1
         if self.section is SetupSection.POLLING:
@@ -785,6 +803,8 @@ class SetupController:
                     self.status = "Run Automatic Discovery before starting a Lab experiment."
                     return ControllerAction()
                 return ControllerAction(ActionKind.RUN_DISCOVERY_LAB)
+            if self.row_cursor == 1:
+                return ControllerAction(ActionKind.IMPORT_VENDOR_CAPTURE)
             self._go(self._next_configuration_section(SetupSection.LAB))
             return ControllerAction()
 
@@ -1015,6 +1035,29 @@ class SetupController:
                     DisplayRow("Exact hardware proof: incomplete"),
                     DisplayRow("Writes: disabled pending verification"),
                 ))
+            imported = self.vendor_capture_import
+            if imported is not None:
+                manifest = imported.manifest
+                rows.extend((
+                    DisplayRow("Vendor capture import", dim=True),
+                    DisplayRow(
+                        f"Format: {manifest.parser_selected}; "
+                        f"accepted {manifest.accepted_records}/{manifest.total_records} records"
+                    ),
+                    DisplayRow(
+                        "Families: " + (
+                            ", ".join(manifest.protocol_families_recognized) or "unrecognized"
+                        )
+                    ),
+                    DisplayRow(
+                        f"Warnings: {len(manifest.warnings)}; conflicts: {len(manifest.conflicts)}; "
+                        f"dangerous/suppressed: {manifest.dangerous_suppressed_records}"
+                    ),
+                    DisplayRow(
+                        f"Review state: {manifest.review_status.value.replace('_', ' ')}"
+                    ),
+                    DisplayRow("Imported evidence does not enable writes or prove capabilities."),
+                ))
             if plan.selected_action is not None:
                 rows.extend([
                     DisplayRow(f"Best experiment: {plan.selected_action.label}"),
@@ -1185,9 +1228,10 @@ class SetupController:
                         ))
             rows.extend([
                 DisplayRow("Run Full Automatic Lab", 0),
+                DisplayRow("Import Vendor Capture", 1),
                 DisplayRow(
                     f"Continue to {self._next_configuration_section(SetupSection.LAB).value.lower()} configuration",
-                    1,
+                    2,
                 ),
                 DisplayRow("Recognition and correlation never grant hardware write authority.", dim=True),
             ])

@@ -1,5 +1,45 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab v1 Vendor Capture Importer
+
+- Discovery Lab now has a generic, offline vendor-capture ingestion layer with
+  adapter-based format detection/parsing, provenance-preserving normalization,
+  deterministic manifests, deduplication, conflict retention, staged review,
+  and content-addressed local persistence. V1 accepts canonical Mouse Control
+  JSON and JSONL; raw PCAP/PCAPNG remains an adapter extension rather than an
+  incomplete dependency claim.
+- Normalized records retain raw frames, original lengths/sequences, timing and
+  direction only when supplied, HID/USB channel metadata, transaction
+  relationships, warnings, and source references. Unknown facts remain unknown.
+  Imported evidence wraps existing `DiscoveryEvidence` and projects into the
+  existing Lab observation, temporal dialogue, timing, pushed-state, routing,
+  and power models where known grammar supports it.
+- Source SHA-256, provenance category, optional vendor/device/family identity,
+  dates, reference text, notes, parser version, review state, warnings, and
+  conflicts are persisted locally by digest. Independent sources remain
+  independent corroboration; temporal repetition is retained; contradictory
+  meanings, identities, and report lengths force conflicted evidence rather
+  than last-writer-wins behavior.
+- The first end-to-end fixture is the existing LAMZU Aurora repertoire. It
+  covers modern Feature-0 response alignment/status, Input-4 battery/DPI/
+  polling/LOD/profile/connection/performance pushes, Power Investigator,
+  routed VID/PID ambiguity, dangerous/unknown command suppression, bootloader
+  refusal, and the separate legacy report-8 family without duplicating the
+  Aurora protocol module.
+- Import status is `IMPORTED_UNREVIEWED`, `ACCEPTED`, or `REJECTED`. Even
+  accepted records remain no stronger than `OBSERVED`/`DECODED`; imports cannot
+  create experiments, `PROVEN` capabilities, setters, wider parameter ranges,
+  permissive `WriteScope`, routing certainty, or write authority.
+- Parsing is bounded for bytes, record count, frame length, nesting, node count,
+  timestamps, byte values, and content-addressed output paths. It is local-only,
+  executes no imported code, performs no network activity, opens no hardware,
+  and has no packet replay or HID write primitive.
+- Validation at this checkpoint: the focused importer/evidence/persistence/
+  grammar/temporal/routing/Lab/TUI/security/Aurora/power suite passed `238`
+  tests; the full suite passed `966` tests with one existing GLib deprecation
+  warning; `compileall` and `git diff --check` passed. LAMZU Thorn V2 physical
+  validation remains `UNVERIFIED — NEEDS PHYSICAL TEST`.
+
 ## 2026-09-18 — LAMZU Aurora protocol-family knowledge milestone
 
 - Automatic Discovery now treats current LAMZU/Aurora as a declarative family:

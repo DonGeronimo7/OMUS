@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab v1 Vendor Capture Importer
+
+- Continued `codex/discovery-90-corpus` from clean Aurora checkpoint `ebe9039`.
+- Added a generic offline importer for canonical JSON/JSONL captures with
+  bounded parsing, source SHA-256/provenance, raw-frame preservation,
+  deterministic normalized/evidence IDs, manifests, deduplication,
+  independent-source corroboration, explicit conflicts, review staging, and
+  atomic content-addressed local persistence.
+- Projected sufficiently described records into existing Lab observations,
+  temporal dialogues/timing, pushed states, Routing Mapper, and Power
+  Investigator evidence. The Aurora fixture reuses the shared repertoire for
+  response alignment/status, events, routed identity, bootloader and dangerous
+  exclusions, and legacy-family separation.
+- Added `Discovery Lab → Import Vendor Capture` to the normal TUI. It presents
+  format, counts, families, warnings/conflicts, dangerous observations, review
+  state, and an explicit write-disabled statement without changing the normal
+  automatic Lab action.
+- Safety: no import can exceed `DECODED`, become experimentable or `PROVEN`,
+  grant a setter/write scope, replay a packet, open hardware, or contact a
+  network service. Prohibited/private provenance is refused. No hardware
+  request/write, install, push, merge, tag, or release occurred.
+- Automated validation: focused importer/evidence/persistence/grammar/temporal/
+  routing/Lab/TUI/security/Aurora/power suite `238 passed`; full suite
+  `966 passed, 1 warning` (the existing GLib deprecation warning);
+  `python3 -m compileall -q src tests` and `git diff --check` passed.
+- LAMZU Thorn V2 physical validation remains `UNVERIFIED — NEEDS PHYSICAL TEST`.
+
 ## 2026-09-18 — LAMZU Aurora first-class protocol-family knowledge
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `7698607` and

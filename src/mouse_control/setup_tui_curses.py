@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import curses
 import errno
+from pathlib import Path
 import queue
 import threading
 from typing import Any, Callable
@@ -32,6 +33,7 @@ from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
 from .research_probe import ResearchProbeError, run_reversible_research_probes
 from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
+from .vendor_capture import VendorCaptureError, VendorCaptureStore
 from .wizard import ButtonCaptureError, get_button_name
 
 
@@ -436,6 +438,104 @@ class CursesSetupApp:
                 return True
             if key in (27, ord("b"), ord("B"), ord("q"), ord("Q")):
                 return False
+
+    def _prompt_text(self, title: str, lines: list[str], *, maximum: int = 4096) -> str | None:
+        """Collect one bounded local path; Escape/blank cancels without mutation."""
+
+        assert self.stdscr is not None
+        stdscr = self.stdscr
+        height, width = stdscr.getmaxyx()
+        self._modal(title, [*lines, "", "Capture path:"], prompt="Type path and press Enter   blank cancels")
+        y = max(1, min(height - 3, height // 2 + len(lines) // 2 + 2))
+        x = max(1, min(width - 3, width // 8))
+        limit = max(1, min(maximum, width - x - 2))
+        value = b""
+        try:
+            curses.echo()
+            curses.curs_set(1)
+            stdscr.move(y, x)
+            stdscr.clrtoeol()
+            value = stdscr.getstr(y, x, limit)
+        except curses.error:
+            return None
+        finally:
+            curses.noecho()
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+        try:
+            text = value.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            self.controller.status = "Capture path must be valid UTF-8."
+            return None
+        return text or None
+
+    def _run_vendor_capture_import(self) -> None:
+        if not self._confirm(
+            "Import vendor capture",
+            [
+                "The file is parsed locally as untrusted offline evidence.",
+                "Captured packets are never replayed or transmitted.",
+                "Imported observations cannot enable writes or become PROVEN.",
+            ],
+            yes="Enter Choose file",
+            no="b Cancel",
+        ):
+            self.controller.cancel_vendor_capture_import()
+            return
+        selected = self._prompt_text(
+            "Vendor capture file",
+            ["Enter a canonical Mouse Control JSON or JSONL capture path."],
+        )
+        if selected is None:
+            self.controller.cancel_vendor_capture_import()
+            return
+        store = VendorCaptureStore()
+        try:
+            imported = store.preview_file(Path(selected))
+        except VendorCaptureError as exc:
+            self.controller.status = f"Vendor capture import refused: {exc}"
+            self._confirm(
+                "Import refused",
+                [str(exc), "No evidence or runtime authority was changed."],
+                yes="Enter Continue", no="Esc Continue",
+            )
+            return
+        source = imported.source
+        provenance = source.provenance_category.value.replace("_", " ")
+        if not self._confirm(
+            "Review detected capture",
+            [
+                f"Format: {imported.manifest.parser_selected}",
+                f"Source: {source.source_name or 'unknown'}",
+                f"Provenance: {provenance}",
+                f"Digest: {source.content_sha256[:16]}…",
+                f"Records: {imported.manifest.accepted_records}/{imported.manifest.total_records}",
+                "Staging remains unreviewed and cannot enable writes.",
+            ],
+            yes="Enter Stage import",
+            no="b Cancel",
+        ):
+            self.controller.cancel_vendor_capture_import()
+            return
+        if not imported.manifest.duplicate_import:
+            try:
+                store.save(imported)
+            except OSError as exc:
+                self.controller.status = f"Could not persist vendor capture evidence: {exc}"
+                return
+        self.controller.apply_vendor_capture_import(imported)
+        manifest = imported.manifest
+        lines = [
+            f"Accepted: {manifest.accepted_records}/{manifest.total_records}",
+            f"Warnings: {len(manifest.warnings)}",
+            f"Conflicts: {len(manifest.conflicts)}",
+            f"Dangerous/suppressed: {manifest.dangerous_suppressed_records}",
+            "Review state: imported / unreviewed",
+            "Writes remain disabled; physical proof is unchanged.",
+        ]
+        self._confirm("Vendor capture staged", lines, yes="Enter Continue", no="Esc Continue")
 
     def _show_help(self) -> None:
         self._confirm(
@@ -1318,6 +1418,8 @@ class CursesSetupApp:
                     self._run_guided()
                 elif action.kind is ActionKind.RUN_DISCOVERY_LAB:
                     self._run_discovery_lab()
+                elif action.kind is ActionKind.IMPORT_VENDOR_CAPTURE:
+                    self._run_vendor_capture_import()
                 elif action.kind is ActionKind.MEASURE_POLLING:
                     self._run_polling_measurement()
                 elif action.kind is ActionKind.EDIT_DPI:
