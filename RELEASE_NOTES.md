@@ -17,6 +17,17 @@ privacy-filtered community report. The automated BITMOUSE-style acceptance
 fixture demonstrates that complete chain while keeping recognition distinct
 from PROVEN runtime write authority.
 
+## Installed CPI measurement
+
+Physical ruler calibration is available from every installed artifact as
+`mouse-control cpi`. It measures CPI and observed polling directly from Linux
+evdev motion, performs repeated-pass consistency and outlier checks, and can
+compare against an optional configured DPI label without using that label in
+the calculation. Automatic Discovery and qualification flows call the same
+installed Python implementation directly; no source-tree script or subprocess
+coupling is required. Mouse Control does not install `mouse-dpi-tool`, avoiding
+a command-name conflict with libevdev.
+
 ## Evidence fidelity and transaction safety
 
 - Canonical usbmon observations retain optional setup/data flags, interval,

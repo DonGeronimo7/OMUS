@@ -4,6 +4,10 @@
 
 ### Pre-v1 discovery architecture foundation
 
+- Package physical CPI/polling measurement as the first-class
+  `mouse-control cpi` command while retaining the shared internal API used by
+  Automatic Discovery. Do not install or replace libevdev's `mouse-dpi-tool`.
+
 - Add bounded temporal dialogue assembly for delayed replies, busy/poll flows,
   overlapping transactions, unsolicited physical events, reconnect generation
   changes, stale replies, echoes, and unresolved ambiguity.

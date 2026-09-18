@@ -234,6 +234,27 @@ mouse-control status
 
 `mouse-control run` remains the explicit foreground/debug command.
 
+## Measure physical CPI
+
+Mouse Control includes a vendor-neutral ruler calibration mode:
+
+```bash
+mouse-control cpi --help
+mouse-control cpi --distance-mm 50.8
+```
+
+It measures physical counts per inch and observed polling from raw Linux evdev
+motion without sending a vendor-protocol command. The guided session asks for
+repeated straight ruler passes, reports confidence and outliers, and can compare
+the result with an optional configured label using `--known-dpi`. Stop the Mouse
+Control service first if it currently owns the selected mouse, because CPI
+capture temporarily grabs that evdev stream exclusively.
+
+The same installed Python measurement API is used by Automatic Discovery,
+guided calibration, polling qualification, and write-promotion verification.
+Mouse Control intentionally does not install `mouse-dpi-tool`, which remains a
+separate libevdev command name.
+
 ## Buttons and configuration
 
 Setup stores your choices here:
@@ -428,7 +449,7 @@ PYTHONPATH=src pytest -q
 python -m compileall -q src tests
 ```
 
-The v0.9.4 release checkpoint passes 660 automated tests with one known GLib
+The v0.9.4 release checkpoint passes 664 automated tests with one known GLib
 deprecation warning. Compile and whitespace checks, Python sdist/wheel, Fedora
 RPM (including `%check` and packaged CLI smoke), Debian package, and AppImage
 build/smoke validation pass. Final v0.9.4 G305 physical acceptance and

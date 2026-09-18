@@ -32,6 +32,17 @@ def test_explicit_command_bypasses_home_screen():
     home.assert_not_called()
 
 
+def test_cpi_subcommand_dispatches_to_packaged_calibration(monkeypatch):
+    from mouse_control import sensor_calibration_cli
+
+    seen = []
+    monkeypatch.setattr(sensor_calibration_cli, "run_calibration", lambda args: seen.append(args) or 0)
+    assert cli.main(["cpi", "--distance-mm", "254", "--known-dpi", "1600"]) == 0
+    assert len(seen) == 1
+    assert seen[0].distance_mm == 254
+    assert seen[0].known_dpi == 1600
+
+
 def test_no_argument_non_tty_prints_help_without_waiting(monkeypatch, capsys):
     monkeypatch.setattr(cli.sys, "stdin", io.StringIO())
     monkeypatch.setattr(cli.sys, "stdout", io.StringIO())

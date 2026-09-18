@@ -77,6 +77,11 @@ def _build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--device", type=int, metavar="N")
     discover.add_argument("--output", type=Path, required=True, metavar="FILE")
     discover.add_argument("--generic-only", action="store_true")
+    from .sensor_calibration_cli import configure_parser as configure_cpi_parser
+    configure_cpi_parser(sub.add_parser(
+        "cpi",
+        help="measure physical mouse CPI and polling from ruler-guided motion",
+    ))
 
     sub.add_parser("install-service", help="install and enable the systemd user service")
     sub.add_parser("start", help="start the background service")
@@ -579,6 +584,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.generic_only:
             command.append("--generic-only")
         return discovery_main(command)
+
+    if args.command == "cpi":
+        from .sensor_calibration_cli import run_calibration
+        return run_calibration(args)
 
     if args.command == "update":
         return run_update(check=args.check, assume_yes=args.yes)

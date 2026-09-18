@@ -62,6 +62,8 @@ for command in mouse-control mouse-control-discover mouse-control-sensor-calibra
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
     %{buildroot}%{_bindir}/$command --help >/dev/null
 done
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
+  %{buildroot}%{_bindir}/mouse-control cpi --help >/dev/null
 
 %files -f %{pyproject_files}
 %license LICENSE

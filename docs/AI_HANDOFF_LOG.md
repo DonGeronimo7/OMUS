@@ -247,6 +247,31 @@
   was added; write authority remains protocol-backed or exact-model PROVEN.
 - Physical validation: pending on the G305 after installing/running this branch.
 
+## 2026-09-18 — v0.9.4 CPI packaging gate
+
+- Request: CPI measurement must ship as a supported installed capability in
+  every v0.9.4 artifact before final G305 acceptance and release closure.
+- Starting commit: `11d2d31` on `codex/tui-only-setup`. Final commit is the
+  commit containing this entry.
+- Implementation: registered `mouse-control cpi` on the primary CLI and
+  refactored the existing calibration CLI to share one parser configuration
+  and execution function. The existing namespaced executable remains
+  compatible. Discovery continues to import packaged modules directly.
+- Packaging: release CI now installs the wheel and Debian package and smokes
+  their primary CPI command; RPM `%check` and the AppImage smoke do the same.
+  No `mouse-dpi-tool` command or artifact is introduced.
+- Validation: focused CPI/release/terminal tests passed 29; full suite passed
+  664 with one existing GLib warning; compileall and `git diff --check` passed.
+  Wheel and sdist built and contained both calibration modules. An isolated
+  wheel install, Fedora RPM `%check`, installed Debian package, and AppImage
+  each passed `mouse-control cpi --help`.
+- Validation level: automated/package only. No physical CPI measurement or
+  new write authority is claimed. The command reads evdev motion and performs
+  no HID feature/output writes.
+- Remaining gate: install the matching RPM and complete every operator-observed
+  step in `docs/G305_HARDWARE_ACCEPTANCE.md`. Do not tag or publish until that
+  physical gate and the final clean-tree release gate pass.
+
 ## 2026-09-15 — G305 polling acceptance runtime mismatch
 
 Request: user attachment `pasted-text.txt`, continuing reviewed commit

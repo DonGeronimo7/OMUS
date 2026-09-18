@@ -400,3 +400,21 @@ after a Generic fallback and DPI event/notification recovery after promotion.
 `python3 -m compileall -q src tests` and `git diff --check` pass. Physical
 receiver-reinsert validation on the G305 remains pending; no physical recovery
 claim is made from the fixtures alone.
+
+## 2026-09-18 v0.9.4 CPI packaging gate
+
+Physical CPI measurement is a first-class installed command at
+`mouse-control cpi`; the compatibility executable
+`mouse-control-sensor-calibrate` remains available. Discovery and calibration
+share packaged `mouse_control` modules directly, with no repository-relative
+helper, shell-out, or `mouse-dpi-tool` executable.
+
+Automated validation passes 664 tests with one existing GLib deprecation
+warning; compileall and whitespace checks pass. The wheel installed in an
+isolated virtual environment, Fedora RPM `%check`, an installed Debian package,
+and the AppImage all pass `mouse-control cpi --help`. The wheel and sdist
+contain both calibration modules and no `mouse-dpi-tool` artifact.
+
+These packaging checks do not establish physical validation. Final G305
+release-candidate acceptance remains pending after installation of the RPM
+produced from this checkpoint.

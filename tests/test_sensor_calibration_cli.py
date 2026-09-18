@@ -10,11 +10,20 @@ from mouse_control.sensor_calibration import (
     summarize_calibrations,
 )
 from mouse_control.sensor_calibration_cli import (
+    _parser,
     _cpi_consistency,
     _polling_consensus,
     _robust_cpi_subset,
     _weaker_confidence,
 )
+
+
+def test_cpi_parser_supports_namespaced_public_program_name():
+    parser = _parser(prog="mouse-control cpi")
+    assert parser.prog == "mouse-control cpi"
+    args = parser.parse_args(["--distance-mm", "254", "--passes", "4"])
+    assert args.distance_mm == 254
+    assert args.passes == 4
 
 
 def _sample(*, rate: int | None):

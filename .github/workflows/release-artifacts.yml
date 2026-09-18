@@ -35,6 +35,10 @@ jobs:
           python-version: '3.14'
       - run: python -m pip install --upgrade build
       - run: python -m build
+      - name: Smoke-test installed wheel CPI command
+        run: |
+          python -m pip install dist/*.whl
+          mouse-control cpi --help
       - uses: actions/upload-artifact@v5
         with:
           name: python-distributions
@@ -52,6 +56,8 @@ jobs:
           dpkg-buildpackage -us -uc -b
           mkdir artifacts
           mv ../mouse-control_*.deb artifacts/
+          sudo apt-get install -y ./artifacts/mouse-control_*.deb
+          mouse-control cpi --help
       - uses: actions/upload-artifact@v5
         with:
           name: debian-package
@@ -91,6 +97,7 @@ jobs:
         run: |
           APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --version
           APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --help
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage cpi --help
           APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage update --check
       - uses: actions/upload-artifact@v5
         with:
