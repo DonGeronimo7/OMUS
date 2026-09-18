@@ -12,9 +12,10 @@
   native adapter. A previously learned device similarly waits for its learned
   members. No write-authority, discovery, identity, or generation-isolation
   rule was weakened.
-- The shared setup input translation/controller path now adds `j/k`, `h/l`, and
-  `g/G` aliases while preserving arrows, Enter, Escape, Back, Quit, Help, Home,
-  and End. First/last movement uses the controller's selectable-row count.
+- The shared setup input translation/controller path adds `h/j/k/l` as exact
+  Left/Down/Up/Right aliases and `g/G` as first/last, while preserving arrows,
+  Enter, Escape, Back, Quit, Help, Home, and End. First/last movement uses the
+  controller's selectable-row count.
 - Automated validation passes 672 tests with the existing GLib warning.
   Physical confirmation of the reduced G305 reconnect generation count remains
   pending; the pre-fix five-generation trace and eventual Native HID recovery

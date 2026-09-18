@@ -141,29 +141,43 @@ def test_vim_key_translation_is_additive_to_existing_navigation():
     assert CursesSetupApp._symbolic_key(27) == "ESC"
     assert CursesSetupApp._symbolic_key(ord("j")) == "DOWN"
     assert CursesSetupApp._symbolic_key(ord("k")) == "UP"
-    assert CursesSetupApp._symbolic_key(ord("h")) == "VIM_LEFT"
-    assert CursesSetupApp._symbolic_key(ord("l")) == "VIM_RIGHT"
+    assert CursesSetupApp._symbolic_key(ord("h")) == "LEFT"
+    assert CursesSetupApp._symbolic_key(ord("l")) == "RIGHT"
     assert CursesSetupApp._symbolic_key(ord("g")) == "FIRST"
     assert CursesSetupApp._symbolic_key(ord("G")) == "LAST"
 
 
-def test_vim_first_last_and_activation_reuse_controller_actions():
+def test_vim_directions_match_arrows_and_first_last_reuse_controller_actions():
+    import curses
+
     app, _ = controller()
     app.handle_key("LAST")
     assert app.device_cursor == len(app.devices) - 1
     app.handle_key("FIRST")
     assert app.device_cursor == 0
 
-    enter_app, _ = controller()
+    arrow_app, _ = controller()
     vim_app, _ = controller()
-    enter_action = enter_app.handle_key("ENTER")
-    vim_action = vim_app.handle_key("VIM_RIGHT")
-    assert vim_app.section == enter_app.section
-    assert vim_action.kind is enter_action.kind
+    for arrow_key, vim_key in (
+        (curses.KEY_DOWN, ord("j")),
+        (curses.KEY_UP, ord("k")),
+        (curses.KEY_RIGHT, ord("l")),
+        (curses.KEY_LEFT, ord("h")),
+    ):
+        arrow = CursesSetupApp._symbolic_key(arrow_key)
+        vim = CursesSetupApp._symbolic_key(vim_key)
+        assert arrow == vim
+        arrow_action = arrow_app.handle_key(arrow)
+        vim_action = vim_app.handle_key(vim)
+        assert vim_app.section == arrow_app.section
+        assert vim_app.row_cursor == arrow_app.row_cursor
+        assert vim_app.device_cursor == arrow_app.device_cursor
+        assert vim_action.kind is arrow_action.kind
 
-    enter_app.handle_key("BACK")
-    vim_app.handle_key("VIM_LEFT")
-    assert vim_app.section == enter_app.section
+    enter_app, _ = controller()
+    enter_action = enter_app.handle_key("ENTER")
+    assert enter_action.kind is ActionKind.AUTOMATIC_DISCOVERY
+    assert enter_app.section is SetupSection.HARDWARE
 
 
 def test_dpi_edit_is_verified_before_state_changes():

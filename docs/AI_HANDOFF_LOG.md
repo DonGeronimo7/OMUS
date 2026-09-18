@@ -17,8 +17,9 @@
   and no learned DPI write attempt. Learned-device affinity has separate
   regression coverage. Compatibility backends outside the universal Discovery
   surface retain their prior replacement behavior.
-- Added shared TUI aliases: `j/k` down/up, `h/l` back/activate, and `g/G`
-  first/last, plus Home/End translation. Existing key behavior remains covered.
+- Added shared TUI aliases: `h/j/k/l` exactly mirror Left/Down/Up/Right and
+  `g/G` select first/last, plus Home/End translation. Enter remains activation;
+  existing key behavior remains covered.
 - Focused lifecycle, learned-safety, notification, remapper, DPI-cycle, and TUI
   suite passed 133 tests. Full suite passed 672 tests with the existing GLib
   warning. No new physical reconnect test was performed after the correction.
