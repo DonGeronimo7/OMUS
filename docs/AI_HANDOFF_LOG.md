@@ -1,5 +1,38 @@
 # AI handoff log
 
+## 2026-09-18 — generic fixed-frame logical-record reassembly
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `ec7d88f` and
+  inserted a generic read-only logical-record layer between fixed HID transport
+  frames and semantic recognition. It does not change temporal dialogue or
+  simple protocols that do not need reconstruction.
+- The reassembler represents single-frame, fragmented, and concatenated
+  records with explicit transport/logical lengths and `COMPLETE`, `INCOMPLETE`,
+  or `INVALID` state. It retains exact stream/generation identity, all source
+  frames, timestamps, declared/captured lengths, integrity state, known field
+  bytes, and exact opaque regions. Padding and stale tails are not searched for
+  fabricated records.
+- Existing integrity hypotheses now validate individual records. Optional
+  protected wrappers remain `UNKNOWN` for unsupported algorithms, become
+  `VALID` only after calculation, cannot be promoted while unknown, and produce
+  invalid non-semantic evidence on mismatch. No checksum engine was duplicated.
+- Added a RAWM-style recognition-only recipe using project-owned abstract
+  fixtures for complete-state field presence, optional protection, and opaque
+  preservation. Family-specific facts are declarative; the reassembler has no
+  RAWM branch. The family is `WriteScope.NEVER` and no setter, whole-state
+  write, or runtime transaction exists.
+- Extended the benchmark from 18 to 27 cases. Outcomes: 12 recognized, 13
+  candidate, 1 unknown, 1 ambiguous; fixture precision/known recall remain
+  100%, unknown/collision false recognition remain 0%, coverage is 44.4%,
+  abstention 51.9%, and ambiguity 3.7%.
+- Validation: 156 focused protocol/discovery tests and 831 complete-suite tests
+  passed with the existing GLib warning; compileall and diff checks passed. No
+  runtime writer, physical test, installation, push, merge, tag, or release.
+- No transport-to-logical message-framing form currently identified in the
+  mouse research corpus needs another primitive. Payload-driven burst
+  terminators/expected counts and multiplexed response namespaces remain a
+  separate temporal-dialogue limitation, not a logical-record framing gap.
+
 ## 2026-09-18 — generic asynchronous pushed-state discovery
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `db66379` and

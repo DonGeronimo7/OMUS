@@ -1,9 +1,15 @@
 """Project-owned open-set corpus and metric regression tests."""
 
+from dataclasses import replace
 from pathlib import Path
 
 from mouse_control.discovery_models import DeviceNode, HidReportDefinition, PhysicalDevice
 from mouse_control.hid_descriptor import ParsedHidDescriptor
+from mouse_control.integrity_inference import IntegrityHypothesis
+from mouse_control.logical_record import (
+    IntegritySelector, LogicalRecordGrammar, LogicalRecordReassembler,
+    RecordFieldSpec, TransportFrame,
+)
 from mouse_control.protocol_benchmark import BenchmarkObservation, score_benchmark
 from mouse_control.protocol_repertoire import (
     RecognitionStatus, SemanticExchange, recognize_open_set,
@@ -180,6 +186,93 @@ def _async_records(mode: str):
     return tuple(records)
 
 
+def _record_grammar(*, namespace: str = "rawm.records") -> LogicalRecordGrammar:
+    return LogicalRecordGrammar(
+        "rawm-style-state-v1", namespace, None, 64,
+        (b"\x5a", b"\xa5"), 1,
+        type_offset=2, sequence_offset=3,
+        minimum_record_length=12, maximum_record_length=192,
+        known_fields=(
+            RecordFieldSpec("model", 4, 2),
+            RecordFieldSpec("sensor", 6, 2),
+            RecordFieldSpec("dpi-stage-count", 8),
+            RecordFieldSpec("polling", 9),
+            RecordFieldSpec("power", 10),
+            RecordFieldSpec("capabilities", 11),
+        ),
+        integrity_selectors=(IntegritySelector(
+            0, 0xA5, IntegrityHypothesis("sum8", -1, 1),
+        ),),
+    )
+
+
+def _logical_bytes(
+    *, length: int = 16, marker: int = 0x5A, record_type: int = 0x20,
+    sequence: int = 1, corrupt: bool = False,
+) -> bytes:
+    data = bytearray(length)
+    data[:12] = bytes((
+        marker, length, record_type, sequence,
+        0x52, 0x4D, 0x33, 0x39, 4, 2, 99, 15,
+    ))
+    for offset in range(12, length):
+        data[offset] = offset * 7 & 0xFF
+    if marker == 0xA5:
+        data[-1] = sum(data[:-1]) & 0xFF
+        if corrupt:
+            data[-1] ^= 0xFF
+    return bytes(data)
+
+
+def _record_frame(
+    payload: bytes, *, sequence: int = 1, generation: int = 1,
+    namespace: str = "rawm.records",
+) -> TransportFrame:
+    return TransportFrame(
+        "record-fixture", "record-physical", "record-input", "hid",
+        Direction.IN, namespace, None, 64, generation,
+        sequence * 1_000_000, sequence, payload.ljust(64, b"\x00"),
+    )
+
+
+def _rawm_records(mode: str):
+    namespace = "unknown.records" if mode == "unknown" else "rawm.records"
+    record_grammar = _record_grammar(namespace=namespace)
+    if mode == "near-miss":
+        record_grammar = replace(
+            record_grammar, known_fields=record_grammar.known_fields[:-1],
+        )
+    assembler = LogicalRecordReassembler(record_grammar)
+    if mode == "fragmented":
+        raw = _logical_bytes(length=80)
+        assembler.add(_record_frame(raw[:64], namespace=namespace))
+        return assembler.add(_record_frame(
+            raw[64:], sequence=2, namespace=namespace,
+        ))
+    if mode == "concatenated":
+        return assembler.add(_record_frame(
+            _logical_bytes(sequence=1)
+            + _logical_bytes(length=18, sequence=2),
+            namespace=namespace,
+        ))
+    if mode == "truncated":
+        raw = _logical_bytes(length=80)
+        assembler.add(_record_frame(raw[:64], namespace=namespace))
+        return assembler.finish()
+    if mode == "generation":
+        raw = _logical_bytes(length=80)
+        assembler.add(_record_frame(raw[:64], namespace=namespace))
+        return assembler.add(_record_frame(
+            raw[64:], sequence=2, generation=2, namespace=namespace,
+        ))
+    raw = _logical_bytes(
+        marker=0xA5 if mode in {"wrapped", "bad-integrity"} else 0x5A,
+        record_type=0x20,
+        corrupt=mode == "bad-integrity",
+    )
+    return assembler.add(_record_frame(raw, namespace=namespace))
+
+
 def test_research_ingestion_corpus_reports_open_set_metrics_without_writes() -> None:
     bitmouse = _node(vendor=0xDEAD, product=0xBEEF)
     bitmouse_descriptors = {bitmouse: _descriptor(
@@ -269,6 +362,28 @@ def test_research_ingestion_corpus_reports_open_set_metrics_without_writes() -> 
         )
     }
 
+    rawm = _node(vendor=0x9999, product=0x1000)
+    rawm_descriptors = {rawm: _descriptor(
+        HidReportDefinition(0x07, "input", 64, (0xFF00,)),
+    )}
+    rawm_decisions = {
+        mode: recognize_open_set(
+            _physical(rawm), rawm_descriptors,
+            logical_records={"rawm-variable-logical-records": _rawm_records(mode)},
+        )
+        for mode in (
+            "single", "fragmented", "concatenated", "wrapped",
+            "bad-integrity", "truncated", "generation", "near-miss",
+        )
+    }
+    unknown_record_node = _node(vendor=0x9999, product=0x1001)
+    unknown_record_decision = recognize_open_set(
+        _physical(unknown_record_node), {unknown_record_node: _descriptor(
+            HidReportDefinition(0x07, "input", 32, (0xFF00,)),
+        )},
+        logical_records={"rawm-variable-logical-records": _rawm_records("unknown")},
+    )
+
     observations = (
         BenchmarkObservation(
             "bitmouse-valid-identity-blinded", RecognitionStatus.RECOGNIZED,
@@ -330,17 +445,53 @@ def test_research_ingestion_corpus_reports_open_set_metrics_without_writes() -> 
             "unknown-asynchronous-protocol", RecognitionStatus.CANDIDATE,
             async_decisions["unknown"],
         ),
+        BenchmarkObservation(
+            "rawm-single-frame-record", RecognitionStatus.RECOGNIZED,
+            rawm_decisions["single"], "rawm-variable-logical-records",
+        ),
+        BenchmarkObservation(
+            "rawm-fragmented-record", RecognitionStatus.RECOGNIZED,
+            rawm_decisions["fragmented"], "rawm-variable-logical-records",
+        ),
+        BenchmarkObservation(
+            "rawm-concatenated-records", RecognitionStatus.RECOGNIZED,
+            rawm_decisions["concatenated"], "rawm-variable-logical-records",
+        ),
+        BenchmarkObservation(
+            "rawm-optional-valid-wrapper", RecognitionStatus.RECOGNIZED,
+            rawm_decisions["wrapped"], "rawm-variable-logical-records",
+        ),
+        BenchmarkObservation(
+            "rawm-bad-integrity", RecognitionStatus.CANDIDATE,
+            rawm_decisions["bad-integrity"],
+        ),
+        BenchmarkObservation(
+            "rawm-truncated-record", RecognitionStatus.CANDIDATE,
+            rawm_decisions["truncated"],
+        ),
+        BenchmarkObservation(
+            "rawm-generation-boundary", RecognitionStatus.CANDIDATE,
+            rawm_decisions["generation"],
+        ),
+        BenchmarkObservation(
+            "rawm-complete-state-near-miss", RecognitionStatus.CANDIDATE,
+            rawm_decisions["near-miss"],
+        ),
+        BenchmarkObservation(
+            "unknown-variable-record-protocol", RecognitionStatus.CANDIDATE,
+            unknown_record_decision,
+        ),
     )
     metrics = score_benchmark(observations)
 
-    assert metrics.cases == 18
+    assert metrics.cases == 27
     assert metrics.exact_outcome_accuracy == 1.0
     assert metrics.recognized_family_precision == 1.0
     assert metrics.known_family_acquisition_recall == 1.0
     assert metrics.unknown_family_false_recognition == 0.0
     assert metrics.structural_collision_false_recognition == 0.0
-    assert metrics.coverage == 8 / 18
-    assert metrics.abstention == 9 / 18
-    assert metrics.ambiguity == 1 / 18
+    assert metrics.coverage == 12 / 27
+    assert metrics.abstention == 14 / 27
+    assert metrics.ambiguity == 1 / 27
     assert metrics.identity_blinded_correct == 1
     assert all(not item.decision.write_authorized for item in observations)

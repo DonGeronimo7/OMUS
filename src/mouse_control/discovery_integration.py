@@ -8,6 +8,7 @@ from typing import Mapping, Sequence
 from .dependency_inference import DependencyInference, infer_dependencies
 from .discovery_models import DeviceNode, PhysicalDevice
 from .hid_descriptor import ParsedHidDescriptor
+from .logical_record import LogicalRecord
 from .proof_state import OperationEvidence, OperationProof, ProofState
 from .protocol_repertoire import (
     FamilyCandidate,
@@ -91,6 +92,55 @@ class IntegratedPushedStateResult:
     @property
     def write_authorized(self) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class IntegratedLogicalRecordResult:
+    records: tuple[LogicalRecord, ...]
+    recognition: OpenSetRecognition
+    proof: OperationProof
+    evidence_source_ids: tuple[str, ...]
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+def integrate_logical_records(
+    records: Sequence[LogicalRecord],
+    *,
+    family_name: str,
+    physical: PhysicalDevice,
+    descriptors: Mapping[DeviceNode, ParsedHidDescriptor],
+) -> IntegratedLogicalRecordResult:
+    """Join read-only reconstructed records to open-set recognition and proof."""
+
+    retained = tuple(records)
+    recognition = recognize_open_set(
+        physical,
+        descriptors,
+        logical_records={family_name: retained},
+    )
+    sources = tuple(
+        f"{frame.source_id}:{frame.sequence}"
+        for record in retained
+        for frame in record.source_frames
+    )
+    proof = OperationProof(
+        "read.logical_protocol_record",
+        (
+            ProofState.RECOGNIZED
+            if recognition.status is RecognitionStatus.RECOGNIZED
+            else ProofState.OBSERVED
+        ),
+        (
+            ("passive logical-record discriminator",)
+            if recognition.status is RecognitionStatus.RECOGNIZED
+            else ("logical-record observation",)
+        ),
+        OperationEvidence(evidence_source_ids=sources),
+    )
+    return IntegratedLogicalRecordResult(retained, recognition, proof, sources)
 
 
 def integrate_pushed_state_observations(

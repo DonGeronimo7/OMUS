@@ -247,6 +247,33 @@ class PushedStateRecognitionRecipe:
 
 
 @dataclass(frozen=True)
+class LogicalRecordRecognitionRecipe:
+    """Passive family facts evaluated on generic reconstructed records."""
+
+    grammar: str
+    namespace: str
+    report_id: int | None
+    required_record_types: tuple[int, ...] = ()
+    required_field_names: tuple[str, ...] = ()
+    minimum_records: int = 1
+    maximum_records: int = 64
+    allow_unwrapped_integrity: bool = True
+    minimum_independent_categories: int = 4
+
+    def __post_init__(self) -> None:
+        if not self.grammar or not self.namespace:
+            raise ValueError("logical-record recognition requires grammar and namespace")
+        if self.minimum_records <= 0 or self.maximum_records < self.minimum_records:
+            raise ValueError("logical-record recognition cardinality is invalid")
+        if any(not 0 <= value <= 0xFF for value in self.required_record_types):
+            raise ValueError("logical record types must fit in one byte")
+        if any(not name for name in self.required_field_names):
+            raise ValueError("logical record field names cannot be empty")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
+@dataclass(frozen=True)
 class ProtocolSource:
     """Auditable provenance for protocol knowledge."""
 
@@ -432,6 +459,7 @@ class ProtocolFamily:
     recognition: RecognitionRecipe | None = None
     burst_recognition: BurstRecognitionRecipe | None = None
     pushed_state_recognition: PushedStateRecognitionRecipe | None = None
+    logical_record_recognition: LogicalRecordRecognitionRecipe | None = None
     write_scope: WriteScope = WriteScope.NEVER
     identity_required: bool = False
     minimum_match_score: int = 4

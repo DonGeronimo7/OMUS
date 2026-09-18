@@ -1,5 +1,34 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — fixed-frame logical-record reassembly milestone
+
+- Discovery now separates fixed HID transport reports from variable logical
+  records. The generic read-only reassembler handles one record per frame,
+  records spanning frames, adjacent records in one frame, and declared-length
+  tails without treating padding as protocol content.
+- Complete, incomplete, and invalid records retain source frames, transport and
+  logical lengths, timestamps, physical/source/channel/namespace/report/
+  generation identity, declared and captured lengths, integrity state, known
+  field bytes, and exact opaque regions. Reconnects invalidate partial old-
+  generation records; streams never cross source, physical device, channel,
+  namespace, report ID, direction, or transport boundaries.
+- Optional wrappers use the existing bounded integrity algorithms. A protected
+  record is valid only after validation; unsupported integrity stays `UNKNOWN`
+  and cannot be promoted, while a failed check makes the record `INVALID`.
+  Unwrapped records remain explicitly unknown rather than implicitly valid.
+- The repertoire adds a recognition-only RAWM-style declarative recipe over
+  independently reconstructed abstract fixtures. It requires coherent complete-
+  state record structure, preserves unresolved bytes, uses `WriteScope.NEVER`,
+  and adds no setter, whole-state write, or runtime transaction.
+- The retained benchmark grows from 18 to 27 cases: 12 recognized, 13
+  candidates, 1 unknown, and 1 ambiguous. Fixture-only coverage is 44.4%,
+  abstention 51.9%, ambiguity 3.7%, recognized precision/known-case recall
+  100%, and unknown/collision false recognition 0%; no broader 90% claim is
+  made.
+- Focused protocol/discovery validation passes 156 tests; the complete suite
+  passes 831 with the existing GLib warning. No physical validation, hardware
+  write, write-authority change, install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — asynchronous pushed-state recognition milestone
 
 - The generation-aware temporal assembler now represents meaningful state that

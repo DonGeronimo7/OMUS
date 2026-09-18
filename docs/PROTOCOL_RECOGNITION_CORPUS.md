@@ -26,6 +26,7 @@ runtime transaction, capability, or hardware write.
 | Keychron M6 | `FFC1`; `B3/B4` and `B5/B6` Output/Input namespaces | both query→response and setting→ACK report-ID pairings | `RECOGNIZED` when both dialogues are observed |
 | Finalmouse ULX-style telemetry | vendor Output/Input reports; distinct mouse/dongle contexts | bounded response burst, exact namespace pairing, length+command+payload records | `RECOGNIZED` only for a completed valid burst |
 | MCHOSE Realtek/L7 | vendor Input report `0x13`; Realtek pushed-state context | subtype `0x1D`, verified XOR-FF transform, periodic cadence or nudge-associated freshness | `RECOGNIZED` from passive or nudged pushed-state evidence |
+| RAWM-style variable records | fixed vendor Input transport | complete declared logical length, coherent stream, complete-state field presence, optional valid integrity wrapper | `RECOGNIZED` only from complete valid/unwrapped reconstructed records |
 | Holtek Venus `04d9:fc55` | interface 2; `FFA0`; Feature 2/16 and Feature 3/64 | not yet encoded because supplied research does not include safe passive frame samples | `CANDIDATE` only |
 
 Holtek control/read/flash/status roles, commit/reset behavior, and polling
@@ -39,6 +40,7 @@ exists.
 | BITMOUSE vs arbitrary `0x72` reports | report ID and 64-byte size | checksum plus target, sequence, and length correlation | `CANDIDATE` |
 | Keychron vs generic 64-byte RPC | vendor page and report sizes | both paired namespaces (`B3→B4`, `B5→B6`) | `CANDIDATE` |
 | Finalmouse vs unknown multi-response RPC | one Output followed by Input records | declared mouse/dongle namespace pair, bounded completion, cardinality, and record length | `CANDIDATE` |
+| RAWM vs unknown length-prefixed records | fixed vendor frame plus a declared logical length | declared record namespace/grammar, coherent completion, complete-state record type and fields, non-failing optional integrity | `CANDIDATE` or `UNKNOWN` |
 | Holtek Venus vs Redragon/Holtek Feature protocols | `FFA0`, Feature IDs, reciprocal polling values | exact PID, interface, both exact lengths, then future semantic dialogue | `CANDIDATE` |
 | SinoWealth plus Keychron descriptor collision | multiple independently valid structural signatures | family-specific semantic evidence and score margin | `AMBIGUOUS` |
 | Unknown vendor protocol | vendor usage/report presence | no nearest-family fallback | `UNKNOWN` |
@@ -48,7 +50,7 @@ sufficient family evidence alone.
 
 ## Project-owned benchmark fixtures
 
-The automated corpus independently constructs eighteen minimal fixtures from
+The automated corpus independently constructs twenty-seven minimal fixtures from
 protocol facts; it imports no upstream capture:
 
 1. identity-blinded valid BITMOUSE exchange;
@@ -69,11 +71,20 @@ protocol facts; it imports no upstream capture:
 16. wrong XOR-FF transform;
 17. old-generation pushed state;
 18. unknown asynchronous protocol.
+19. one complete RAWM-style record in one transport frame;
+20. one RAWM-style record fragmented across two frames;
+21. two RAWM-style records concatenated in one frame;
+22. a valid optional integrity wrapper;
+23. a bad-integrity protected record;
+24. a truncated logical record;
+25. a record invalidated at a generation boundary;
+26. a RAWM-style complete-state field near miss;
+27. an unknown variable-record protocol.
 
-The expected current outcomes are eight recognized, eight candidates, one unknown,
+The expected current outcomes are twelve recognized, thirteen candidates, one unknown,
 and one ambiguous. This gives 100% recognized-family precision and known-case
 recall, 0% unknown and collision false recognition, 44.4% overall coverage,
-50% abstention, and 5.6% ambiguity **on this eighteen-case ingestion fixture only**.
+51.9% abstention, and 3.7% ambiguity **on this twenty-seven-case ingestion fixture only**.
 It does not satisfy or claim the broader 90% objective; the positive set covers
 only four executable families. The benchmark code reports these rates from the
 actual decisions so later corpus expansion cannot silently redefine them.
@@ -108,6 +119,36 @@ asynchronous-family work is recipe and corpus population. Fragmented logical
 record reassembly, such as RAWM transport-vs-record boundaries, remains a
 separate framing problem rather than an asynchronous-delivery limitation.
 
+## Fixed-frame logical-record model
+
+The read-only record layer explicitly distinguishes fixed HID wire length from
+declared and captured logical length. A grammar declares record markers, length
+encoding and bounds, optional type/sequence positions, known field spans, and
+optional integrity selectors. The generic reassembler emits complete, partial,
+and invalid evidence while retaining every contributing transport frame and all
+uninterpreted byte regions exactly.
+
+Streams are keyed by source, physical device, transport, direction, channel,
+report namespace, report ID, grammar, and connection generation. A reconnect
+closes an old partial record as incomplete; another channel or namespace cannot
+finish it. After a declared record end, only immediately adjacent records or
+declared padding are considered, so stale tail bytes cannot manufacture a new
+record.
+
+The RAWM-style fixture uses this generic grammar and generic recognition path.
+Its symbolic record type and field locations are project-owned fixture devices,
+not claims about imported packet constants. They establish the architecture:
+complete current state may expose model, sensor, DPI-stage, polling, power, and
+capability context while unrelated regions stay opaque. Optional wrapper
+integrity is validated through the shared integrity module. No record can grant
+a write or become a whole-state/RMW setter.
+
+No transport-to-logical message-framing form currently identified in the mouse
+research corpus requires another primitive. Additional known families at this
+layer are recipe/fixture population unless hardware evidence reveals a novel
+structure. Payload-driven burst terminators/counts and multiplexed response
+namespaces remain separate temporal-dialogue limitations.
+
 ## Bounded response-burst model
 
 The temporal assembler now represents one trigger followed by zero or more
@@ -132,7 +173,6 @@ use the maximum-count bound only when that count is already known.
 
 Add independently reconstructed passive fixtures before promoting the remaining
 research families. Priority evidence is GearHub internal device identity,
-RAWM logical
-record boundaries, VAXEE echo/direction/length, HyperX no-ACK readback, and Beken
+VAXEE echo/direction/length, HyperX no-ACK readback, and Beken
 prerequisite/apply state. Incomplete research remains negative or abstention
 evidence rather than guessed semantics.

@@ -18,6 +18,7 @@ from typing import Iterable, Mapping
 
 from .discovery_models import DeviceNode, PhysicalDevice
 from .hid_descriptor import ParsedHidDescriptor
+from .logical_record import LogicalRecord, RecordCompleteness, RecordIntegrity
 from .protocol_codec import ProtocolCodecError, decode_value
 from .protocol_grammar import (
     BurstRecognitionRecipe,
@@ -27,6 +28,7 @@ from .protocol_grammar import (
     EvidenceCategory,
     FieldBinding,
     FrameSide,
+    LogicalRecordRecognitionRecipe,
     ProtocolFamily,
     ProtocolSource,
     PushedStateRecognitionRecipe,
@@ -67,6 +69,7 @@ class SemanticFamilyRecognition:
             self.candidate.family.recognition
             or self.candidate.family.burst_recognition
             or self.candidate.family.pushed_state_recognition
+            or self.candidate.family.logical_record_recognition
         )
         return (
             recipe is not None
@@ -728,6 +731,47 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="Read-only telemetry knowledge. Report 05 existence never implies configuration authority.",
     ),
     ProtocolFamily(
+        name="rawm-variable-logical-records",
+        revision="logical-record-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90% research payload — RAWM logical record framing",
+                SourceTrust.REFERENCE,
+                notes=(
+                    "Independently reconstructed abstract fixtures; record type values and "
+                    "field locations are corpus symbols, not imported device packets."
+                ),
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "input", vendor_usage_required=True, weight=4,
+            ),
+        ),
+        logical_record_recognition=LogicalRecordRecognitionRecipe(
+            grammar="rawm-style-state-v1",
+            namespace="rawm.records",
+            report_id=None,
+            required_field_names=(
+                "model", "sensor", "dpi-stage-count", "polling",
+                "power", "capabilities",
+            ),
+            minimum_records=1,
+            maximum_records=16,
+            allow_unwrapped_integrity=True,
+        ),
+        transports=(TransportKind.HID_INPUT,),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=4,
+        notes=(
+            "Recognition-only fixed-HID/variable-record architecture. Abstract fixture fields "
+            "represent complete-state presence while all uninterpreted bytes remain opaque. "
+            "Optional integrity may be valid or absent/unknown, never invalid. No setter, "
+            "whole-state write, or runtime transaction is represented."
+        ),
+    ),
+    ProtocolFamily(
         name="mchose-realtek-l7-pushed-state",
         revision="async-state-research-v1",
         sources=(
@@ -1070,6 +1114,114 @@ def recognize_pushed_state_semantics(
     )
 
 
+def recognize_logical_record_semantics(
+    candidate: FamilyCandidate,
+    records: Iterable[LogicalRecord],
+) -> SemanticFamilyRecognition:
+    """Evaluate generic reconstructed records against declarative family facts."""
+
+    recipe = candidate.family.logical_record_recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-logical-record-discriminator",), (), ()
+        )
+    observed = tuple(records)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-logical-record-evidence",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+    identities = {
+        (
+            record.source_frames[0].source_id,
+            record.source_frames[0].physical_id,
+            record.source_frames[0].transport,
+            record.channel_id,
+            record.report_namespace,
+            record.report_id,
+            record.grammar,
+            record.generation,
+        )
+        for record in observed if record.source_frames
+    }
+    if len(identities) == 1:
+        matched.append("coherent-logical-record-stream")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("coherent-logical-record-stream")
+
+    namespace_valid = all(
+        record.grammar == recipe.grammar
+        and record.report_namespace == recipe.namespace
+        and record.report_id == recipe.report_id
+        for record in observed
+    )
+    if namespace_valid:
+        matched.append("declared-logical-record-namespace")
+        categories.add(EvidenceCategory.FRAME)
+    else:
+        missing.append("declared-logical-record-namespace")
+
+    complete = all(
+        record.completeness is RecordCompleteness.COMPLETE
+        and record.declared_length == record.captured_logical_length
+        for record in observed
+    )
+    if complete:
+        matched.append("complete-declared-logical-length")
+        categories.add(EvidenceCategory.RELATIONSHIP)
+    else:
+        missing.append("complete-declared-logical-length")
+
+    integrity_valid = all(
+        record.integrity is RecordIntegrity.VALID
+        if record.integrity_protected
+        else recipe.allow_unwrapped_integrity
+        and record.integrity is RecordIntegrity.UNKNOWN
+        for record in observed
+    )
+    if integrity_valid:
+        matched.append("valid-or-unwrapped-integrity")
+        if any(record.integrity is RecordIntegrity.VALID for record in observed):
+            categories.add(EvidenceCategory.INTEGRITY)
+    else:
+        missing.append("valid-or-unwrapped-integrity")
+
+    cardinality = recipe.minimum_records <= len(observed) <= recipe.maximum_records
+    if cardinality:
+        matched.append("logical-record-cardinality")
+    else:
+        missing.append("logical-record-cardinality")
+
+    if recipe.required_record_types:
+        observed_types = {record.record_type for record in observed}
+        types_valid = set(recipe.required_record_types) <= observed_types
+        if types_valid:
+            matched.append("required-logical-record-types")
+            categories.add(EvidenceCategory.INTERNAL_IDENTITY)
+        else:
+            missing.append("required-logical-record-types")
+
+    observed_fields = {
+        name for record in observed for name in record.fields
+    }
+    fields_valid = set(recipe.required_field_names) <= observed_fields
+    if fields_valid:
+        matched.append("complete-state-field-presence")
+        categories.add(EvidenceCategory.INTERNAL_IDENTITY)
+    else:
+        missing.append("complete-state-field-presence")
+
+    semantic_records = tuple(record.data for record in observed) if not missing else ()
+    return SemanticFamilyRecognition(
+        candidate, tuple(sorted(matched)), tuple(sorted(missing)),
+        semantic_records, tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
 def _frame(exchange: SemanticExchange, side: FrameSide) -> bytes:
     return exchange.request if side is FrameSide.REQUEST else exchange.response
 
@@ -1131,6 +1283,7 @@ def recognize_open_set(
     exchanges: Mapping[str, Iterable[SemanticExchange]] | None = None,
     bursts: Mapping[str, Iterable[BurstDialogueResult]] | None = None,
     pushed_states: Mapping[str, Iterable[PushedStateRecord]] | None = None,
+    logical_records: Mapping[str, Iterable[LogicalRecord]] | None = None,
     families: Iterable[ProtocolFamily] = DEFAULT_REPERTOIRE,
     minimum_margin: int = 3,
 ) -> OpenSetRecognition:
@@ -1141,6 +1294,7 @@ def recognize_open_set(
     supplied = exchanges or {}
     supplied_bursts = bursts or {}
     supplied_pushed = pushed_states or {}
+    supplied_records = logical_records or {}
     structural = tuple(
         candidate
         for candidate in match_repertoire(physical, descriptors, families=families)
@@ -1148,6 +1302,8 @@ def recognize_open_set(
         or candidate.family.name in supplied_bursts
         if candidate.family.pushed_state_recognition is None
         or candidate.family.name in supplied_pushed
+        if candidate.family.logical_record_recognition is None
+        or candidate.family.name in supplied_records
     )
     if not structural:
         return OpenSetRecognition(RecognitionStatus.UNKNOWN, None, (), "no structural candidate")
@@ -1162,6 +1318,10 @@ def recognize_open_set(
                 candidate, supplied_pushed.get(candidate.family.name, ()),
             )
             if candidate.family.pushed_state_recognition is not None
+            else recognize_logical_record_semantics(
+                candidate, supplied_records.get(candidate.family.name, ()),
+            )
+            if candidate.family.logical_record_recognition is not None
             else recognize_family_semantics(
                 candidate, supplied.get(candidate.family.name, ()),
             )
@@ -1182,7 +1342,7 @@ def recognize_open_set(
                 "bounded-burst-completion": 3,
                 "length-command-payload-framing": 4,
             }
-        else:
+        elif item.candidate.family.pushed_state_recognition is not None:
             weights = {
                 "current-generation-pushed-state": 3,
                 "coherent-pushed-state-stream": 3,
@@ -1191,6 +1351,16 @@ def recognize_open_set(
                 "pushed-state-payload-transform": 4,
                 "pushed-state-cardinality": 2,
                 "asynchronous-freshness-evidence": 4,
+            }
+        else:
+            weights = {
+                "coherent-logical-record-stream": 3,
+                "declared-logical-record-namespace": 3,
+                "complete-declared-logical-length": 4,
+                "valid-or-unwrapped-integrity": 4,
+                "logical-record-cardinality": 2,
+                "required-logical-record-types": 4,
+                "complete-state-field-presence": 4,
             }
         return item.candidate.score + sum(weights.get(name, 0) for name in item.matched)
 

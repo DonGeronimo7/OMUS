@@ -16,6 +16,44 @@ class IntegrityHypothesis:
     byte_order: str = "big"
 
 
+def validate_integrity(packet: bytes, hypothesis: IntegrityHypothesis) -> bool | None:
+    """Validate one packet with an existing bounded integrity hypothesis.
+
+    ``None`` means that the named algorithm is outside the finite algorithms
+    understood by this module.  Callers must preserve that as unknown rather
+    than treating it as successful validation.
+    """
+
+    raw = bytes(packet)
+    offset = hypothesis.offset
+    if offset < 0:
+        offset += len(raw)
+    if (
+        hypothesis.width <= 0
+        or offset < 0
+        or offset + hypothesis.width > len(raw)
+    ):
+        return False
+    payload = raw[:offset] + raw[offset + hypothesis.width:]
+    observed = int.from_bytes(
+        raw[offset:offset + hypothesis.width], hypothesis.byte_order,
+    )
+    checks = {
+        "xor8": lambda data: _xor8(data),
+        "sum8": lambda data: sum(data) & 0xFF,
+        "ones-complement-sum8": lambda data: (~sum(data)) & 0xFF,
+        "crc8-07": lambda data: _crc8(data, 0x07, 0x00),
+        "crc8-31": lambda data: _crc8(data, 0x31, 0x00),
+        "crc8-9b": lambda data: _crc8(data, 0x9B, 0xFF),
+        "crc16-ccitt-false": lambda data: _crc16(data, 0x1021, 0xFFFF),
+        "crc16-xmodem": lambda data: _crc16(data, 0x1021, 0x0000),
+    }
+    calculate = checks.get(hypothesis.algorithm)
+    if calculate is None:
+        return None
+    return calculate(payload) == observed
+
+
 def _xor8(data: bytes) -> int:
     result = 0
     for value in data:
