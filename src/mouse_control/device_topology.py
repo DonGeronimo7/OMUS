@@ -22,6 +22,7 @@ from .discovery_models import (
     EvidenceLevel,
     PhysicalDevice,
 )
+from .performance import timed
 
 
 class TopologyError(RuntimeError):
@@ -341,6 +342,7 @@ def _same_path(left: Path | str, right: Path | str) -> bool:
         return os.fspath(left) == os.fspath(right)
 
 
+@timed("physical_identity_resolution")
 def build_device_graph(
     mouse: MouseDevice,
     *,

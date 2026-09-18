@@ -18,6 +18,7 @@ from .guided_discovery import GuidedDiscoveryOutcome, load_known_device_state
 from .hardware import HardwareError, get_backend
 from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
+from .performance import timed
 
 
 class SetupSection(Enum):
@@ -861,6 +862,7 @@ class SetupController:
         else:
             self.status = "Deeper DPI-stage learning finished without a complete validated cycle."
 
+    @timed("tui_frame_preparation")
     def detail_rows(self) -> list[DisplayRow]:
         if self.section is SetupSection.DEVICE:
             return [

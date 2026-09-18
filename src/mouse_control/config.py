@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .performance import timed
+
 DEFAULT_DPI_STAGES = [800, 1500, 2000, 2500, 3000]
 DEFAULT_DPI = 800
 
@@ -154,6 +156,7 @@ def save_config(config_content: str) -> Path:
     return path
 
 
+@timed("config_load")
 def load_config(path: Path | None = None) -> dict[str, Any]:
     import tomllib
 

@@ -42,6 +42,7 @@ from .protocol_discovery import (
     detect_known_protocol,
 )
 from .protocol_repertoire import FamilyCandidate, match_repertoire
+from .performance import measure, milestone
 
 
 class DiscoveryEngine:
@@ -135,15 +136,18 @@ class DiscoveryEngine:
         """
 
         self._reset_session_state()
-        physical = self.build_topology(mouse)
+        with measure("topology_construction"):
+            physical = self.build_topology(mouse)
         if physical.ambiguous:
             return None
-        restored = self._profile_store.restore_result(physical)
+        with measure("persisted_evidence_lookup"):
+            restored = self._profile_store.restore_result(physical)
         if restored is None:
             return None
         self._profile_path, result = restored
         self._cached_profile_used = True
         self._phases.extend((DiscoveryPhase.ENUMERATE, DiscoveryPhase.COMPLETE))
+        milestone("runtime_ready")
         return result
 
     def discover(
@@ -170,9 +174,11 @@ class DiscoveryEngine:
 
         emit(DiscoveryPhase.ENUMERATE, "Establishing physical-device topology…", 0, 6)
         self._phase(DiscoveryPhase.ENUMERATE)
-        physical = self.build_topology(mouse)
+        with measure("topology_construction"):
+            physical = self.build_topology(mouse)
         if not force and not physical.ambiguous:
-            restored = self._profile_store.restore_result(physical)
+            with measure("persisted_evidence_lookup"):
+                restored = self._profile_store.restore_result(physical)
             if restored is not None:
                 self._profile_path, result = restored
                 self._cached_profile_used = True
@@ -183,6 +189,7 @@ class DiscoveryEngine:
                     1,
                     cached=True,
                 )
+                milestone("runtime_ready")
                 return result
 
         emit(DiscoveryPhase.ENUMERATE, "Physical mouse identified", 1, 6)
@@ -206,7 +213,8 @@ class DiscoveryEngine:
 
         emit(DiscoveryPhase.PROTOCOL, "Searching known protocol teachers and repertoire…", 3, 6)
         self._phase(DiscoveryPhase.PROTOCOL)
-        protocol = self.detect_protocol(physical)
+        with measure("protocol_binding"):
+            protocol = self.detect_protocol(physical)
 
         if protocol is not None:
             emit(DiscoveryPhase.PROTOCOL, f"Known protocol matched: {protocol.name}", 4, 6)
@@ -220,7 +228,8 @@ class DiscoveryEngine:
             capabilities = self.observe_unknown_device(physical)
 
         self._phase(DiscoveryPhase.VALIDATE)
-        result = self.validate(physical, protocol, capabilities)
+        with measure("hardware_validation"):
+            result = self.validate(physical, protocol, capabilities)
         for name, capability in sorted(result.capabilities.items()):
             mode = "read/write" if capability.writable else "read-only" if capability.readable else "unknown"
             emit(DiscoveryPhase.VALIDATE, f"{name.replace('_', ' ')} capability: {mode}", 5, 6)
@@ -230,6 +239,7 @@ class DiscoveryEngine:
         if self._save_profiles and not physical.ambiguous:
             self._profile_path = self.save_profile(result)
         emit(DiscoveryPhase.COMPLETE, "Discovery evidence persisted", 6, 6)
+        milestone("runtime_ready")
         return result
 
     def build_topology(self, mouse: MouseDevice) -> PhysicalDevice:
@@ -255,8 +265,10 @@ class DiscoveryEngine:
         for node in physical.hidraw_nodes:
             probe = self._probe_factory(node)
             try:
-                raw = probe.read_descriptor()
-                descriptor = parse_report_descriptor(raw)
+                with measure("descriptor_acquisition"):
+                    raw = probe.read_descriptor()
+                with measure("descriptor_parsing"):
+                    descriptor = parse_report_descriptor(raw)
             except (OSError, PermissionError, HidDescriptorError, ValueError) as exc:
                 self._observations.append(
                     DiscoveryEvidence(

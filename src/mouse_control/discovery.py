@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from .performance import timed
+
 from evdev import InputDevice, ecodes, list_devices
 
 
@@ -57,6 +59,7 @@ def has_mouse_capabilities(device: InputDevice) -> bool:
         return False
 
 
+@timed("device_enumeration")
 def get_mouse_devices() -> list[MouseDevice]:
     """Discover mouse-like evdev devices, preferring stable by-id symlinks."""
     devices: list[MouseDevice] = []
