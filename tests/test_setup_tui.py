@@ -508,7 +508,19 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
         ),
         contradictions=(),
     )
-    app.apply_lab_experiment(SimpleNamespace(analysis=analysis, observations=(1, 2, 3)))
+    timing = SimpleNamespace(
+        summaries=(SimpleNamespace(
+            relationship=SimpleNamespace(value="request_response_latency"),
+            median_ns=3_000_000, accepted_count=3, spread_ns=200_000,
+            minimum_ns=2_900_000, maximum_ns=3_100_000,
+        ),),
+        differentials=(),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+    ))
     text = "\n".join(row.text for row in app.detail_rows())
     assert "Just learned: 1 action-correlated field" in text
+    assert "Protocol timing" in text
+    assert "median 3.0 ms, stable across 3 samples" in text
     assert "Hardware write required: no" in text

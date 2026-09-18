@@ -58,6 +58,44 @@ field it identifies and ranks:
 The next observation is selected with the existing information-gain planner.
 Recommendations in this milestone are read-only.
 
+## Protocol Timing Profiler
+
+The second Lab milestone turns already-established temporal relationships into
+canonical timing evidence. It does not infer request ownership, burst
+membership, push causality, or lifecycle state independently; those facts must
+come from the existing dialogue, burst, pushed-state, freshness, or explicit
+lifecycle evidence.
+
+Each `LabTimingObservation` retains the experiment ID, stable physical context,
+connection generation, source observation IDs, start/end timestamps, raw
+duration, relationship, interval/repeat, confidence/proof state, classification,
+and freshness where relevant. `ProtocolTimingProfile` remains attached to the
+same `LabExperiment` and provides:
+
+- request/response and request/ACK latency;
+- busy/poll cadence, busy duration, time-to-ready, and poll count;
+- trigger-to-first-response, inter-response gaps, bounded quiet completion,
+  overall burst duration, response count, and completion reason;
+- nudge-to-push, controlled-action-to-state-change, and periodic push cadence;
+- stale/unknown immediate read to later fresh changed state;
+- last-valid/commit to disconnect, disconnect to attachment, and attachment to
+  first valid new-generation state;
+- per-relationship count, minimum, median, maximum, spread, rejected outliers,
+  classification, and evidence sufficiency;
+- baseline-versus-action timing deltas and timing-aware next experiments.
+
+All calculations use recorded nanosecond timestamps. Tests and replay perform
+no sleeps. `IMMEDIATE`, `SHORT_DELAY`, `SETTLING_DELAY`, `PERIODIC`,
+`BUSY_POLL`, `BURST`, and `RECONNECT_BOUND` are contextual classifications,
+not universal millisecond thresholds. A lone ordinary transaction remains
+`UNKNOWN` while its raw latency is retained.
+
+Reconnect measurements use explicit lifecycle boundary records. Protocol
+transactions themselves still cannot cross generations. Quiet completion is
+measured only when the existing bounded-burst assembler retains an exact replay
+completion boundary; explicit-end or generation-change completion remains
+unknown when no completion timestamp exists.
+
 ## Automatic run
 
 The current TUI run chooses the capture plan automatically:
@@ -87,8 +125,8 @@ correlation, integrity analysis, ranking, and replay-fixture representation.
 
 ## Deferred master-Lab milestones
 
-The protocol timing profiler, controlled action matrix, multi-instrument
-information-gain orchestration, state/effect/persistence verifier,
+The controlled action matrix, multi-instrument information-gain orchestration,
+state/effect/persistence verifier,
 receiver/child routing mapper, battery/charging investigator, vendor capture
 importer, complete multi-instrument automatic orchestrator,
 `ProtocolKnowledgePackage`, automatic positive/negative contribution fixtures,

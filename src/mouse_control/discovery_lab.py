@@ -22,7 +22,14 @@ from .learning_session import LearningSample, ReadOnlyLearningSession
 from .logical_record import LogicalRecord
 from .proof_state import ProofState
 from .semantic_inference import SemanticHypothesis
-from .temporal_dialogue import DialogueKind, DialogueRecord
+from .temporal_dialogue import (
+    BurstDialogueResult,
+    DialogueKind,
+    DialogueRecord,
+    PushedStateRecord,
+    StateEvidence,
+    StateFreshness,
+)
 from .trace.models import UsbObservation
 
 
@@ -31,6 +38,42 @@ class LabInterval(str, Enum):
     ACTION = "action"
     POST_ACTION = "post_action"
     NEGATIVE_CONTROL = "negative_control"
+
+
+class TimingRelationship(str, Enum):
+    REQUEST_RESPONSE_LATENCY = "request_response_latency"
+    REQUEST_ACK_LATENCY = "request_ack_latency"
+    BUSY_POLL_INTERVAL = "busy_poll_interval"
+    BUSY_TO_READY_LATENCY = "busy_to_ready_latency"
+    BURST_TRIGGER_TO_FIRST_RESPONSE = "burst_trigger_to_first_response"
+    BURST_INTER_RESPONSE_GAP = "burst_inter_response_gap"
+    BURST_QUIET_INTERVAL = "burst_quiet_interval"
+    BURST_DURATION = "burst_duration"
+    NUDGE_TO_PUSH_LATENCY = "nudge_to_push_latency"
+    PERIODIC_PUSH_CADENCE = "periodic_push_cadence"
+    ACTION_TO_STATE_CHANGE_LATENCY = "action_to_state_change_latency"
+    READ_TO_FRESH_STATE_LATENCY = "read_to_fresh_state_latency"
+    DISCONNECT_LATENCY = "disconnect_latency"
+    RECONNECT_DURATION = "reconnect_duration"
+    RECONNECT_TO_FIRST_VALID_STATE = "reconnect_to_first_valid_state"
+
+
+class TimingClassification(str, Enum):
+    IMMEDIATE = "immediate"
+    SHORT_DELAY = "short_delay"
+    SETTLING_DELAY = "settling_delay"
+    PERIODIC = "periodic"
+    BUSY_POLL = "busy_poll"
+    BURST = "burst"
+    RECONNECT_BOUND = "reconnect_bound"
+    UNKNOWN = "unknown"
+
+
+class LifecycleEventKind(str, Enum):
+    LAST_VALID_STATE = "last_valid_state"
+    DISCONNECT = "disconnect"
+    ATTACH = "attach"
+    FIRST_VALID_STATE = "first_valid_state"
 
 
 class FieldSignal(str, Enum):
@@ -98,6 +141,116 @@ class PhysicalEvidence:
 
 
 @dataclass(frozen=True)
+class LabLifecycleEvent:
+    kind: LifecycleEventKind
+    timestamp_ns: int
+    connection_generation: int
+    source_observation_id: str
+    confidence: str = "observed"
+
+    def __post_init__(self) -> None:
+        if self.timestamp_ns < 0 or self.connection_generation < 0:
+            raise ValueError("lifecycle timestamps and generations must be non-negative")
+        if not self.source_observation_id:
+            raise ValueError("lifecycle evidence requires a source observation ID")
+
+
+@dataclass(frozen=True)
+class LabTimingObservation:
+    timing_id: str
+    experiment_id: str
+    physical_device_context: Mapping[str, object]
+    connection_generation: int
+    source_observation_ids: tuple[str, ...]
+    start_timestamp_ns: int
+    end_timestamp_ns: int
+    duration_ns: int
+    relationship: TimingRelationship
+    confidence: str
+    evidence_state: ProofState = ProofState.OBSERVED
+    classification: TimingClassification = TimingClassification.UNKNOWN
+    interval: LabInterval | None = None
+    repeat: int = 0
+    freshness: StateFreshness | None = None
+    context: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.timing_id or not self.experiment_id:
+            raise ValueError("timing and experiment IDs are required")
+        if not self.physical_device_context or not self.source_observation_ids:
+            raise ValueError("timing evidence requires device context and source observations")
+        if self.connection_generation < 0 or self.repeat < 0:
+            raise ValueError("timing generation and repeat must be non-negative")
+        if self.start_timestamp_ns < 0 or self.end_timestamp_ns < self.start_timestamp_ns:
+            raise ValueError("timing timestamps are invalid")
+        if self.duration_ns != self.end_timestamp_ns - self.start_timestamp_ns:
+            raise ValueError("timing duration must equal end minus start")
+
+
+@dataclass(frozen=True)
+class TimingSummary:
+    relationship: TimingRelationship
+    context: str
+    interval: LabInterval | None
+    sample_count: int
+    accepted_count: int
+    minimum_ns: int | None
+    median_ns: int | None
+    maximum_ns: int | None
+    spread_ns: int | None
+    rejected_durations_ns: tuple[int, ...]
+    classification: TimingClassification
+    confidence: str
+
+
+@dataclass(frozen=True)
+class BusyPollCycle:
+    request_source_id: str
+    connection_generation: int
+    poll_count: int
+    poll_intervals_ns: tuple[int, ...]
+    busy_duration_ns: int | None
+    time_to_ready_ns: int | None
+    source_observation_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BurstTimingRecord:
+    request_source_id: str
+    connection_generation: int
+    trigger_to_first_response_ns: int | None
+    inter_response_gaps_ns: tuple[int, ...]
+    quiet_interval_ns: int | None
+    overall_duration_ns: int | None
+    response_count: int
+    completion_reason: str
+    source_observation_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TimingDelta:
+    relationship: TimingRelationship
+    context: str
+    baseline_median_ns: int
+    action_median_ns: int
+    ratio: float
+    delta_ns: int
+    score: float
+    reason: str
+
+
+@dataclass(frozen=True)
+class ProtocolTimingProfile:
+    observations: tuple[LabTimingObservation, ...]
+    summaries: tuple[TimingSummary, ...]
+    busy_poll_cycles: tuple[BusyPollCycle, ...]
+    burst_timings: tuple[BurstTimingRecord, ...]
+    differentials: tuple[TimingDelta, ...]
+    contradictions: tuple[str, ...]
+    next_recommended_experiment: LabRecommendation | None = None
+
+
+@dataclass(frozen=True)
 class RankedFieldEvidence:
     stream_id: str
     offset: int
@@ -161,6 +314,7 @@ class DifferentialAnalysis:
     integrity: Mapping[str, tuple[IntegrityHypothesis, ...]]
     echoes: tuple[EchoEvidence, ...]
     transaction_differences: tuple[TransactionDifference, ...]
+    timing_deltas: tuple[TimingDelta, ...]
     dependencies: DependencyInference
     semantic_hypotheses: tuple[SemanticHypothesis | LabSemanticHypothesis, ...]
     contradictions: tuple[str, ...]
@@ -182,11 +336,16 @@ class LabExperiment:
     usb_observations: tuple[UsbObservation, ...] = ()
     logical_records: tuple[LogicalRecord, ...] = ()
     dialogues: tuple[DialogueRecord, ...] = ()
+    bursts: tuple[BurstDialogueResult, ...] = ()
+    pushed_states: tuple[PushedStateRecord, ...] = ()
+    state_reads: tuple[StateEvidence, ...] = ()
+    lifecycle_events: tuple[LabLifecycleEvent, ...] = ()
     physical_cpi_evidence: tuple[PhysicalEvidence, ...] = ()
     physical_polling_evidence: tuple[PhysicalEvidence, ...] = ()
     provenance: tuple[str, ...] = ()
     proof_state: ProofState = ProofState.OBSERVED
     confidence: str = "observed"
+    timing_profile: ProtocolTimingProfile | None = None
     analysis: DifferentialAnalysis | None = None
 
     def __post_init__(self) -> None:
@@ -198,6 +357,23 @@ class LabExperiment:
             raise ValueError("exact physical device context is required")
         if any(item.connection_generation != self.connection_generation for item in self.observations):
             raise ValueError("observations cannot cross connection generations")
+        dialogue_generations = {
+            item.observation.generation for item in self.dialogues
+        } | {
+            item.request.generation for item in self.dialogues if item.request is not None
+        }
+        temporal_generations = dialogue_generations | {
+            item.generation for item in self.bursts
+        } | {
+            item.observation.generation for item in self.pushed_states
+        } | {
+            item.observation.generation for item in self.state_reads
+        }
+        if temporal_generations - {self.connection_generation}:
+            raise ValueError(
+                "protocol relationships cannot cross connection generations; "
+                "use explicit lifecycle evidence for reconnect timing"
+            )
 
     @property
     def write_authorized(self) -> bool:
@@ -224,6 +400,8 @@ class LabExperiment:
                 item.timestamp_ns, item.sequence,
             ),
         )
+        redact_id = lambda value: "id:" + sha256(str(value).encode("utf-8", "replace")).hexdigest()[:16]
+        timing = self.timing_profile
         return {
             "schema": 1,
             "experiment_id": self.experiment_id,
@@ -233,8 +411,8 @@ class LabExperiment:
             "human_action": self.human_action,
             "observations": [
                 {
-                    "source_id": item.source_id,
-                    "stream_id": item.stream_id,
+                    "source_id": redact_id(item.source_id),
+                    "stream_id": redact_id(item.stream_id),
                     "timestamp_ns": item.timestamp_ns,
                     "sequence": item.sequence,
                     "payload_hex": item.payload.hex(),
@@ -244,6 +422,44 @@ class LabExperiment:
                     "report_id": item.report_id,
                 }
                 for item in observations
+            ],
+            "timing_observations": [
+                {
+                    "timing_id": item.timing_id,
+                    "relationship": item.relationship.value,
+                    "source_observation_ids": [
+                        redact_id(source_id) for source_id in item.source_observation_ids
+                    ],
+                    "connection_generation": item.connection_generation,
+                    "start_timestamp_ns": item.start_timestamp_ns,
+                    "end_timestamp_ns": item.end_timestamp_ns,
+                    "duration_ns": item.duration_ns,
+                    "confidence": item.confidence,
+                    "evidence_state": item.evidence_state.value,
+                    "classification": item.classification.value,
+                    "interval": item.interval.value if item.interval is not None else None,
+                    "repeat": item.repeat,
+                    "freshness": item.freshness.value if item.freshness is not None else None,
+                    "context": item.context,
+                }
+                for item in (timing.observations if timing is not None else ())
+            ],
+            "timing_summaries": [
+                {
+                    "relationship": item.relationship.value,
+                    "context": item.context,
+                    "interval": item.interval.value if item.interval is not None else None,
+                    "sample_count": item.sample_count,
+                    "accepted_count": item.accepted_count,
+                    "minimum_ns": item.minimum_ns,
+                    "median_ns": item.median_ns,
+                    "maximum_ns": item.maximum_ns,
+                    "spread_ns": item.spread_ns,
+                    "rejected_durations_ns": list(item.rejected_durations_ns),
+                    "classification": item.classification.value,
+                    "confidence": item.confidence,
+                }
+                for item in (timing.summaries if timing is not None else ())
             ],
         }
 
@@ -558,30 +774,46 @@ def _project_existing_evidence(experiment: LabExperiment) -> tuple[ProtocolObser
     return tuple(projected)
 
 
-def _recommend(fields: Sequence[RankedFieldEvidence]) -> LabRecommendation | None:
+def _recommend(
+    fields: Sequence[RankedFieldEvidence],
+    timing_profile: ProtocolTimingProfile | None = None,
+) -> LabRecommendation | None:
     candidates = [item for item in fields if FieldSignal.ACTION_CORRELATED in item.signals][:4]
+    field_recommendation: LabRecommendation
     if not candidates:
-        return LabRecommendation(
+        field_recommendation = LabRecommendation(
             "repeat-controlled-action", 0.0,
             "No action-specific field survived the negative control; collect another isolated repeat.",
         )
-    hypotheses = []
-    for item in candidates:
-        name = f"{item.stream_id}:byte-{item.offset}"
-        hypotheses.append(ExperimentHypothesis(name, {
-            "repeat-controlled-action": ("changes", item.offset),
-            "alternate-negative-control": ("unchanged", len(item.contradictions)),
-            "idle-persistence-check": ("persists", FieldSignal.STATUS_CANDIDATE in item.signals),
-        }))
-    choice = choose_experiment(hypotheses)
-    if choice is None:
-        return LabRecommendation(
-            "alternate-negative-control", 0.0,
-            "The leading correlation needs a distinct ordinary-use control before stronger semantics.",
+    else:
+        hypotheses = []
+        for item in candidates:
+            name = f"{item.stream_id}:byte-{item.offset}"
+            hypotheses.append(ExperimentHypothesis(name, {
+                "repeat-controlled-action": ("changes", item.offset),
+                "alternate-negative-control": ("unchanged", len(item.contradictions)),
+                "idle-persistence-check": ("persists", FieldSignal.STATUS_CANDIDATE in item.signals),
+            }))
+        choice = choose_experiment(hypotheses)
+        field_recommendation = (
+            LabRecommendation(
+                choice.experiment, choice.information_gain_bits,
+                "Chosen deterministically from the remaining field hypotheses by expected information gain.",
+            )
+            if choice is not None else
+            LabRecommendation(
+                "alternate-negative-control", 0.0,
+                "The leading correlation needs a distinct ordinary-use control before stronger semantics.",
+            )
         )
-    return LabRecommendation(
-        choice.experiment, choice.information_gain_bits,
-        "Chosen deterministically from the remaining field hypotheses by expected information gain.",
+    timing_recommendation = (
+        timing_profile.next_recommended_experiment if timing_profile is not None else None
+    )
+    if timing_recommendation is None:
+        return field_recommendation
+    return min(
+        (field_recommendation, timing_recommendation),
+        key=lambda item: (-item.information_gain_bits, item.experiment),
     )
 
 
@@ -592,6 +824,11 @@ def analyze_differential_experiment(
     semantic_hypotheses: Iterable[SemanticHypothesis] = (),
 ) -> LabExperiment:
     """Analyze one canonical experiment without performing I/O."""
+
+    if experiment.timing_profile is None:
+        from .protocol_timing import profile_experiment_timing
+
+        experiment = profile_experiment_timing(experiment)
 
     canonical_observations = _project_existing_evidence(experiment)
     streams: dict[str, list[ProtocolObservation]] = defaultdict(list)
@@ -660,10 +897,14 @@ def analyze_differential_experiment(
         integrity=integrity,
         echoes=_echoes(experiment.dialogues),
         transaction_differences=_transaction_differences(experiment.dialogues),
+        timing_deltas=(
+            experiment.timing_profile.differentials
+            if experiment.timing_profile is not None else ()
+        ),
         dependencies=dependencies,
         semantic_hypotheses=(*tuple(semantic_hypotheses), *derived_semantics),
         contradictions=contradictions,
-        next_recommended_experiment=_recommend(fields),
+        next_recommended_experiment=_recommend(fields, experiment.timing_profile),
     )
     state = ProofState.HYPOTHESIZED if any(
         FieldSignal.ACTION_CORRELATED in item.signals for item in fields

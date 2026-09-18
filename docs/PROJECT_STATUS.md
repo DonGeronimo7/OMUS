@@ -1,5 +1,27 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab protocol timing profiler milestone
+
+- `LabExperiment` now retains canonical timing observations and profiles derived
+  from recorded timestamps. Evidence carries experiment/device/generation,
+  source IDs, exact start/end/duration, relationship, interval/repeat,
+  confidence/proof state, classification, and freshness where applicable.
+- The profiler automatically extracts request/response and ACK latency,
+  busy/poll cycles, existing burst timing and quiet completion, nudge/action/
+  periodic pushed-state timing, stale-read settling windows, and explicit
+  disconnect/reconnect/first-valid-state lifecycle timing. It never sleeps,
+  captures, polls, or writes hardware.
+- Repeated samples retain count/minimum/median/maximum/spread and MAD-based
+  rejected outliers. Timing classes are contextual rather than universal
+  millisecond thresholds; insufficient ordinary evidence remains `UNKNOWN`.
+- Baseline/action timing distributions produce separately ranked timing deltas
+  without assigning semantics. Timing uncertainty participates in the existing
+  information-gain recommendation path, and the cohesive Lab screen renders
+  normal-language timing summaries.
+- Focused Lab/discovery/protocol/TUI/security validation passes 171 tests; the
+  complete suite passes 849 with the existing GLib warning. No physical
+  validation, runtime write, install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — Discovery Lab differential analyzer milestone
 
 - The canonical setup TUI now exposes `Hardware Discovery → Discovery Lab →

@@ -106,6 +106,8 @@ class BurstDialogueResult:
     generation: int
     channel_id: str
     grammar: str | None
+    completion_timestamp_ns: int | None = None
+    quiet_interval_ns: int | None = None
 
     @property
     def response_count(self) -> int:
@@ -166,6 +168,7 @@ class PushedStateRecord(StateEvidence):
     transform: str | None = None
     transform_source: bytes = b""
     transformed_payload: bytes = b""
+    controlled_action: DialogueObservation | None = None
 
 
 @dataclass
@@ -408,6 +411,7 @@ class DialogueAssembler:
             transform=transform,
             transform_source=transform_source,
             transformed_payload=transformed_payload,
+            controlled_action=controlled_action,
         )
         self._state_history[key] = record
         return record
@@ -416,6 +420,8 @@ class DialogueAssembler:
     def _burst_result(
         pending: _PendingBurst,
         reason: BurstCompletionReason,
+        *,
+        completion_timestamp_ns: int | None = None,
     ) -> BurstDialogueResult:
         request = pending.request
         return BurstDialogueResult(
@@ -430,6 +436,11 @@ class DialogueAssembler:
             generation=request.generation,
             channel_id=pending.spec.response_channel_id or request.channel_id,
             grammar=pending.spec.response_grammar or request.grammar,
+            completion_timestamp_ns=completion_timestamp_ns,
+            quiet_interval_ns=(
+                pending.spec.quiet_interval_ms * 1_000_000
+                if reason is BurstCompletionReason.QUIET_INTERVAL else None
+            ),
         )
 
     def begin_burst(
@@ -508,7 +519,13 @@ class DialogueAssembler:
             if reason is None:
                 retained.append(pending)
             else:
-                completed.append(self._burst_result(pending, reason))
+                completed.append(self._burst_result(
+                    pending,
+                    reason,
+                    completion_timestamp_ns=(
+                        deadline_at if reason is BurstCompletionReason.DEADLINE else quiet_at
+                    ),
+                ))
         self._bursts = retained
         return tuple(completed)
 
@@ -532,7 +549,11 @@ class DialogueAssembler:
         pending.responses.append(item)
         if len(pending.responses) >= pending.spec.max_responses:
             self._bursts.remove(pending)
-            completed.append(self._burst_result(pending, BurstCompletionReason.MAX_RESPONSES))
+            completed.append(self._burst_result(
+                pending,
+                BurstCompletionReason.MAX_RESPONSES,
+                completion_timestamp_ns=item.timestamp_ns,
+            ))
         return tuple(completed)
 
     def end_burst(

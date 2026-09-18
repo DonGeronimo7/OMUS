@@ -1,5 +1,34 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab protocol timing profiler
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `91cdbd2`; reused
+  the canonical `LabExperiment`, `DialogueRecord`, bounded burst,
+  `PushedStateRecord`, freshness, logical-record, generation, proof, and
+  information-gain architecture rather than adding a timing capture stack.
+- Added canonical experiment-attached timing evidence for request/response and
+  ACK, busy/poll/ready cycles, burst first-response/gaps/quiet/duration,
+  nudge/action/periodic pushes, stale-read settling, commit/last-valid to
+  disconnect, reconnect duration, and first valid new-generation state.
+- Repeated distributions retain raw samples, accepted count, minimum, median,
+  maximum, spread, and MAD-based outliers. Classification uses established
+  protocol context and relative baseline/action distributions, never universal
+  millisecond truth; insufficient ordinary evidence stays unknown.
+- The existing differential analysis now ranks baseline/action timing deltas
+  alongside packet/field evidence. Timing ambiguity creates read-only
+  information-gain recommendations such as repeat without a nudge, repeat
+  request/push timing, or extend the busy observation window.
+- The Discovery Lab page displays stable/variable medians, stale-state settling
+  warnings, and meaningful timing deltas. Replay timing evidence is deterministic
+  and hashes source identifiers; it retains no keyboard, clipboard, screen, or
+  unrelated USB activity.
+- Validation: 171 focused Lab/discovery/protocol/TUI/security tests and 849 full-
+  suite tests pass with the existing GLib warning; compileall and diff checks
+  pass. No physical validation, hardware write, install, push, merge, tag, or
+  release occurred.
+- Next bounded milestone: Controlled Action Matrix using the same experiment,
+  timing, safety, and TUI models.
+
 ## 2026-09-18 — first-class Discovery Lab differential analyzer
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `c7ca4d0` and

@@ -21,6 +21,16 @@ from .setup_flow import SetupChoices, discover_choices, restore_dpi
 from .performance import timed
 
 
+def _format_timing_ns(value: int | None) -> str:
+    if value is None:
+        return "unknown"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f} ms"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f} µs"
+    return f"{value} ns"
+
+
 class SetupSection(Enum):
     DEVICE = "Device"
     HARDWARE = "Hardware Discovery"
@@ -1004,6 +1014,47 @@ class SetupController:
                     rows.append(DisplayRow(
                         f"{item.stream_id[-12:]} byte {item.offset}: {labels} (rank {item.score:g})"
                     ))
+                timing = getattr(experiment, "timing_profile", None)
+                rows.append(DisplayRow("Protocol timing", dim=True))
+                if timing is None or not timing.summaries:
+                    rows.append(DisplayRow(
+                        "No established temporal relationship was present in this capture.",
+                        dim=True,
+                    ))
+                else:
+                    for summary in timing.summaries[:4]:
+                        label = summary.relationship.value.replace("_", " → ", 1).replace("_", " ")
+                        detail = f"median {_format_timing_ns(summary.median_ns)}"
+                        if summary.accepted_count >= 2:
+                            stable = (
+                                summary.spread_ns is not None
+                                and summary.median_ns not in {None, 0}
+                                and summary.spread_ns / summary.median_ns <= 0.25
+                            )
+                            if stable:
+                                detail += f", stable across {summary.accepted_count} samples"
+                            else:
+                                detail += (
+                                    f", variable {_format_timing_ns(summary.minimum_ns)}–"
+                                    f"{_format_timing_ns(summary.maximum_ns)}"
+                                )
+                        else:
+                            detail += ", insufficient repeated evidence"
+                        rows.append(DisplayRow(f"{label}: {detail}"))
+                    stale = [
+                        item for item in timing.summaries
+                        if item.relationship.value == "read_to_fresh_state_latency"
+                    ]
+                    if stale:
+                        rows.append(DisplayRow(
+                            "Immediate readable state was superseded; freshness is questionable "
+                            f"for about {_format_timing_ns(stale[0].median_ns)}."
+                        ))
+                    for delta in timing.differentials[:2]:
+                        rows.append(DisplayRow(
+                            f"Timing delta: baseline {_format_timing_ns(delta.baseline_median_ns)} "
+                            f"→ action {_format_timing_ns(delta.action_median_ns)}"
+                        ))
                 recommendation = analysis.next_recommended_experiment
                 if recommendation is not None:
                     rows.append(DisplayRow(
