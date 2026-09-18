@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from enum import Enum
+from enum import Enum, IntEnum
 from hashlib import sha256
 from statistics import median
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -144,6 +144,63 @@ class LabStopReason(str, Enum):
     HARDWARE_REQUIRED = "hardware_required"
     CONFLICT_FOUND = "conflict_found"
     USER_CANCELLED = "user_cancelled"
+    EFFECT_CONFIRMED = "effect_confirmed"
+    EFFECT_NOT_CONFIRMED = "effect_not_confirmed"
+    RECONNECT_PERSISTENCE_CONFIRMED = "reconnect_persistence_confirmed"
+    POWER_CYCLE_PERSISTENCE_CONFIRMED = "power_cycle_persistence_confirmed"
+    COMMIT_REQUIREMENT_IDENTIFIED = "commit_requirement_identified"
+    STATE_REVERTED = "state_reverted"
+    PERSISTENCE_SUFFICIENTLY_CHARACTERIZED = "persistence_sufficiently_characterized"
+    NO_SAFE_HIGH_VALUE_PERSISTENCE_TEST = "no_safe_high_value_persistence_test"
+    USER_DECLINED_DISRUPTIVE_TEST = "user_declined_disruptive_test"
+
+
+class EffectVerificationMethod(str, Enum):
+    PROTOCOL_READBACK = "protocol_readback"
+    PHYSICAL_CPI = "physical_cpi"
+    PHYSICAL_POLLING = "physical_polling"
+    PUSHED_STATE = "pushed_state"
+    USER_VISIBLE_HARDWARE_STATE = "user_visible_hardware_state"
+    DESCRIPTOR_TOPOLOGY_CHANGE = "descriptor_topology_change"
+    EXTERNAL_VENDOR_CONFIRMATION = "external_vendor_confirmation"
+
+
+class EffectState(str, Enum):
+    REQUEST_ACCEPTED = "request_accepted"
+    STATE_REPORTED = "state_reported"
+    STATE_PHYSICALLY_EFFECTIVE = "state_physically_effective"
+    STATE_NOT_PHYSICALLY_EFFECTIVE = "state_not_physically_effective"
+    STATE_FRESH = "state_fresh"
+    STATE_STALE = "state_stale"
+    STATE_REVERTED = "state_reverted"
+    STATE_UNKNOWN = "state_unknown"
+
+
+class PersistenceClassification(str, Enum):
+    VOLATILE = "volatile"
+    SESSION_PERSISTENT = "session_persistent"
+    RECONNECT_PERSISTENT = "reconnect_persistent"
+    RECEIVER_RECONNECT_PERSISTENT = "receiver_reconnect_persistent"
+    POWER_CYCLE_PERSISTENT = "power_cycle_persistent"
+    HOST_RESTART_PERSISTENT = "host_restart_persistent"
+    DEVICE_STORED = "device_stored"
+    HOST_STORED = "host_stored"
+    UNKNOWN_STORAGE_LOCATION = "unknown_storage_location"
+    COMMIT_REQUIRED = "commit_required"
+    APPLY_REQUIRED = "apply_required"
+    VOLATILE_UNTIL_COMMIT = "volatile_until_commit"
+    REVERTED = "reverted"
+    UNKNOWN = "unknown"
+
+
+class PersistenceLevel(IntEnum):
+    IMMEDIATE_EFFECT = 0
+    SETTLING_IDLE = 1
+    PROTOCOL_REREAD = 2
+    DEVICE_RECONNECT = 3
+    RECEIVER_RECONNECT = 4
+    POWER_CYCLE = 5
+    HOST_SESSION_RESTART = 6
 
 
 class HypothesisDisposition(str, Enum):
@@ -344,6 +401,111 @@ class PhysicalEvidence:
     unit: str | None = None
     confidence: str = "observed"
     evidence_source_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class EffectEvidence:
+    experiment_id: str
+    physical_device_context: Mapping[str, object]
+    connection_generation: int
+    target_semantic: str
+    before_state: bytes | int | float | str | None
+    after_state: bytes | int | float | str | None
+    request_state: EffectState = EffectState.STATE_UNKNOWN
+    protocol_effect: EffectState = EffectState.STATE_UNKNOWN
+    physical_effect: EffectState = EffectState.STATE_UNKNOWN
+    freshness: StateFreshness = StateFreshness.UNKNOWN
+    verification_methods: tuple[EffectVerificationMethod, ...] = ()
+    source_observation_ids: tuple[str, ...] = ()
+    confidence: str = "unknown"
+    proof_state: ProofState = ProofState.OBSERVED
+    contradictions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.experiment_id or not self.physical_device_context or not self.target_semantic:
+            raise ValueError("effect evidence requires experiment, device, and semantic identity")
+        if self.connection_generation < 0:
+            raise ValueError("effect evidence generation must be non-negative")
+        if any(not item for item in self.source_observation_ids):
+            raise ValueError("effect source observation IDs must be non-empty")
+
+    @property
+    def freshness_state(self) -> EffectState:
+        if self.freshness is StateFreshness.FRESH:
+            return EffectState.STATE_FRESH
+        if self.freshness is StateFreshness.STALE:
+            return EffectState.STATE_STALE
+        return EffectState.STATE_UNKNOWN
+
+
+@dataclass(frozen=True)
+class PersistenceEvidence:
+    experiment_id: str
+    physical_device_context: Mapping[str, object]
+    target_semantic: str
+    level: PersistenceLevel
+    before_state: bytes | int | float | str | None
+    after_state: bytes | int | float | str | None
+    before_generation: int
+    after_generation: int
+    survived: bool | None
+    freshness: StateFreshness
+    verification_methods: tuple[EffectVerificationMethod, ...]
+    source_observation_ids: tuple[str, ...]
+    action_label: str
+    confidence: str = "observed"
+    proof_state: ProofState = ProofState.OBSERVED
+    commit_observed: bool = False
+    apply_observed: bool = False
+    automatic_reversion_observed: bool = False
+    reversion_cause: str | None = None
+    host_reapplied: bool = False
+    user_restored: bool = False
+    contradictions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.experiment_id or not self.physical_device_context \
+                or not self.target_semantic or not self.action_label:
+            raise ValueError("persistence evidence requires experiment, device, semantic, and action identity")
+        if self.before_generation < 0 or self.after_generation < 0:
+            raise ValueError("persistence generations must be non-negative")
+        if not self.source_observation_ids:
+            raise ValueError("persistence evidence requires source observation IDs")
+        if self.level >= PersistenceLevel.DEVICE_RECONNECT and self.survived is not None:
+            if self.before_generation == self.after_generation:
+                raise ValueError("reconnect persistence requires an explicit generation boundary")
+
+
+@dataclass(frozen=True)
+class RestorationPlan:
+    required: bool
+    original_state: bytes | int | float | str | None
+    current_state: bytes | int | float | str | None
+    instruction: str | None
+    verified: bool = False
+    automatic_write_authorized: bool = False
+
+
+@dataclass(frozen=True)
+class PersistenceAssessment:
+    target_semantic: str
+    effective_state: EffectState
+    classifications: tuple[PersistenceClassification, ...]
+    strongest_confirmed_level: PersistenceLevel | None
+    decisive_effect_evidence: str | None
+    retained_effect_evidence: tuple[str, ...]
+    retained_persistence_evidence: tuple[str, ...]
+    contradictions: tuple[str, ...]
+    stop_reason: LabStopReason
+    next_plan: LabExperimentPlan | None
+    restoration: RestorationPlan
+    freshness_wait_seconds: float
+    timing_source: str
+    timing_uncertainty: str | None = None
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
@@ -557,6 +719,9 @@ class LabExperiment:
     hypothesis_updates: tuple[HypothesisUpdate, ...] = ()
     stop_reason: LabStopReason | None = None
     next_plan: LabExperimentPlan | None = None
+    effect_evidence: tuple[EffectEvidence, ...] = ()
+    persistence_evidence: tuple[PersistenceEvidence, ...] = ()
+    persistence_assessment: PersistenceAssessment | None = None
 
     def __post_init__(self) -> None:
         if not self.experiment_id or not self.purpose:
@@ -584,6 +749,10 @@ class LabExperiment:
                 "protocol relationships cannot cross connection generations; "
                 "use explicit lifecycle evidence for reconnect timing"
             )
+        if any(item.experiment_id != self.experiment_id for item in self.effect_evidence):
+            raise ValueError("effect evidence belongs to a different experiment")
+        if any(item.experiment_id != self.experiment_id for item in self.persistence_evidence):
+            raise ValueError("persistence evidence belongs to a different experiment")
 
     @property
     def write_authorized(self) -> bool:
@@ -611,6 +780,9 @@ class LabExperiment:
             ),
         )
         redact_id = lambda value: "id:" + sha256(str(value).encode("utf-8", "replace")).hexdigest()[:16]
+        replay_value = lambda value: (
+            {"bytes_hex": value.hex()} if isinstance(value, bytes) else value
+        )
         timing = self.timing_profile
         return {
             "schema": 1,
@@ -684,6 +856,76 @@ class LabExperiment:
             ],
             "stop_reason": self.stop_reason.value if self.stop_reason else None,
             "next_plan": self.next_plan.replay_fixture() if self.next_plan is not None else None,
+            "effect_evidence": [
+                {
+                    "target_semantic": item.target_semantic,
+                    "connection_generation": item.connection_generation,
+                    "before_state": replay_value(item.before_state),
+                    "after_state": replay_value(item.after_state),
+                    "request_state": item.request_state.value,
+                    "protocol_effect": item.protocol_effect.value,
+                    "physical_effect": item.physical_effect.value,
+                    "freshness": item.freshness.value,
+                    "verification_methods": [method.value for method in item.verification_methods],
+                    "source_observation_ids": [redact_id(source) for source in item.source_observation_ids],
+                    "confidence": item.confidence,
+                    "proof_state": item.proof_state.value,
+                    "contradictions": list(item.contradictions),
+                }
+                for item in self.effect_evidence
+            ],
+            "persistence_evidence": [
+                {
+                    "target_semantic": item.target_semantic,
+                    "level": int(item.level),
+                    "before_state": replay_value(item.before_state),
+                    "after_state": replay_value(item.after_state),
+                    "before_generation": item.before_generation,
+                    "after_generation": item.after_generation,
+                    "survived": item.survived,
+                    "freshness": item.freshness.value,
+                    "verification_methods": [method.value for method in item.verification_methods],
+                    "source_observation_ids": [redact_id(source) for source in item.source_observation_ids],
+                    "action_label": item.action_label,
+                    "confidence": item.confidence,
+                    "proof_state": item.proof_state.value,
+                    "commit_observed": item.commit_observed,
+                    "apply_observed": item.apply_observed,
+                    "automatic_reversion_observed": item.automatic_reversion_observed,
+                    "reversion_cause": item.reversion_cause,
+                    "host_reapplied": item.host_reapplied,
+                    "user_restored": item.user_restored,
+                    "contradictions": list(item.contradictions),
+                }
+                for item in sorted(self.persistence_evidence, key=lambda item: (item.level, item.action_label))
+            ],
+            "persistence_assessment": (
+                {
+                    "target_semantic": self.persistence_assessment.target_semantic,
+                    "effective_state": self.persistence_assessment.effective_state.value,
+                    "classifications": [item.value for item in self.persistence_assessment.classifications],
+                    "strongest_confirmed_level": (
+                        int(self.persistence_assessment.strongest_confirmed_level)
+                        if self.persistence_assessment.strongest_confirmed_level is not None else None
+                    ),
+                    "decisive_effect_evidence": (
+                        redact_id(self.persistence_assessment.decisive_effect_evidence)
+                        if self.persistence_assessment.decisive_effect_evidence else None
+                    ),
+                    "contradictions": list(self.persistence_assessment.contradictions),
+                    "stop_reason": self.persistence_assessment.stop_reason.value,
+                    "next_plan": (
+                        self.persistence_assessment.next_plan.replay_fixture()
+                        if self.persistence_assessment.next_plan else None
+                    ),
+                    "restoration_required": self.persistence_assessment.restoration.required,
+                    "restoration_verified": self.persistence_assessment.restoration.verified,
+                    "freshness_wait_seconds": self.persistence_assessment.freshness_wait_seconds,
+                    "timing_source": self.persistence_assessment.timing_source,
+                    "timing_uncertainty": self.persistence_assessment.timing_uncertainty,
+                }
+                if self.persistence_assessment is not None else None
+            ),
         }
 
 

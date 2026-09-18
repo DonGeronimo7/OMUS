@@ -1106,6 +1106,29 @@ class SetupController:
                     rows.append(DisplayRow(
                         f"Next uncertainty: {next_plan.purpose}; try {next_plan.selected_action.label}."
                     ))
+                assessment = getattr(experiment, "persistence_assessment", None)
+                if assessment is not None:
+                    rows.append(DisplayRow("Effect / persistence", dim=True))
+                    rows.append(DisplayRow(
+                        "Effect: " + assessment.effective_state.value.replace("_", " ")
+                    ))
+                    persistence = ", ".join(
+                        item.value.replace("_", " ") for item in assessment.classifications
+                    )
+                    rows.append(DisplayRow(f"Persistence: {persistence or 'unknown'}"))
+                    if assessment.strongest_confirmed_level is not None:
+                        rows.append(DisplayRow(
+                            "Strongest tested level: "
+                            + assessment.strongest_confirmed_level.name.lower().replace("_", " ")
+                        ))
+                    if assessment.contradictions:
+                        rows.append(DisplayRow(
+                            f"Contradictions retained: {len(assessment.contradictions)}"
+                        ))
+                    if assessment.restoration.required:
+                        rows.append(DisplayRow(
+                            "Restore original state manually, then verify restoration."
+                        ))
             rows.extend([
                 DisplayRow("Run Full Automatic Lab", 0),
                 DisplayRow(

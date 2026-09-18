@@ -1,5 +1,33 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab state/effect/persistence verification milestone
+
+- `LabExperiment` now retains canonical effect evidence, cross-generation
+  persistence evidence, restoration requirements, and a derived persistence
+  assessment. Accepted requests, reported state, fresh/stale state, independent
+  physical effect, reversion, and unknown effect remain distinct.
+- The verifier implements a conservative seven-level evidence ladder from
+  immediate effect through idle, fresh reread, device reconnect, receiver
+  reconnect, power cycle, and host/session restart. Stronger persistence is
+  never inferred from a weaker checkpoint; stale post-reconnect state cannot
+  prove survival.
+- Protocol/physical disagreement, stale/fresh disagreement, automatic
+  reversion, and vendor/physical contradiction remain explicit. Commit/apply
+  and volatile-until-commit evidence can be identified without inventing or
+  executing an unknown commit command.
+- Power-cycle evidence may support device storage; observed host reapplication
+  supports host storage; host restart alone leaves storage location unknown.
+  Cross-generation state comparison is allowed only through persistence
+  evidence while protocol dialogue remains generation-isolated.
+- Persistence uncertainty produces bounded idle, reread, reconnect, receiver-
+  reconnect, or power-cycle plans through the existing information-gain and
+  human-cost planner. Disruptive testing can stop on user refusal or insufficient
+  value. Original-state restoration remains manual unless separately authorized.
+- Focused Lab/discovery/protocol/TUI/security validation passes 140 tests; the
+  complete suite passes 876 with the existing GLib warning. Compileall and diff
+  checks pass. Physical hardware validation remains pending. No hardware write,
+  install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — Discovery Lab controlled-action orchestration milestone
 
 - The Lab now models all supported physical, passive, external-vendor,

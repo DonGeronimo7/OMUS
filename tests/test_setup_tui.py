@@ -527,3 +527,21 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
     assert "Protocol timing" in text
     assert "median 3.0 ms, stable across 3 samples" in text
     assert "Hardware write required: no" in text
+
+    assessment = SimpleNamespace(
+        effective_state=SimpleNamespace(value="state_physically_effective"),
+        classifications=(SimpleNamespace(value="reconnect_persistent"),),
+        strongest_confirmed_level=SimpleNamespace(name="DEVICE_RECONNECT"),
+        contradictions=("stale state superseded",),
+        restoration=SimpleNamespace(required=True),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+        persistence_assessment=assessment,
+    ))
+    effect_text = "\n".join(row.text for row in app.detail_rows())
+    assert "Effect / persistence" in effect_text
+    assert "state physically effective" in effect_text
+    assert "reconnect persistent" in effect_text
+    assert "Strongest tested level: device reconnect" in effect_text
+    assert "Restore original state manually" in effect_text

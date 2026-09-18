@@ -107,6 +107,45 @@ ACTION_TEMPLATES: Mapping[str, ControlledAction] = {
         effort=2, duration=3, equipment=2, burden=2,
         tags=("vendor", "dpi", "polling", "profile"),
     ),
+    "IDLE_PERSISTENCE": _action(
+        "IDLE_PERSISTENCE", ControlledActionType.QUIET,
+        "bounded idle persistence observation", ActionSafetyClass.PASSIVE,
+        "Leave the selected mouse and its connection unchanged during the observation.",
+        effort=0, duration=2, burden=1, tags=("persistence", "idle", "freshness"),
+    ),
+    "PROTOCOL_REREAD": _action(
+        "PROTOCOL_REREAD", ControlledActionType.QUIET,
+        "fresh protocol state re-read", ActionSafetyClass.PASSIVE,
+        "Leave the selected mouse unchanged while Mouse Control waits for fresh state.",
+        effort=0, duration=1, burden=1, tags=("persistence", "reread", "freshness"),
+    ),
+    "RECONNECT_PERSISTENCE": _action(
+        "RECONNECT_PERSISTENCE", ControlledActionType.DISCONNECT_CABLE,
+        "selected-device reconnect persistence test", ActionSafetyClass.PHYSICAL_ONLY,
+        "Disconnect and reconnect the selected mouse when prompted.",
+        effort=3, duration=3, risk=1, burden=1,
+        tags=("persistence", "lifecycle", "reconnect"),
+    ),
+    "RECEIVER_RECONNECT_PERSISTENCE": _action(
+        "RECEIVER_RECONNECT_PERSISTENCE", ControlledActionType.DISCONNECT_RECEIVER,
+        "receiver reconnect persistence test", ActionSafetyClass.PHYSICAL_ONLY,
+        "Disconnect and reconnect only the selected mouse receiver when prompted.",
+        effort=4, duration=4, risk=1, equipment=1, burden=1,
+        tags=("persistence", "lifecycle", "receiver", "reconnect"),
+    ),
+    "POWER_CYCLE_PERSISTENCE": _action(
+        "POWER_CYCLE_PERSISTENCE", ControlledActionType.POWER_CYCLE,
+        "device power-cycle persistence test", ActionSafetyClass.PHYSICAL_ONLY,
+        "Turn the selected mouse off and back on when prompted.",
+        effort=5, duration=5, risk=2, burden=1,
+        tags=("persistence", "lifecycle", "power"),
+    ),
+    "MANUAL_RESTORE": _action(
+        "MANUAL_RESTORE", ControlledActionType.CUSTOM_LABELLED_ACTION,
+        "manual original-state restoration", ActionSafetyClass.PHYSICAL_ONLY,
+        "Restore the original setting with the same physical or external tool used for the demonstration.",
+        effort=2, duration=2, burden=1, tags=("restoration",),
+    ),
 }
 
 
@@ -141,7 +180,7 @@ def initial_lab_hypotheses() -> tuple[LabHypothesis, ...]:
     )
 
 
-def _timing_windows(profile: ProtocolTimingProfile | None) -> ObservationWindowPlan:
+def derive_observation_windows(profile: ProtocolTimingProfile | None) -> ObservationWindowPlan:
     if profile is None or not profile.summaries:
         return ObservationWindowPlan(
             1.5, 1.5, 1.5, 1.5, source="bounded conservative default",
@@ -171,6 +210,8 @@ def _timing_windows(profile: ProtocolTimingProfile | None) -> ObservationWindowP
 
 def _repeat_count(action: ControlledAction, hypotheses: Sequence[LabHypothesis]) -> int:
     topics = {item.topic.lower() for item in hypotheses}
+    if "persistence" in action.semantic_tags:
+        return 1
     if "timing" in topics or "periodic" in topics or "polling" in topics:
         return 5
     if action.action_id == "MULTI_DPI_STAGE_SEQUENCE":
@@ -226,7 +267,7 @@ def plan_next_experiment(
     """Choose the maximum-information safe action, using human cost only as a tie-breaker."""
 
     hypotheses = tuple(item for item in hypotheses if item.disposition not in {HypothesisDisposition.REJECTED})
-    offered = tuple(available_actions or ACTION_TEMPLATES.values())
+    offered = tuple(ACTION_TEMPLATES.values() if available_actions is None else available_actions)
     authorized = set(authorized_bounded_action_ids)
     safe = tuple(
         action for action in offered
@@ -258,7 +299,7 @@ def plan_next_experiment(
         ]
         if len(hypotheses) <= 1 and relevant:
             selected = min(relevant, key=lambda item: (item.human_cost, item.action_id))
-    windows = _timing_windows(timing_profile)
+    windows = derive_observation_windows(timing_profile)
     stop = LabStopReason.INSUFFICIENT_SAFE_ACTIONS if selected is None else None
     repeat = _repeat_count(selected, hypotheses) if selected else 0
     control = _negative_control(selected) if selected else None
@@ -340,6 +381,7 @@ def _stop_reason(updates: Sequence[HypothesisUpdate]) -> LabStopReason | None:
 
 
 Verifier = Callable[[LabExperimentPlan], Sequence[PhysicalEvidence]]
+EffectVerifier = Callable[[LabExperiment], LabExperiment]
 
 
 def execute_lab_plan(
@@ -352,6 +394,7 @@ def execute_lab_plan(
     connection_generation: int = 0,
     session_factory: Callable[..., ReadOnlyLearningSession] = ReadOnlyLearningSession,
     verifier_runners: Mapping[LabInstrument, Verifier] | None = None,
+    effect_verifier: EffectVerifier | None = None,
 ) -> LabExperiment:
     """Produce one canonical experiment from a plan using read-only capture callbacks."""
 
@@ -453,6 +496,10 @@ def execute_lab_plan(
     completed += 1
     emit(LabProgressEvent(LabProgressStage.ANALYSIS, "Running automatic differential analysis", completed, total))
     analyzed = analyze_differential_experiment(experiment)
+    if effect_verifier is not None:
+        analyzed = effect_verifier(analyzed)
+        if analyzed.write_authorized:
+            raise PermissionError("effect verification cannot grant Lab write authority")
     updates = update_hypotheses(plan.target_hypotheses, analyzed)
     completed += 1
     emit(LabProgressEvent(LabProgressStage.HYPOTHESIS_UPDATE, "Updating retained hypotheses", completed, total))

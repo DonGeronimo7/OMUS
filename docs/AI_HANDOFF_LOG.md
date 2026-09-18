@@ -1,5 +1,31 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab state/effect/persistence verification
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `d211361` and
+  extended the same `LabExperiment`, plan, timing, controlled-action, proof,
+  information-gain, and TUI architecture without adding a capture stack.
+- Added explicit effect states and methods plus a seven-level persistence ladder.
+  Fresh state supersedes but does not erase stale evidence; protocol/physical
+  disagreement, reversion, and cross-source conflicts remain contradictions.
+- Added conservative session, reconnect, receiver, power-cycle, host-restart,
+  device/host storage, commit/apply, volatile-until-commit, reverted, and unknown
+  classifications. Cross-generation state comparison requires exact physical
+  identity; protocol transaction correlation remains generation-isolated.
+- Persistence uncertainty now selects bounded idle, reread, reconnect, receiver-
+  reconnect, or power-cycle plans with timing-derived windows and human-cost/
+  disruptive-test stops. Original-state recovery is requested manually and can
+  be marked verified, but is never automatically written without authority.
+- The Lab page presents effect, persistence, strongest tested level,
+  contradictions, restoration needs, and next uncertainty. Replay retains the
+  new findings deterministically with redacted source IDs and no unrelated
+  keyboard, clipboard, screen, evdev, or USB history.
+- Validation: 140 focused tests and 876 full-suite tests pass with the existing
+  GLib warning; compileall and diff checks pass. Physical validation remains
+  pending. No hardware write, install, push, merge, tag, or release occurred.
+- Next bounded milestone: receiver/child routing mapper using the same exact-
+  identity, generation, experiment, proof, and authority boundaries.
+
 ## 2026-09-18 — Discovery Lab controlled-action orchestration
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `89a78e1` and

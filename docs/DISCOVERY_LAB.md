@@ -130,6 +130,50 @@ Hypotheses are never silently discarded. Supported, strengthened, weakened,
 rejected, conflicted, and unresolved states retain their positive and negative
 evidence. Plan/result replay fixtures are deterministic and privacy-redacted.
 
+## State, effect, and persistence verification
+
+An observed packet transition is not treated as device success. Canonical
+`EffectEvidence` separately retains request acceptance, protocol readback,
+freshness, physical behavior, verification method, source observations, proof
+state, and contradictions. A fresh later state dominates a stale immediate read
+for conclusions, while both remain in replay and advanced evidence.
+
+`PersistenceEvidence` compares stable state facts—not transactions—across an
+explicit ladder:
+
+0. immediate effect;
+1. settling or idle;
+2. fresh protocol reread;
+3. selected-device reconnect;
+4. receiver reconnect;
+5. physical power cycle;
+6. host or session restart evidence.
+
+Protocol transactions and temporal relationships still cannot span connection
+generations. Cross-generation state comparison is allowed only in explicit
+persistence evidence carrying the same experiment and exact physical identity,
+old/new generations, freshness, verification methods, and source IDs.
+
+Persistence classifications include volatile, session/reconnect/receiver/
+power-cycle/host-restart persistence, device- or host-stored state, unknown
+storage, commit/apply required, volatile-until-commit, reverted, and unknown.
+No level implies an untested stronger level. A host restart alone does not prove
+device storage; independently observed power-cycle survival may do so.
+
+The verifier uses the timing profile for freshness and settling windows,
+preserves protocol/physical and stale/fresh contradictions, detects observed
+automatic reversion, and can identify a commit/apply requirement without
+inventing the command. It selects the next safe high-value idle, reread,
+reconnect, receiver-reconnect, or power-cycle plan, or records why disruptive
+testing stopped. Changed original state produces a manual restoration request;
+the Lab never broadens write authority for cleanup.
+
+The normal Lab page renders physical effect, persistence classifications,
+strongest tested level, contradiction count, restoration needs, and the next
+experiment. Deterministic replay retains effect and persistence findings while
+hashing source identifiers and omitting live device paths and unrelated human
+activity.
+
 ## Safety and privacy
 
 - Capture is restricted to the physical mouse selected by Automatic Discovery.
@@ -145,8 +189,7 @@ evidence. Plan/result replay fixtures are deterministic and privacy-redacted.
 
 ## Deferred master-Lab milestones
 
-The state/effect/persistence verifier,
-receiver/child routing mapper, battery/charging investigator, vendor capture
+The receiver/child routing mapper, battery/charging investigator, vendor capture
 importer,
 `ProtocolKnowledgePackage`, automatic positive/negative contribution fixtures,
 repository contribution pipeline, and blind-device v1 acceptance suite remain

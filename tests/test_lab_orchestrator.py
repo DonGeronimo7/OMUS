@@ -154,6 +154,30 @@ def test_completed_plan_runs_verifier_analyzer_updates_and_stops():
     assert experiment.write_authorized is False
 
 
+def test_completed_plan_can_feed_the_effect_persistence_verifier():
+    _Session.calls = 0
+    hypothesis = LabHypothesis(
+        "only", "Which field changes?", "the action field", "dpi",
+        {"DPI_STAGE_CHANGE": "changed"},
+    )
+    plan = plan_next_experiment(
+        (hypothesis,), available_actions=(ACTION_TEMPLATES["DPI_STAGE_CHANGE"],),
+    )
+    received = []
+
+    def effect_verifier(experiment):
+        received.append(experiment.analysis is not None)
+        return replace(experiment, confidence="effect-checked")
+
+    experiment = execute_lab_plan(
+        _physical(), {}, plan, prompt=lambda step: True,
+        session_factory=_Session, effect_verifier=effect_verifier,
+    )
+    assert received == [True]
+    assert experiment.confidence == "effect-checked"
+    assert experiment.write_authorized is False
+
+
 def test_unresolved_ambiguity_recalculates_the_next_best_experiment():
     _Session.calls = 0
     plan = plan_next_experiment(_hypotheses())
