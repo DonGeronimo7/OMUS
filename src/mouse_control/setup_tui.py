@@ -1150,6 +1150,24 @@ class SetupController:
                             "Best next routing experiment: "
                             + routing.next_plan.selected_action.label
                         ))
+                power = getattr(experiment, "power_analysis", None)
+                if power is not None:
+                    rows.append(DisplayRow("Battery / Power", dim=True))
+                    for finding in power.summary[:8]:
+                        rows.append(DisplayRow(finding))
+                    if power.contradictions:
+                        rows.append(DisplayRow(
+                            f"Power contradictions retained: {len(power.contradictions)}"
+                        ))
+                    if power.pending_natural_observation:
+                        rows.append(DisplayRow(
+                            "Passive follow-up: retain this candidate during normal future use."
+                        ))
+                    if power.next_plan is not None and power.next_plan.selected_action is not None:
+                        rows.append(DisplayRow(
+                            "Best next power experiment: "
+                            + power.next_plan.selected_action.label
+                        ))
             rows.extend([
                 DisplayRow("Run Full Automatic Lab", 0),
                 DisplayRow(

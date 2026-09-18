@@ -31,6 +31,7 @@ from .discovery_lab import (
     ObservationWindowPlan,
     PhysicalEvidence,
     ProtocolTimingProfile,
+    TimingRelationship,
     _interval_record,
     _sample_observations,
     _sample_transitions,
@@ -153,6 +154,14 @@ ACTION_TEMPLATES: Mapping[str, ControlledAction] = {
         effort=2, duration=2, equipment=1, burden=2,
         tags=("routing", "other-child", "negative-control"),
     ),
+    "VENDOR_POWER_STATE_CHANGE": _action(
+        "VENDOR_POWER_STATE_CHANGE", ControlledActionType.CUSTOM_LABELLED_ACTION,
+        "vendor-software power-state demonstration",
+        ActionSafetyClass.EXTERNAL_VENDOR_DEMONSTRATION,
+        "Use the vendor application only to display or demonstrate the requested power state.",
+        effort=1, duration=2, equipment=2, burden=1,
+        tags=("battery", "charging", "power", "vendor"),
+    ),
 }
 
 
@@ -258,6 +267,8 @@ def _instruments(action: ControlledAction, hypotheses: Sequence[LabHypothesis]) 
     if "polling" in topics or "polling" in tags:
         selected.add(LabInstrument.POLLING_VERIFIER)
     if "receiver" in tags or "lifecycle" in topics:
+        selected.add(LabInstrument.RECEIVER_TOPOLOGY)
+    if topics & {"battery", "charging", "power"} or tags & {"battery", "charging", "power"}:
         selected.add(LabInstrument.RECEIVER_TOPOLOGY)
     if "usb" in topics or "vendor" in tags:
         selected.update({LabInstrument.SELECTED_DEVICE_USBMON, LabInstrument.LOGICAL_RECORD_RECONSTRUCTION})
@@ -390,6 +401,56 @@ def _stop_reason(updates: Sequence[HypothesisUpdate]) -> LabStopReason | None:
 Verifier = Callable[[LabExperimentPlan], Sequence[PhysicalEvidence]]
 EffectVerifier = Callable[[LabExperiment], LabExperiment]
 RouteMapper = Callable[[LabExperiment], LabExperiment]
+PowerInvestigator = Callable[[LabExperiment], LabExperiment]
+
+
+def _suggests_power_investigation(experiment: LabExperiment) -> bool:
+    """Return whether retained evidence merits conservative power analysis."""
+
+    power_tokens = ("battery", "charge", "charging", "power")
+    if experiment.human_action and any(
+        token in experiment.human_action.lower() for token in power_tokens
+    ):
+        return True
+    if experiment.plan is not None and any(
+        hypothesis.topic.lower() in power_tokens
+        for hypothesis in experiment.plan.target_hypotheses
+    ):
+        return True
+    if any(
+        any(token in state.semantic_state_id.lower() for token in power_tokens)
+        for state in (*experiment.state_reads, *experiment.pushed_states)
+    ):
+        return True
+    routing = experiment.routing_analysis
+    if routing is not None and any(
+        any(
+            token in str(value).lower()
+            for token in power_tokens
+            for value in (
+                item.source_route.namespace,
+                item.source_route.channel,
+                item.destination_route.namespace if item.destination_route else None,
+                item.destination_route.channel if item.destination_route else None,
+            )
+            if value is not None
+        )
+        for item in routing.evidence
+    ):
+        return True
+    timing = experiment.timing_profile
+    return bool(
+        timing is not None
+        and any(
+            item.relationship is TimingRelationship.PERIODIC_PUSH_CADENCE
+            for item in timing.summaries
+        )
+        and experiment.analysis is not None
+        and any(
+            FieldSignal.STATUS_CANDIDATE in item.signals
+            for item in experiment.analysis.ranked_fields
+        )
+    )
 
 
 def execute_lab_plan(
@@ -404,6 +465,7 @@ def execute_lab_plan(
     verifier_runners: Mapping[LabInstrument, Verifier] | None = None,
     effect_verifier: EffectVerifier | None = None,
     route_mapper: RouteMapper | None = None,
+    power_investigator: PowerInvestigator | None = None,
 ) -> LabExperiment:
     """Produce one canonical experiment from a plan using read-only capture callbacks."""
 
@@ -513,6 +575,16 @@ def execute_lab_plan(
         analyzed = route_mapper(analyzed)
         if analyzed.write_authorized:
             raise PermissionError("routing analysis cannot grant Lab write authority")
+    if power_investigator is not None:
+        analyzed = power_investigator(analyzed)
+        if analyzed.write_authorized:
+            raise PermissionError("power-state analysis cannot grant Lab write authority")
+    elif _suggests_power_investigation(analyzed):
+        from .power_investigator import analyze_power_state
+
+        analyzed = analyze_power_state(analyzed)
+        if analyzed.write_authorized:
+            raise PermissionError("power-state analysis cannot grant Lab write authority")
     updates = update_hypotheses(plan.target_hypotheses, analyzed)
     completed += 1
     emit(LabProgressEvent(LabProgressStage.HYPOTHESIS_UPDATE, "Updating retained hypotheses", completed, total))

@@ -217,6 +217,53 @@ count, unresolved ownership count, and next routing experiment. Advanced replay
 retains interfaces, endpoints, report IDs, internal targets, asymmetric edges,
 generation, contradictions, and redacted source IDs.
 
+## Battery, charging, and power-state investigation
+
+Power evidence is attached to the same `LabExperiment`; there is no additional
+capture or authority model. Each observation keeps raw and decoded values
+separate and records the exact selected-device context, connection generation,
+source IDs, candidate semantic, optional proven units, charging/source/battery
+state, freshness, timestamp, cadence, routed owner, confidence, proof state,
+and contradictions.
+
+An integer in `0..100` is only a percentage candidate. A percentage is confirmed
+only by established protocol semantics, agreement with an independent source,
+or repeated directional evidence at distinct levels during charging/discharge.
+One plausible value and cadence alone are insufficient. Discrete buckets,
+ADC-like values, and voltage-like values retain exact raw form; an unknown
+conversion is reported as raw level known and percentage unknown.
+
+The investigator consumes existing differential fields, Feature/Input reports,
+async state, temporal freshness, timing profiles, and confirmed routing facts.
+A power-related plan or semantic state, power-labelled routed namespace, or
+periodic status candidate causes the automatic orchestrator to run it; users do
+not select a separate investigator.
+A repeated binary transition across baseline and a controlled cable action may
+support charging or not-charging state. Merely performing a cable action does
+not label every changing field. Explicit external power, battery power, full,
+charge-complete, and low-battery evidence remain independent facts.
+
+Fresh telemetry supersedes a conflicting stale cache for the current conclusion
+without deleting either observation. Periodic cadence is reported but never
+assigns semantics. Confirmed logical ownership is distinct from transport via a
+receiver, and mouse/receiver disagreements and equally supported candidate
+fields remain explicit contradictions.
+
+Slow trends may be compared across sessions only when stable device-unique
+identity is present. The replay fixture stores only scoped power/protocol facts
+and hashes session, source, independent-reference, and routed-owner identifiers.
+There is no evdev, keyboard, clipboard, screen, unrelated USB, or network
+history. Normal runtime passive collection is intentionally deferred; the
+pending-candidate model is the extension point if a later selected-device,
+allowlisted design can satisfy the privacy boundary.
+
+Power uncertainty reuses the information-gain planner. It prefers one cable
+transition, or a mouse-only power-cycle experiment when receiver cache ownership
+is ambiguous. It never proposes forced discharge or a long wait. A candidate
+may remain pending for evidence gathered during normal future use. The Lab TUI
+shows the useful interpretation, cadence, contradictions, passive follow-up,
+and next bounded experiment without packet detail.
+
 ## Safety and privacy
 
 - Capture is restricted to the physical mouse selected by Automatic Discovery.
@@ -232,7 +279,7 @@ generation, contradictions, and redacted source IDs.
 
 ## Deferred master-Lab milestones
 
-The battery/charging investigator, vendor capture importer,
-`ProtocolKnowledgePackage`, automatic positive/negative contribution fixtures,
+The vendor capture importer, `ProtocolKnowledgePackage`, automatic
+positive/negative contribution fixtures,
 repository contribution pipeline, and blind-device v1 acceptance suite remain
 bounded future milestones.

@@ -566,3 +566,25 @@ def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
     assert "Confirmed logical routes: 1" in route_text
     assert "Unresolved routing questions: 1" in route_text
     assert "Best next routing experiment: power-cycle the selected mouse" in route_text
+
+    power = SimpleNamespace(
+        summary=(
+            "Battery candidate: raw 73; percentage unknown",
+            "Update cadence: approximately 60 s",
+        ),
+        contradictions=("stale cache differs",),
+        pending_natural_observation=True,
+        next_plan=SimpleNamespace(
+            selected_action=SimpleNamespace(label="connect or disconnect charging once"),
+        ),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+        power_analysis=power,
+    ))
+    power_text = "\n".join(row.text for row in app.detail_rows())
+    assert "Battery / Power" in power_text
+    assert "percentage unknown" in power_text
+    assert "Power contradictions retained: 1" in power_text
+    assert "Passive follow-up" in power_text
+    assert "Best next power experiment: connect or disconnect charging once" in power_text

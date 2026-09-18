@@ -231,6 +231,52 @@ class RoutingNodeKind(str, Enum):
     UNKNOWN_ROUTE = "unknown_route"
 
 
+class PowerSemantic(str, Enum):
+    UNKNOWN_BATTERY_VALUE = "unknown_battery_value"
+    PERCENTAGE_CANDIDATE = "percentage_candidate"
+    PERCENTAGE_CONFIRMED = "percentage_confirmed"
+    RAW_LEVEL_CANDIDATE = "raw_level_candidate"
+    VOLTAGE_CANDIDATE = "voltage_candidate"
+    CHARGING = "charging"
+    NOT_CHARGING = "not_charging"
+    EXTERNAL_POWER = "external_power"
+    BATTERY_POWER = "battery_power"
+    FULL = "full"
+    LOW_BATTERY = "low_battery"
+    UNKNOWN_POWER_STATE = "unknown_power_state"
+
+
+class PowerSourceState(str, Enum):
+    UNKNOWN = "unknown"
+    EXTERNAL_POWER = "external_power"
+    BATTERY_POWER = "battery_power"
+
+
+class ChargingState(str, Enum):
+    UNKNOWN = "unknown"
+    CHARGING = "charging"
+    NOT_CHARGING = "not_charging"
+    CHARGE_COMPLETE = "charge_complete"
+
+
+class BatteryCondition(str, Enum):
+    UNKNOWN = "unknown"
+    NORMAL = "normal"
+    FULL = "full"
+    LOW_BATTERY = "low_battery"
+
+
+class PowerObservationContext(str, Enum):
+    UNKNOWN = "unknown"
+    QUIET = "quiet"
+    DISCHARGING = "discharging"
+    CHARGING_CONNECTED = "charging_connected"
+    CHARGING_DISCONNECTED = "charging_disconnected"
+    FULL_TRANSITION = "full_transition"
+    LOW_INDICATOR = "low_indicator"
+    WAKE = "wake"
+
+
 class HypothesisDisposition(str, Enum):
     SUPPORTED = "supported"
     STRENGTHENED = "strengthened"
@@ -664,6 +710,94 @@ class RoutingAnalysis:
 
 
 @dataclass(frozen=True)
+class PowerEvidence:
+    evidence_id: str
+    experiment_id: str
+    physical_device_context: Mapping[str, object]
+    connection_generation: int
+    session_id: str
+    source_observation_ids: tuple[str, ...]
+    field_id: str | None
+    route_evidence_id: str | None
+    route_owner: str | None
+    route_confidence: str
+    candidate_semantic: PowerSemantic
+    raw_value: bytes | int | float | str
+    decoded_value: int | float | str | None
+    units_if_proven: str | None
+    power_source_state: PowerSourceState
+    charging_state: ChargingState
+    battery_state: BatteryCondition
+    freshness: StateFreshness
+    timestamp_ns: int
+    cadence_ns: int | None = None
+    context: PowerObservationContext = PowerObservationContext.UNKNOWN
+    independent_reference_value: int | float | str | None = None
+    independent_reference_source: str | None = None
+    known_protocol_semantics: bool = False
+    confidence: str = "candidate"
+    proof_state: ProofState = ProofState.HYPOTHESIZED
+    contradictions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.evidence_id or not self.experiment_id or not self.physical_device_context:
+            raise ValueError("power evidence requires evidence, experiment, and physical identity")
+        if not self.session_id or not self.source_observation_ids:
+            raise ValueError("power evidence requires session and source observation identity")
+        if self.connection_generation < 0 or self.timestamp_ns < 0:
+            raise ValueError("power evidence generation and timestamp must be non-negative")
+        if self.cadence_ns is not None and self.cadence_ns <= 0:
+            raise ValueError("power cadence must be positive")
+        if self.units_if_proven is not None and not (
+            self.known_protocol_semantics or self.independent_reference_source
+        ):
+            raise ValueError("power units require known semantics or independent evidence")
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class PowerFieldCandidate:
+    field_id: str
+    semantic: PowerSemantic
+    raw_values: tuple[bytes | int | float | str, ...]
+    decoded_values: tuple[int | float | str, ...]
+    source_observation_ids: tuple[str, ...]
+    distinct_sessions: int
+    confidence: str
+    reasons: tuple[str, ...]
+    contradictions: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PowerAnalysis:
+    evidence: tuple[PowerEvidence, ...]
+    field_candidates: tuple[PowerFieldCandidate, ...]
+    decisive_evidence_id: str | None
+    battery_semantic: PowerSemantic
+    battery_value: int | float | str | None
+    battery_units: str | None
+    charging_state: ChargingState
+    power_source_state: PowerSourceState
+    battery_state: BatteryCondition
+    freshness: StateFreshness
+    cadence_ns: int | None
+    route_owner: str | None
+    route_confidence: str
+    confidence: str
+    contradictions: tuple[str, ...]
+    pending_natural_observation: bool
+    next_plan: LabExperimentPlan | None
+    summary: tuple[str, ...]
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
 class LabLifecycleEvent:
     kind: LifecycleEventKind
     timestamp_ns: int
@@ -879,6 +1013,8 @@ class LabExperiment:
     persistence_assessment: PersistenceAssessment | None = None
     routing_evidence: tuple[RoutingEvidence, ...] = ()
     routing_analysis: RoutingAnalysis | None = None
+    power_evidence: tuple[PowerEvidence, ...] = ()
+    power_analysis: PowerAnalysis | None = None
 
     def __post_init__(self) -> None:
         if not self.experiment_id or not self.purpose:
@@ -914,6 +1050,8 @@ class LabExperiment:
             raise ValueError("routing evidence belongs to a different experiment")
         if any(item.connection_generation != self.connection_generation for item in self.routing_evidence):
             raise ValueError("routing evidence cannot silently cross connection generations")
+        if any(item.physical_device_context != self.physical_device_context for item in self.power_evidence):
+            raise ValueError("power evidence physical identity does not match the experiment")
 
     @property
     def write_authorized(self) -> bool:
@@ -1192,6 +1330,88 @@ class LabExperiment:
                     "summary": list(self.routing_analysis.summary),
                 }
                 if self.routing_analysis is not None else None
+            ),
+            "power_evidence": [
+                {
+                    "evidence_id": item.evidence_id,
+                    "experiment_id": item.experiment_id,
+                    "connection_generation": item.connection_generation,
+                    "session_id": redact_id(item.session_id),
+                    "source_observation_ids": [
+                        redact_id(source) for source in item.source_observation_ids
+                    ],
+                    "field_id": item.field_id,
+                    "route_evidence_id": item.route_evidence_id,
+                    "route_owner": redact_id(item.route_owner) if item.route_owner else None,
+                    "route_confidence": item.route_confidence,
+                    "candidate_semantic": item.candidate_semantic.value,
+                    "raw_value": replay_value(item.raw_value),
+                    "decoded_value": replay_value(item.decoded_value),
+                    "units_if_proven": item.units_if_proven,
+                    "power_source_state": item.power_source_state.value,
+                    "charging_state": item.charging_state.value,
+                    "battery_state": item.battery_state.value,
+                    "freshness": item.freshness.value,
+                    "timestamp_ns": item.timestamp_ns,
+                    "cadence_ns": item.cadence_ns,
+                    "context": item.context.value,
+                    "independent_reference_value": replay_value(item.independent_reference_value),
+                    "independent_reference_source": (
+                        redact_id(item.independent_reference_source)
+                        if item.independent_reference_source else None
+                    ),
+                    "known_protocol_semantics": item.known_protocol_semantics,
+                    "confidence": item.confidence,
+                    "proof_state": item.proof_state.value,
+                    "contradictions": list(item.contradictions),
+                }
+                for item in sorted(
+                    self.power_evidence,
+                    key=lambda item: (item.timestamp_ns, item.evidence_id),
+                )
+            ],
+            "power_analysis": (
+                {
+                    "field_candidates": [
+                        {
+                            "field_id": item.field_id,
+                            "semantic": item.semantic.value,
+                            "raw_values": [replay_value(value) for value in item.raw_values],
+                            "decoded_values": [replay_value(value) for value in item.decoded_values],
+                            "source_observation_ids": [
+                                redact_id(source) for source in item.source_observation_ids
+                            ],
+                            "distinct_sessions": item.distinct_sessions,
+                            "confidence": item.confidence,
+                            "reasons": list(item.reasons),
+                            "contradictions": list(item.contradictions),
+                        }
+                        for item in self.power_analysis.field_candidates
+                    ],
+                    "decisive_evidence_id": self.power_analysis.decisive_evidence_id,
+                    "battery_semantic": self.power_analysis.battery_semantic.value,
+                    "battery_value": replay_value(self.power_analysis.battery_value),
+                    "battery_units": self.power_analysis.battery_units,
+                    "charging_state": self.power_analysis.charging_state.value,
+                    "power_source_state": self.power_analysis.power_source_state.value,
+                    "battery_state": self.power_analysis.battery_state.value,
+                    "freshness": self.power_analysis.freshness.value,
+                    "cadence_ns": self.power_analysis.cadence_ns,
+                    "route_owner": (
+                        redact_id(self.power_analysis.route_owner)
+                        if self.power_analysis.route_owner else None
+                    ),
+                    "route_confidence": self.power_analysis.route_confidence,
+                    "confidence": self.power_analysis.confidence,
+                    "contradictions": list(self.power_analysis.contradictions),
+                    "pending_natural_observation": self.power_analysis.pending_natural_observation,
+                    "next_plan": (
+                        self.power_analysis.next_plan.replay_fixture()
+                        if self.power_analysis.next_plan else None
+                    ),
+                    "summary": list(self.power_analysis.summary),
+                }
+                if self.power_analysis is not None else None
             ),
         }
 

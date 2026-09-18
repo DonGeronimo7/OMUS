@@ -202,6 +202,52 @@ def test_completed_plan_can_feed_the_receiver_child_route_mapper():
     assert experiment.write_authorized is False
 
 
+def test_completed_plan_can_feed_the_power_state_investigator():
+    _Session.calls = 0
+    hypothesis = LabHypothesis(
+        "only", "Which field is power state?", "selected power field", "charging",
+        {"CHARGING_TRANSITION": "changed"},
+    )
+    plan = plan_next_experiment(
+        (hypothesis,), available_actions=(ACTION_TEMPLATES["CHARGING_TRANSITION"],),
+    )
+    received = []
+
+    def power_investigator(experiment):
+        received.append(experiment.analysis is not None)
+        return replace(experiment, confidence="power-checked")
+
+    experiment = execute_lab_plan(
+        _physical(), {}, plan, prompt=lambda step: True,
+        session_factory=_Session, power_investigator=power_investigator,
+    )
+    assert received == [True]
+    assert experiment.confidence == "power-checked"
+    assert experiment.write_authorized is False
+
+
+def test_power_related_plan_invokes_the_investigator_automatically():
+    _Session.calls = 0
+    hypotheses = (
+        LabHypothesis(
+            "power", "Which field is power state?", "power field", "charging",
+            {"CHARGING_TRANSITION": "changed"},
+        ),
+        LabHypothesis(
+            "unrelated", "Which field is power state?", "unrelated field", "charging",
+            {"CHARGING_TRANSITION": "stable"},
+        ),
+    )
+    plan = plan_next_experiment(
+        hypotheses, available_actions=(ACTION_TEMPLATES["CHARGING_TRANSITION"],),
+    )
+    experiment = execute_lab_plan(
+        _physical(), {}, plan, prompt=lambda step: True, session_factory=_Session,
+    )
+    assert experiment.power_analysis is not None
+    assert experiment.power_analysis.write_authorized is False
+
+
 def test_unresolved_ambiguity_recalculates_the_next_best_experiment():
     _Session.calls = 0
     plan = plan_next_experiment(_hypotheses())

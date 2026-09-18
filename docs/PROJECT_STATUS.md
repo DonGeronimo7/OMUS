@@ -1,5 +1,36 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Discovery Lab battery/charging/power-state milestone
+
+- `LabExperiment` now retains canonical power evidence with raw and decoded
+  values, candidate semantics, explicit units only when proven, charging/source/
+  battery states, freshness, cadence, routed owner, confidence, proof state,
+  contradictions, and narrowly scoped cross-session provenance.
+- A value in `0..100` remains only a percentage candidate. Promotion requires
+  known protocol semantics, independent agreement, or repeated directional
+  evidence at distinct levels. Unknown buckets and voltage-like values retain
+  their exact representation without an invented percentage conversion.
+- Repeated controlled cable transitions can correlate a binary charging field;
+  the cable action alone never labels arbitrary changing bytes. Explicit
+  charging, external-power, full, low-battery, stale/fresh, and mouse-versus-
+  receiver evidence remain separate, and conflicting sources are not averaged.
+- Slow battery trends may accumulate across sessions only for the same exact
+  device-unique identity. When immediate evidence is insufficient, the planner
+  prefers one charging transition or a mouse-only power-cycle cache check and
+  otherwise leaves a passive candidate pending rather than asking the user to
+  drain the battery.
+- The existing orchestrator invokes the investigator after differential and
+  routing analysis when plans, semantic state, routed namespaces, or periodic
+  status evidence suggest power telemetry. The Lab page presents battery/power state,
+  confidence context, cadence, contradictions, passive follow-up, and the next
+  bounded experiment. Replay hashes source/owner identifiers and retains only
+  scoped power/protocol facts.
+- Focused Lab/discovery/protocol/TUI/security validation passes 232 tests; the
+  complete suite passes 905 with the existing GLib warning. Compileall and diff
+  checks pass. Physical hardware validation and passive runtime persistence
+  remain pending. No hardware write, forced discharge, network activity,
+  install, push, merge, tag, or release occurred.
+
 ## 2026-09-18 — Discovery Lab receiver/child routing milestone
 
 - `LabExperiment` now retains canonical generation-bound routing evidence and a

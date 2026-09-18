@@ -1,5 +1,37 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab battery/charging/power-state investigator
+
+- Continued `codex/discovery-90-corpus` from clean checkpoint `c408b80` and
+  extended the existing experiment, differential, timing, freshness,
+  persistence, routing, proof, planner, orchestrator, and TUI architecture.
+- Added canonical power evidence and conservative percentage, raw-level,
+  voltage-like, charging, external/battery-power, full, low-battery, cadence,
+  freshness, ownership, and cross-session analysis. Raw and interpreted values
+  remain separate; `0..100` alone never establishes percentage semantics.
+- Percentage confirmation requires known protocol semantics, independent
+  agreement, or repeated directional evidence at distinct charge levels.
+  Cross-session trends require exact device-unique identity. Fresh state may
+  supersede a stale cache without erasing it, and contradictory routed or
+  independent sources remain explicit.
+- Repeated controlled cable transitions may correlate binary charging state,
+  but a cable action does not label arbitrary fields. Planning prefers one
+  charging transition or a mouse-only power-cycle cache check; otherwise the
+  candidate remains pending for normal future evidence rather than forced
+  discharge or waiting.
+- The orchestrator automatically runs the investigator after differential and
+  routing analysis when a power plan/state/namespace or periodic status candidate
+  suggests it. The TUI adds a concise Battery / Power section, and replay redacts session,
+  source, routed-owner, and independent-reference identities. Passive runtime
+  persistence remains a deliberate extension point rather than a new capture
+  scope.
+- Validation: 232 focused tests and 905 full-suite tests pass with the existing
+  GLib warning; compileall and diff checks pass. Physical validation remains
+  pending. No hardware write, charging command, forced load/discharge, network
+  activity, install, push, merge, tag, or release occurred.
+- Next bounded milestone: vendor capture importer using the same selected-device,
+  local-only, replay, proof, and no-write boundaries.
+
 ## 2026-09-18 — Discovery Lab receiver/child routing mapper
 
 - Continued `codex/discovery-90-corpus` from clean checkpoint `b905564` and
