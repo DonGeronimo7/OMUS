@@ -10,6 +10,8 @@ privacy-conscious report that helps expand support.
 [![Current release: v0.9.6](https://img.shields.io/badge/release-v0.9.6-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.6)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
+![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
+![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
 
 > **Your unsupported mouse is exactly what we need.** If Mouse Control already
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
