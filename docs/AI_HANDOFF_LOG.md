@@ -1,5 +1,52 @@
 # AI handoff log
 
+## 2026-09-18 — Redragon M724 + Ryunix Kyu Pro MX1 protocol knowledge delta
+
+- Goal: import newly upstream-researched protocol facts into the universal
+  discovery repertoire without making either family executable or writable.
+  Starting branch/head: `codex/v0.9.7-python-performance` at `09aea626`.
+- Redragon M724: exact `04d9:fc7a` plus Feature Report 2, 16-byte numbered
+  frame, `FFA0:0001` control collection, and optional report IDs 3–6 identify
+  the record. It describes F5 open/close, F3 write prefix, the indivisible
+  F1 commit-code order `04,01,02,08,10`, reciprocal polling raw domain
+  `01,02,04,08`, nominal DPI/range math, and FA FA responder evidence. The
+  `SessionGrammar` is deliberately descriptive—not an engine transaction—so
+  the failure-critical close cannot be omitted by an execution path. Upstream
+  physical verification is recorded as provenance only. `WriteScope.NEVER`.
+- Ryunix: exact `04f3:026e` / `04f3:026f`, input Report 4, seven-byte numbered
+  frame, and `000a:00c7` collection identify read-only telemetry. The decoder
+  validates active/charging flags, 125/250/500/1000 reciprocal polling codes,
+  and battery 0–100, while retaining DPI stage and LED code as observations.
+  Report 5 alone cannot match and no RGB/configuration path exists.
+- Generalization: descriptor report definitions retain application collection
+  usages; repertoire signatures may require them; `CodecSpec` may limit a
+  semantic codec to directly observed raw values. The added `SessionGrammar`
+  records mandatory teardown/hazards without expanding `TransactionEngine` or
+  providing an adapter that can emit frames.
+- Safety: structural recognition remains insufficient to authorize writes.
+  Both candidates are exact-identity constrained and return false for write
+  authorization even with that identity. Generic Holtek/Redragon and Ryunix
+  lookalikes do not match; neither creates a capability, backend, transaction,
+  desired-state update, or hardware write. Generic HID remains read-only.
+- Provenance: `CREDITS.md` cites OpenMouse commits
+  `b7183b395b2b0350c1e50cbcd9616c56f8de2e7a`,
+  `73f57898340636e0a0fdab8ce8f517449e065e33`, and
+  `37739057a4b1a5484d8e131f1a6b47d753cad7ce`; its unresolved licensing review
+  remains explicit. No upstream implementation or test vector was vendored.
+- Validation: focused repertoire/descriptor/transaction tests passed 25;
+  `git diff --check` and compileall passed; full suite passed 741 tests versus
+  the 738-test baseline, with one existing GLib warning. A 500-round benchmark
+  found no clear regression: cold import 15.493 ms, known restore 0.0334 ms,
+  Rediscover 0.416 ms, single decode 0.0283 ms, bulk 1,000 decode 29.035 ms.
+- Physical validation: none. Remaining unknowns include Redragon button/LED/
+  profile/report-3 grammars, active-stage read/selection, and individual commit
+  meanings; Ryunix Report 5 configuration semantics are intentionally unknown.
+  Any future promotion requires exact local hardware evidence, an execution
+  adapter with guaranteed session cleanup for M724, and the existing proof/
+  authorization/readback requirements.
+- Git discipline: no push, merge, tag, installation, or release. Final commit
+  is the local protocol-knowledge checkpoint containing this entry.
+
 ## 2026-09-18 — v0.9.7-1 integration, updater, and Python performance
 
 - Goal: integrate the canonical TUI checkpoint, correct the incremental-RPM

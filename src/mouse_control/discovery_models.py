@@ -145,6 +145,7 @@ class HidReportDefinition:
     report_type: str
     byte_length: int
     usage_pages: tuple[int, ...] = ()
+    application_usages: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass

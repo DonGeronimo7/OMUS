@@ -36,6 +36,9 @@ def decode_value(raw: int | bytes, spec: CodecSpec, *, width: int = 1) -> int:
     else:
         value = int(raw)
 
+    if spec.allowed_raw_values and value not in spec.allowed_raw_values:
+        raise ProtocolCodecError(f"raw value {value} is outside the observed codec domain")
+
     if spec.kind in {CodecKind.IDENTITY, CodecKind.U8, CodecKind.U16_LE, CodecKind.U16_BE}:
         return value
     if spec.kind in {CodecKind.ENUM, CodecKind.LOOKUP}:
@@ -104,6 +107,8 @@ def encode_value(value: int, spec: CodecSpec, *, width: int = 1) -> bytes:
 
     if raw < 0:
         raise ProtocolCodecError("encoded value cannot be negative")
+    if spec.allowed_raw_values and raw not in spec.allowed_raw_values:
+        raise ProtocolCodecError(f"raw value {raw} is outside the observed codec domain")
     byteorder = "big" if spec.kind is CodecKind.U16_BE else "little"
     size = max(width, 2 if spec.kind in {CodecKind.U16_LE, CodecKind.U16_BE} else 1)
     try:

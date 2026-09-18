@@ -335,7 +335,15 @@ def _parse_report_descriptor(data: bytes) -> ParsedHidDescriptor:
     if stack: diag(HidDiagnosticSeverity.WARNING,"unclosed-global-push",f"{len(stack)} push state(s) not popped",len(data))
     order={"input":0,"output":1,"feature":2}; reports=[]
     for (kind,rid),bits in sorted(lengths.items(),key=lambda x:(order[x[0][0]],x[0][1])):
-        reports.append(HidReportDefinition(rid,kind,ceil(bits/8)+(1 if rid else 0),tuple(sorted(pages[(kind,rid)]))))
+        application_usages = tuple(sorted({
+            field.application_usage for field in fields
+            if field.report_type == kind and field.report_id == rid
+            and field.application_usage is not None
+        }))
+        reports.append(HidReportDefinition(
+            rid, kind, ceil(bits/8)+(1 if rid else 0),
+            tuple(sorted(pages[(kind,rid)])), application_usages,
+        ))
     return ParsedHidDescriptor(data,tuple(reports),tuple(fields),tuple(collections),tuple(diagnostics))
 
 

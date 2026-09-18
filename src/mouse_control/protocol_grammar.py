@@ -83,6 +83,7 @@ class CodecKind(str, Enum):
 
 
 class SemanticBehavior(str, Enum):
+    ACTIVE_STATE = "active_state"
     DPI_VALUE = "dpi_value"
     DPI_X = "dpi_x"
     DPI_Y = "dpi_y"
@@ -92,6 +93,8 @@ class SemanticBehavior(str, Enum):
     DPI_CYCLE_TRIGGER = "dpi_cycle_trigger"
     REPORT_RATE_HZ = "report_rate_hz"
     BATTERY_PERCENT = "battery_percent"
+    CHARGING_STATE = "charging_state"
+    LED_MODE = "led_mode"
     BUTTON_BINDING = "button_binding"
     PROFILE_INDEX = "profile_index"
     LIFT_OFF_DISTANCE = "lift_off_distance"
@@ -124,6 +127,8 @@ class ReportSignature:
     minimum_length: int | None = None
     maximum_length: int | None = None
     vendor_usage_required: bool | None = None
+    required_usage_page: int | None = None
+    required_application_usage: tuple[int, int] | None = None
     required: bool = True
     weight: int = 4
 
@@ -147,6 +152,12 @@ class ReportSignature:
             raise ValueError("minimum_length cannot exceed maximum_length")
         if self.weight < 0:
             raise ValueError("weight cannot be negative")
+        if self.required_usage_page is not None and not 0 <= self.required_usage_page <= 0xFFFF:
+            raise ValueError("required_usage_page must fit in 16 bits")
+        if self.required_application_usage is not None and any(
+            not 0 <= value <= 0xFFFF for value in self.required_application_usage
+        ):
+            raise ValueError("required_application_usage values must fit in 16 bits")
 
 
 @dataclass(frozen=True)
@@ -166,6 +177,7 @@ class CodecSpec:
     mask: int | None = None
     shift: int = 0
     values: Mapping[int, int] = field(default_factory=dict)
+    allowed_raw_values: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if self.kind is CodecKind.RECIPROCAL and not self.base:
@@ -176,6 +188,10 @@ class CodecSpec:
             raise ValueError("bitfield codec requires a mask")
         if self.shift < 0:
             raise ValueError("shift cannot be negative")
+        if any(value < 0 for value in self.allowed_raw_values):
+            raise ValueError("allowed raw values cannot be negative")
+        if len(set(self.allowed_raw_values)) != len(self.allowed_raw_values):
+            raise ValueError("allowed raw values must be unique")
 
 
 @dataclass(frozen=True)
@@ -225,6 +241,32 @@ class TransactionSpec:
 
 
 @dataclass(frozen=True)
+class SessionGrammar:
+    """Descriptive stateful protocol framing, never an execution recipe.
+
+    This records protocols whose teardown is part of their safety boundary.
+    Runtime support must separately implement guaranteed cleanup and acquire
+    ordinary transaction authorization before any frame can be sent.
+    """
+
+    name: str
+    transport: TransportKind
+    open_frame: bytes
+    close_frame: bytes
+    write_prefix: bytes = b""
+    commit_codes: tuple[int, ...] = ()
+    cleanup_required: bool = True
+    abandoned_session_hazard: str = ""
+    unresolved_semantics: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.open_frame or not self.close_frame:
+            raise ValueError("session grammar requires open and close frames")
+        if any(not 0 <= value <= 0xFF for value in self.commit_codes):
+            raise ValueError("commit codes must fit in one byte")
+
+
+@dataclass(frozen=True)
 class ProtocolFamily:
     """Reusable protocol-family knowledge.
 
@@ -242,7 +284,9 @@ class ProtocolFamily:
     transports: tuple[TransportKind, ...] = ()
     bindings: tuple[FieldBinding, ...] = ()
     transactions: tuple[TransactionSpec, ...] = ()
+    sessions: tuple[SessionGrammar, ...] = ()
     write_scope: WriteScope = WriteScope.NEVER
+    identity_required: bool = False
     minimum_match_score: int = 4
     notes: str = ""
 

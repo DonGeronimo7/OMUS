@@ -96,6 +96,8 @@ observation planning. Bindings additionally seed semantic interpretation.
 | Attack Shark X11 | Multi-report classification, semantic bindings, transport plan, and explicit dangerous-report boundary. |
 | AJAZZ AJ feature64 | Feature-envelope classification and delayed-query transport planning. |
 | MCHOSE V3 block RPC | Block/RPC classification, semantic bindings, and transport planning. |
+| Redragon M724 feature session | Exact-model feature-session recognition, descriptive DPI/polling knowledge, and mandatory-close hazard; no executable transaction or write scope. |
+| Ryunix Kyu Pro MX1 telemetry | Exact-model passive telemetry classification for activity, DPI stage, polling, battery, charging, and opaque LED mode; write disabled. |
 
 Structural repertoire matches remain research hints. They do not set a
 capability writable and cannot construct `TransactionAuthorization`.

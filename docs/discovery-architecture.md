@@ -132,9 +132,12 @@ Mouse Control's protocol knowledge has two deliberately different roles:
 The current repertoire records HID++ 2 and Razer knowledge alongside sourced
 facts for ASUS ROG command-64, SteelSeries direct-command, Sinowealth/ODM
 configuration blobs, Attack Shark X11 feature reports, AJAZZ AJ-series feature
-reports, MCHOSE V3 block RPC, and a BITMOUSE-style `0x72` grammar. The source of
-each fact, its verification strength, its transport, and its write scope are
-declared in `protocol_repertoire.py`.
+reports, MCHOSE V3 block RPC, Redragon M724 stateful Feature sessions, Ryunix
+Kyu Pro MX1 telemetry, and a BITMOUSE-style `0x72` grammar. The Redragon and
+Ryunix entries are recognition/read-side knowledge only: neither creates a
+runtime driver or write authority. The source of each fact, its verification
+strength, its transport, and its write scope are declared in
+`protocol_repertoire.py`.
 
 This list is not a vendor compatibility table. Some entries have only passive
 structural or semantic discriminators; some intentionally set write scope to

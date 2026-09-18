@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from mouse_control.discovery_models import DeviceNode, HidReportDefinition, PhysicalDevice
 from mouse_control.event_correlation import CorrelationCandidate
 from mouse_control.hid_descriptor import ParsedHidDescriptor
 from mouse_control.protocol_codec import (
+    ProtocolCodecError,
     decode_value,
     encode_value,
     fit_linear_codec,
@@ -16,7 +19,9 @@ from mouse_control.protocol_codec import (
 )
 from mouse_control.protocol_grammar import CodecKind, CodecSpec
 from mouse_control.protocol_repertoire import (
-    DEFAULT_REPERTOIRE, SemanticExchange, match_repertoire, recognize_family_semantics,
+    DEFAULT_REPERTOIRE, ProtocolKnowledgeError, SemanticExchange,
+    decode_redragon_m724_dpi, decode_ryunix_telemetry,
+    encode_redragon_m724_dpi, match_repertoire, recognize_family_semantics,
 )
 from mouse_control.semantic_inference import infer_stage_hypotheses
 
@@ -206,3 +211,86 @@ def test_bitmouse_semantic_phase_refuses_sequence_collision() -> None:
     semantic = recognize_family_semantics(structural, (SemanticExchange(request, bytes(response)),))
     assert not semantic.recognized
     assert "sequence-correlation" in semantic.missing
+
+
+def test_redragon_m724_requires_exact_identity_and_control_collection() -> None:
+    n = node(vendor=0x04D9, product=0xFC7A)
+    report = HidReportDefinition(
+        0x02, "feature", 16, (0xFFA0,), ((0xFFA0, 0x01),),
+    )
+    matches = match_repertoire(
+        physical(vendor=0x04D9, product=0xFC7A, n=n), {n: descriptor(report)}
+    )
+    redragon = next(item for item in matches if item.family.name == "redragon-m724-feature-session")
+    assert redragon.exact_identity
+    assert redragon.write_authorized is False
+
+    wrong_usage = HidReportDefinition(0x02, "feature", 16, (0xFFA0,), ((0xFFA0, 0x02),))
+    assert not any(item.family.name == redragon.family.name for item in match_repertoire(
+        physical(vendor=0x04D9, product=0xFC7A, n=n), {n: descriptor(wrong_usage)}
+    ))
+    assert not any(item.family.name == redragon.family.name for item in match_repertoire(
+        physical(vendor=0x04D9, product=0xFC7B, n=n), {n: descriptor(report)}
+    ))
+    assert not any(item.family.name == redragon.family.name for item in match_repertoire(
+        physical(vendor=0x04D9, product=0xFC7A, n=n), {n: descriptor()}
+    ))
+
+
+def test_redragon_m724_dpi_polling_and_session_knowledge_are_descriptive_only() -> None:
+    assert encode_redragon_m724_dpi(800).value == 0x12
+    assert encode_redragon_m724_dpi(12400).value == 0x8C
+    assert encode_redragon_m724_dpi(12400).range_flag == 1
+    assert decode_redragon_m724_dpi(0x12, 0) == 800
+    assert decode_redragon_m724_dpi(0x8C, 1) == 12444
+    with pytest.raises(ProtocolKnowledgeError):
+        encode_redragon_m724_dpi(0)
+
+    redragon = family("redragon-m724-feature-session")
+    polling = redragon.bindings[0].codec
+    assert [decode_value(raw, polling) for raw in (1, 2, 4, 8)] == [1000, 500, 250, 125]
+    with pytest.raises(ProtocolCodecError, match="observed codec domain"):
+        encode_value(200, polling)
+    session = redragon.sessions[0]
+    assert session.open_frame[:3] == b"\x02\xf5\x00"
+    assert session.close_frame[:3] == b"\x02\xf5\x01"
+    assert session.cleanup_required
+    assert session.commit_codes == (0x04, 0x01, 0x02, 0x08, 0x10)
+    assert "individual commit-code meanings" in session.unresolved_semantics
+    assert redragon.transactions == ()
+    assert redragon.can_authorize_write(exact_model=True) is False
+
+
+def test_ryunix_telemetry_is_exact_read_only_structure() -> None:
+    n = node(vendor=0x04F3, product=0x026E)
+    telemetry_report = HidReportDefinition(
+        0x04, "input", 7, (0x0A,), ((0x0A, 0xC7),),
+    )
+    matches = match_repertoire(
+        physical(vendor=0x04F3, product=0x026E, n=n), {n: descriptor(telemetry_report)}
+    )
+    ryunix = next(item for item in matches if item.family.name == "ryunix-kyu-pro-mx1-telemetry")
+    assert ryunix.write_authorized is False
+    assert ryunix.family.can_authorize_write(exact_model=True) is False
+    decoded = decode_ryunix_telemetry(bytes((0x04, 1, 3, 2, 83, 1, 7)))
+    assert (decoded.active, decoded.dpi_stage, decoded.polling_rate_hz) == (True, 3, 500)
+    assert (decoded.battery_percent, decoded.charging, decoded.led_mode) == (83, True, 7)
+
+    for malformed in (
+        b"\x04\x01\x03\x02\x53\x01",
+        bytes((0x04, 2, 3, 2, 83, 1, 7)),
+        bytes((0x04, 1, 3, 3, 83, 1, 7)),
+        bytes((0x04, 1, 3, 2, 101, 1, 7)),
+        bytes((0x04, 1, 3, 2, 83, 2, 7)),
+    ):
+        with pytest.raises(ProtocolKnowledgeError):
+            decode_ryunix_telemetry(malformed)
+
+    assert not any(item.family.name == ryunix.family.name for item in match_repertoire(
+        physical(vendor=0x04F3, product=0x9999, n=n), {n: descriptor(telemetry_report)}
+    ))
+    assert not any(item.family.name == ryunix.family.name for item in match_repertoire(
+        physical(vendor=0x04F3, product=0x026E, n=n), {
+            n: descriptor(HidReportDefinition(0x05, "feature", 7, (0x0A,), ((0x0A, 0xC7),)))
+        }
+    ))

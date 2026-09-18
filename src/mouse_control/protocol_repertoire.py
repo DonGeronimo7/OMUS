@@ -17,6 +17,7 @@ from typing import Iterable, Mapping
 
 from .discovery_models import DeviceNode, PhysicalDevice
 from .hid_descriptor import ParsedHidDescriptor
+from .protocol_codec import ProtocolCodecError, decode_value
 from .protocol_grammar import (
     CodecKind,
     CodecSpec,
@@ -24,6 +25,7 @@ from .protocol_grammar import (
     ProtocolFamily,
     ProtocolSource,
     ReportSignature,
+    SessionGrammar,
     SemanticBehavior,
     SourceTrust,
     TransportKind,
@@ -75,6 +77,76 @@ class ObservedReport:
     report_id: int
     byte_length: int
     vendor_usage: bool
+    usage_pages: tuple[int, ...] = ()
+    application_usages: tuple[tuple[int, int], ...] = ()
+
+
+@dataclass(frozen=True)
+class RedragonDpiEncoding:
+    value: int
+    range_flag: int
+
+
+@dataclass(frozen=True)
+class RyunixTelemetry:
+    active: bool
+    dpi_stage: int
+    polling_rate_hz: int
+    battery_percent: int
+    charging: bool
+    led_mode: int
+
+
+class ProtocolKnowledgeError(ValueError):
+    """A passive frame or sourced semantic value violates its known grammar."""
+
+
+_OBSERVED_POLLING_CODEC = CodecSpec(
+    CodecKind.RECIPROCAL, base=1000, allowed_raw_values=(1, 2, 4, 8)
+)
+
+
+def encode_redragon_m724_dpi(dpi: int) -> RedragonDpiEncoding:
+    """Encode the observed M724 numeric formula without granting write authority."""
+
+    if dpi <= 0:
+        raise ProtocolKnowledgeError("DPI must be positive")
+    raw = (dpi * 9 + 200) // 400
+    if raw > 510:
+        raise ProtocolKnowledgeError("DPI exceeds the observed one-range-bit representation")
+    if raw > 255:
+        return RedragonDpiEncoding((raw + 1) // 2, 1)
+    return RedragonDpiEncoding(raw, 0)
+
+
+def decode_redragon_m724_dpi(value: int, range_flag: int) -> int:
+    """Decode the nominal M724 formula as an approximate integer DPI value."""
+
+    if not 0 <= value <= 0xFF or range_flag not in (0, 1):
+        raise ProtocolKnowledgeError("invalid M724 DPI value or range flag")
+    numerator = value * (2 if range_flag else 1) * 400
+    return (numerator + 4) // 9
+
+
+def decode_ryunix_telemetry(report: bytes) -> RyunixTelemetry:
+    """Decode one exact seven-byte numbered Kyu Pro MX1 telemetry report."""
+
+    if len(report) != 7 or report[0] != 0x04:
+        raise ProtocolKnowledgeError("not an exact Ryunix telemetry report")
+    active, stage, polling, battery, charging, led_mode = report[1:]
+    if active not in (0, 1):
+        raise ProtocolKnowledgeError("invalid Ryunix active flag")
+    if charging not in (0, 1):
+        raise ProtocolKnowledgeError("invalid Ryunix charging flag")
+    if battery > 100:
+        raise ProtocolKnowledgeError("invalid Ryunix battery percentage")
+    try:
+        polling_rate_hz = decode_value(polling, _OBSERVED_POLLING_CODEC)
+    except ProtocolCodecError as exc:
+        raise ProtocolKnowledgeError("invalid Ryunix polling code") from exc
+    return RyunixTelemetry(
+        bool(active), stage, polling_rate_hz, battery, bool(charging), led_mode
+    )
 
 
 def _source(
@@ -324,6 +396,125 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="64-byte command/subcommand/length/SUM8 envelope; battery uses a separate heartbeat transaction.",
     ),
     ProtocolFamily(
+        name="redragon-m724-feature-session",
+        revision="m724-k1ng-1k-v1",
+        sources=(
+            _source(
+                "OpenMouse mouse-protocol",
+                "commit b7183b395b2b0350c1e50cbcd9616c56f8de2e7a; docs/redragon-m724-testing.md",
+                SourceTrust.MAINTAINED,
+                verified_date="2026-09-18",
+                notes="Feature-report session, DPI, polling and commit grammar; independently re-expressed as facts.",
+            ),
+            _source(
+                "OpenMouse mouse-protocol",
+                "commit 73f57898340636e0a0fdab8ce8f517449e065e33",
+                SourceTrust.HARDWARE_VERIFIED,
+                verified_on="Redragon M724 K1NG 1K wired (04d9:fc7a)",
+                verified_date="2026-09-18",
+                notes="Upstream physically verified DPI/polling writes and the safety-critical session close requirement.",
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "feature", 0x02, exact_length=16,
+                required_usage_page=0xFFA0,
+                required_application_usage=(0xFFA0, 0x01),
+                weight=8,
+            ),
+            ReportSignature("feature", 0x03, required=False, weight=1),
+            ReportSignature("feature", 0x04, required=False, weight=1),
+            ReportSignature("feature", 0x05, required=False, weight=1),
+            ReportSignature("feature", 0x06, required=False, weight=1),
+        ),
+        vendor_ids=(0x04D9,),
+        product_ids=(0xFC7A,),
+        transports=(TransportKind.HID_FEATURE_GET, TransportKind.HID_FEATURE_SET),
+        bindings=(
+            FieldBinding(
+                SemanticBehavior.REPORT_RATE_HZ,
+                "polling-config-02-f3-32-00-06",
+                8,
+                codec=_OBSERVED_POLLING_CODEC,
+                evidence_note="Observed raw domain is exactly 01/02/04/08; descriptive only.",
+            ),
+        ),
+        sessions=(
+            SessionGrammar(
+                name="feature-report-configuration",
+                transport=TransportKind.HID_FEATURE_SET,
+                open_frame=bytes((0x02, 0xF5, 0x00) + (0,) * 13),
+                close_frame=bytes((0x02, 0xF5, 0x01) + (0,) * 13),
+                write_prefix=b"\x02\xf3",
+                commit_codes=(0x04, 0x01, 0x02, 0x08, 0x10),
+                cleanup_required=True,
+                abandoned_session_hazard="Interface may stall until physical reconnect",
+                unresolved_semantics=(
+                    "individual commit-code meanings",
+                    "active DPI-stage read/selection",
+                    "button configuration",
+                    "LED configuration",
+                    "profile selection",
+                    "full report-3 command",
+                ),
+            ),
+        ),
+        write_scope=WriteScope.NEVER,
+        identity_required=True,
+        minimum_match_score=11,
+        notes=(
+            "Exact M724 structural research only. Report 2 is descriptor-sized as a 16-byte numbered frame; "
+            "other reports may declare oversized lengths while meaningful replies remain short. DPI table uses "
+            "section 05, profile 00, subcommands 44/4a/50/56/5c and paired X/Y values. FA FA is a responder marker, "
+            "not semantic readback. No executable write recipe is exposed because guaranteed cleanup and local "
+            "physical proof are absent."
+        ),
+    ),
+    ProtocolFamily(
+        name="ryunix-kyu-pro-mx1-telemetry",
+        revision="telemetry-v1",
+        sources=(
+            _source(
+                "OpenMouse mouse-protocol",
+                "commit 37739057a4b1a5484d8e131f1a6b47d753cad7ce; src/ryunix/kyu-pro-mx1.ts",
+                SourceTrust.MAINTAINED,
+                verified_on="Ryunix Kyu Pro MX1 wired/wireless identities",
+                verified_date="2026-09-18",
+                notes="Six-byte passive telemetry semantics; no configuration-write authority imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "input", 0x04, exact_length=7,
+                required_usage_page=0x0A,
+                required_application_usage=(0x0A, 0xC7),
+                weight=8,
+            ),
+            ReportSignature("feature", 0x05, required=False, weight=1),
+        ),
+        vendor_ids=(0x04F3,),
+        product_ids=(0x026E, 0x026F),
+        transports=(TransportKind.HID_INPUT,),
+        bindings=(
+            FieldBinding(SemanticBehavior.ACTIVE_STATE, "telemetry", 1),
+            FieldBinding(SemanticBehavior.DPI_STAGE_INDEX, "telemetry", 2),
+            FieldBinding(
+                SemanticBehavior.REPORT_RATE_HZ, "telemetry", 3,
+                codec=_OBSERVED_POLLING_CODEC,
+            ),
+            FieldBinding(SemanticBehavior.BATTERY_PERCENT, "telemetry", 4),
+            FieldBinding(SemanticBehavior.CHARGING_STATE, "telemetry", 5),
+            FieldBinding(
+                SemanticBehavior.LED_MODE, "telemetry", 6,
+                evidence_note="Classification only; Mouse Control does not manage RGB.",
+            ),
+        ),
+        write_scope=WriteScope.NEVER,
+        identity_required=True,
+        minimum_match_score=11,
+        notes="Read-only telemetry knowledge. Report 05 existence never implies configuration authority.",
+    ),
+    ProtocolFamily(
         name="mchose-v3-block-rpc",
         revision="a7-v3",
         sources=(
@@ -412,6 +603,8 @@ def observed_reports(
                     report_id=report.report_id,
                     byte_length=report.byte_length,
                     vendor_usage=any(0xFF00 <= page <= 0xFFFF for page in report.usage_pages),
+                    usage_pages=report.usage_pages,
+                    application_usages=report.application_usages,
                 )
             )
     return tuple(result)
@@ -431,6 +624,16 @@ def _signature_matches(signature: ReportSignature, report: ObservedReport) -> bo
     if (
         signature.vendor_usage_required is not None
         and signature.vendor_usage_required != report.vendor_usage
+    ):
+        return False
+    if (
+        signature.required_usage_page is not None
+        and signature.required_usage_page not in report.usage_pages
+    ):
+        return False
+    if (
+        signature.required_application_usage is not None
+        and signature.required_application_usage not in report.application_usages
     ):
         return False
     return True
@@ -483,6 +686,9 @@ def match_repertoire(
         if product_match:
             score += 2
             matched.append("product-hint")
+
+        if family.identity_required and not (vendor_match and product_match):
+            continue
 
         # Identity hints alone are intentionally insufficient for generic
         # repertoire matching.  Families without structural signatures are

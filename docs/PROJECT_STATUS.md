@@ -1,5 +1,24 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Redragon M724 and Ryunix Kyu Pro MX1 protocol knowledge
+
+- The discovery repertoire now recognizes the exact Redragon M724 K1NG 1K
+  Feature-report control collection and records its upstream-sourced session,
+  DPI, reciprocal polling, commit, responder-marker, and abandoned-session
+  hazard facts. It has no executable transaction and `WriteScope.NEVER`.
+- The exact wired/wireless Ryunix Kyu Pro MX1 identities now have passive
+  telemetry structure for active state, DPI stage, polling, battery, charging,
+  and opaque LED mode. Its configuration report remains non-authorizing and it
+  also has `WriteScope.NEVER`.
+- Report matching can now require exact HID usage page/application usage, and
+  codecs can constrain their raw domain to observed values. These are additive
+  recognition/evidence capabilities, not runtime hardware support.
+- Full automated validation passes 741 tests with the existing GLib warning.
+  The representative benchmark remains within prior noise: cold import 15.493
+  ms, known-device restore 0.0334 ms, forced Rediscover 0.416 ms, and 1,000 HID
+  decodes 29.035 ms. No physical device, write, installation, tag, merge, push,
+  or release was performed.
+
 ## 2026-09-18 — v0.9.7-1 updater and measured Python performance candidate
 
 - `origin/main` now contains the canonical full-screen TUI correction at
