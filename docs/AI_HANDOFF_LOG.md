@@ -247,7 +247,7 @@
   was added; write authority remains protocol-backed or exact-model PROVEN.
 - Physical validation: pending on the G305 after installing/running this branch.
 
-## 2026-09-18 — v0.9.4 CPI packaging gate
+## 2026-09-17 — v0.9.4 CPI packaging gate
 
 - Request: CPI measurement must ship as a supported installed capability in
   every v0.9.4 artifact before final G305 acceptance and release closure.
@@ -271,6 +271,35 @@
 - Remaining gate: install the matching RPM and complete every operator-observed
   step in `docs/G305_HARDWARE_ACCEPTANCE.md`. Do not tag or publish until that
   physical gate and the final clean-tree release gate pass.
+
+## 2026-09-17 — v0.9.4 G305 physical release gate
+
+- Installed artifact: `mouse-control-0.9.4-1.fc44.noarch` built from the CPI
+  checkpoint. `mouse-control cpi --help` resolved from installed packaged
+  modules. The existing `/usr/bin/mouse-dpi-tool` is owned by Fedora's
+  `libevdev-utils`; Mouse Control did not package or replace it.
+- Startup: doctor passed permissions and service checks and detected exact G305
+  identity `046d:4074`. Runtime selected Automatic Discovery's Native HID
+  adapter and retained configured DPI stages, 1000 Hz polling, notifications,
+  and remaps.
+- Physical DPI events: the operator observed the complete slow sequence
+  `1000,1500,2000,2500,3000` and two rapid complete cycles, with every popup
+  ordered and no omissions or duplicates.
+- Software write: installed setup applied and verified 1000 DPI by canonical
+  hardware readback. Configuration and restart retained the value, and the
+  journal contained no fabricated physical-button notification for the write.
+- Lifecycle: two receiver unplug/reinsert cycles restored pointer/buttons,
+  configured remaps, Native HID, DPI notifications, and battery/tray state.
+  Reconnect itself created no popup and no duplicate device/tray identity.
+  Battery disappeared during incomplete enumeration on the first cycle and
+  returned on the monitor's next refresh after Native HID promotion.
+- Final restart: the operator confirmed input, remaps, DPI notification, and
+  battery behavior recovered without issue. Journal review found bounded
+  generation changes and no repeated reconnect loop, stale-generation event,
+  duplicate notification, rollback failure, or unresolved readback failure.
+- Validation level: physically validated on this attached Logitech G305 plus
+  the separately recorded automated/package gates. This evidence does not grant
+  write authority to any other model.
 
 ## 2026-09-15 — G305 polling acceptance runtime mismatch
 

@@ -13,11 +13,12 @@
   operation-scoped proof, and privacy-filtered community reporting end to end.
   Declared semantic length excludes stale HID tail bytes, and RECOGNIZED remains
   write-disabled.
-- Automated validation passes 660 tests with the existing GLib warning;
+- Automated validation passes 664 tests with the existing GLib warning;
   compileall, diff validation, sdist/wheel, Fedora RPM `%check` and CLI smoke,
   Debian package build, and AppImage version/help smoke pass.
-- The v0.9.4 G305 physical acceptance sequence and published release artifacts
-  remain release gates. No tag or release has been created.
+- The v0.9.4 G305 physical acceptance sequence passed on the installed Fedora
+  RPM. Published release artifacts remain the final release gate; no tag or
+  release existed when this status was recorded.
 
 ## 2026-09-17 — v0.9.4 pre-v1 discovery foundation
 
@@ -401,7 +402,7 @@ after a Generic fallback and DPI event/notification recovery after promotion.
 receiver-reinsert validation on the G305 remains pending; no physical recovery
 claim is made from the fixtures alone.
 
-## 2026-09-18 v0.9.4 CPI packaging gate
+## 2026-09-17 v0.9.4 CPI packaging gate
 
 Physical CPI measurement is a first-class installed command at
 `mouse-control cpi`; the compatibility executable
@@ -415,6 +416,24 @@ isolated virtual environment, Fedora RPM `%check`, an installed Debian package,
 and the AppImage all pass `mouse-control cpi --help`. The wheel and sdist
 contain both calibration modules and no `mouse-dpi-tool` artifact.
 
-These packaging checks do not establish physical validation. Final G305
-release-candidate acceptance remains pending after installation of the RPM
-produced from this checkpoint.
+These packaging checks did not themselves establish physical validation. The
+separate installed-RPM G305 acceptance below supplies that evidence.
+
+## 2026-09-17 v0.9.4 installed-RPM G305 acceptance
+
+The installed `mouse-control-0.9.4-1.fc44.noarch` package selected the exact
+G305 `046d:4074` through Automatic Discovery's Native HID adapter. Setup and
+restart retained stages `1000/1500/2000/2500/3000`, 1000 Hz polling,
+notifications, and configured remaps.
+
+Operator-observed physical validation passed: one slow five-stage DPI cycle,
+two rapid cycles with all ten ordered one-for-one popups, a setup-driven
+software write to 1000 with canonical readback and no fabricated physical-event
+popup, two receiver unplug/reinsert cycles, remap recovery, battery/tray
+recovery, no reconnect-created popup or duplicate identity, and a final service
+restart with input, remaps, DPI notifications, and battery reporting intact.
+
+The journal showed bounded provisional rebinds followed by Native HID recovery,
+not repeated reconnect loops or stale-generation delivery. One first-cycle
+learned-adapter candidate refused an undemonstrated 1000-DPI write as designed;
+the supervisor then promoted Native HID and reconciled 1000 successfully.

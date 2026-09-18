@@ -452,8 +452,8 @@ python -m compileall -q src tests
 The v0.9.4 release checkpoint passes 664 automated tests with one known GLib
 deprecation warning. Compile and whitespace checks, Python sdist/wheel, Fedora
 RPM (including `%check` and packaged CLI smoke), Debian package, and AppImage
-build/smoke validation pass. Final v0.9.4 G305 physical acceptance and
-published-asset validation remain explicit release gates.
+build/smoke validation pass. Final v0.9.4 G305 physical acceptance passed on
+the installed RPM; published-asset validation remains the final release gate.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions and hardware reports.
 See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for release-specific details.
