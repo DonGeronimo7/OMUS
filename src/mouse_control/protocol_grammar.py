@@ -105,6 +105,91 @@ class SemanticBehavior(str, Enum):
     SLEEP_TIMEOUT = "sleep_timeout"
 
 
+class EvidenceCategory(str, Enum):
+    """Independent categories used by open-set family recognition."""
+
+    IDENTITY = "identity"
+    TOPOLOGY = "topology"
+    FRAME = "frame"
+    RELATIONSHIP = "relationship"
+    DIALOGUE = "dialogue"
+    INTEGRITY = "integrity"
+    INTERNAL_IDENTITY = "internal_identity"
+
+
+class FrameSide(str, Enum):
+    REQUEST = "request"
+    RESPONSE = "response"
+
+
+class DiscriminatorKind(str, Enum):
+    """Small reusable predicates for passive request/response evidence."""
+
+    FRAME_LENGTH = "frame_length"
+    BYTE_EQUALS = "byte_equals"
+    FIELD_EQUALS = "field_equals"
+    SUM8_EQUALS = "sum8_equals"
+    DECLARED_LENGTH = "declared_length"
+    REPORT_ID_PAIR = "report_id_pair"
+
+
+@dataclass(frozen=True)
+class SemanticDiscriminator:
+    """One positive requirement whose failure is also negative evidence.
+
+    Offsets always refer to captured report bytes. ``FIELD_EQUALS`` compares
+    ``side/offset/width`` with ``other_side/other_offset/width``.
+    ``SUM8_EQUALS`` compares the byte at ``offset`` with the sum of the
+    half-open range ``[start:end]`` on the same side. ``DECLARED_LENGTH``
+    requires the value at ``offset`` to equal the other field and fit after
+    ``payload_offset`` in the frame. ``REPORT_ID_PAIR`` uses the exchange's
+    report metadata instead of frame bytes.
+    """
+
+    name: str
+    kind: DiscriminatorKind
+    category: EvidenceCategory
+    side: FrameSide = FrameSide.REQUEST
+    offset: int = 0
+    width: int = 1
+    expected: int | None = None
+    other_side: FrameSide | None = None
+    other_offset: int = 0
+    start: int = 0
+    end: int | None = None
+    payload_offset: int = 0
+    request_report_id: int | None = None
+    response_report_id: int | None = None
+    weight: int = 3
+    match_all_exchanges: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("semantic discriminator requires a name")
+        if self.offset < 0 or self.other_offset < 0 or self.start < 0:
+            raise ValueError("semantic discriminator offsets cannot be negative")
+        if self.width <= 0:
+            raise ValueError("semantic discriminator width must be positive")
+        if self.end is not None and self.end < self.start:
+            raise ValueError("semantic discriminator end cannot precede start")
+        if self.payload_offset < 0 or self.weight < 0:
+            raise ValueError("payload offset and weight cannot be negative")
+
+
+@dataclass(frozen=True)
+class RecognitionRecipe:
+    """Data-only semantic recipe evaluated by the generic recognizer."""
+
+    discriminators: tuple[SemanticDiscriminator, ...]
+    minimum_independent_categories: int = 2
+
+    def __post_init__(self) -> None:
+        if not self.discriminators:
+            raise ValueError("recognition recipe requires discriminators")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
 @dataclass(frozen=True)
 class ProtocolSource:
     """Auditable provenance for protocol knowledge."""
@@ -129,6 +214,7 @@ class ReportSignature:
     vendor_usage_required: bool | None = None
     required_usage_page: int | None = None
     required_application_usage: tuple[int, int] | None = None
+    required_interface_number: int | None = None
     required: bool = True
     weight: int = 4
 
@@ -158,6 +244,8 @@ class ReportSignature:
             not 0 <= value <= 0xFFFF for value in self.required_application_usage
         ):
             raise ValueError("required_application_usage values must fit in 16 bits")
+        if self.required_interface_number is not None and self.required_interface_number < 0:
+            raise ValueError("required_interface_number cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -285,6 +373,7 @@ class ProtocolFamily:
     bindings: tuple[FieldBinding, ...] = ()
     transactions: tuple[TransactionSpec, ...] = ()
     sessions: tuple[SessionGrammar, ...] = ()
+    recognition: RecognitionRecipe | None = None
     write_scope: WriteScope = WriteScope.NEVER
     identity_required: bool = False
     minimum_match_score: int = 4

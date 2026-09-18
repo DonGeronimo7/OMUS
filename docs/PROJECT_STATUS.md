@@ -1,5 +1,28 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — open-set protocol-recognition corpus foundation
+
+- Protocol-family semantic recognition is now data-driven. Reusable passive
+  discriminators cover frame length/constants, cross-frame field correlation,
+  SUM8 integrity, declared semantic length, and paired report namespaces; the
+  BITMOUSE path no longer contains a family-specific recognizer.
+- Recognition explicitly returns `UNKNOWN`, `CANDIDATE`, `AMBIGUOUS`, or
+  `RECOGNIZED`, requires independent evidence categories and a winner margin,
+  and converts broken checksum/target/sequence/length relations into negative
+  evidence instead of nearest-family matches.
+- Keychron M6 paired `B3→B4` and `B5→B6` dialogues and exact Holtek Venus
+  `04d9:fc55` interface/report topology are now declarative repertoire facts.
+  Holtek remains structural-only; all new knowledge has `WriteScope.NEVER` and
+  creates no capability, transaction, backend, or runtime write.
+- The initial project-owned six-case corpus includes identity-blinded positive,
+  near-miss, unknown, structural-collision, dialogue, and structure-only cases.
+  It reports 100% recognized precision/known-case recall, 0% unknown/collision
+  false recognition, 33.3% coverage, 50% abstention, and 16.7% ambiguity on
+  this small fixture only; it does not claim the broader 90% objective.
+- Focused discovery/protocol validation passes 60 tests. The complete suite
+  passes 797 tests with the existing GLib deprecation warning. Physical
+  hardware validation was not performed and no new hardware support is claimed.
+
 ## 2026-09-18 — launcher / TUI first-frame performance candidate
 
 - The canonical device-selection frame now renders before the live HID backend

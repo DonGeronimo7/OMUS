@@ -13,6 +13,7 @@ and a family match never grants write authority.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Iterable, Mapping
 
 from .discovery_models import DeviceNode, PhysicalDevice
@@ -21,10 +22,15 @@ from .protocol_codec import ProtocolCodecError, decode_value
 from .protocol_grammar import (
     CodecKind,
     CodecSpec,
+    DiscriminatorKind,
+    EvidenceCategory,
     FieldBinding,
+    FrameSide,
     ProtocolFamily,
     ProtocolSource,
+    RecognitionRecipe,
     ReportSignature,
+    SemanticDiscriminator,
     SessionGrammar,
     SemanticBehavior,
     SourceTrust,
@@ -37,6 +43,8 @@ from .protocol_grammar import (
 class SemanticExchange:
     request: bytes
     response: bytes
+    request_report_id: int | None = None
+    response_report_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -45,10 +53,17 @@ class SemanticFamilyRecognition:
     matched: tuple[str, ...]
     missing: tuple[str, ...]
     semantic_records: tuple[bytes, ...]
+    evidence_categories: tuple[EvidenceCategory, ...] = ()
 
     @property
     def recognized(self) -> bool:
-        return bool(self.matched) and not self.missing
+        recipe = self.candidate.family.recognition
+        return (
+            recipe is not None
+            and bool(self.matched)
+            and not self.missing
+            and len(self.evidence_categories) >= recipe.minimum_independent_categories
+        )
 
     @property
     def write_authorized(self) -> bool:
@@ -70,6 +85,25 @@ class FamilyCandidate:
         return self.family.can_authorize_write(exact_model=self.exact_identity)
 
 
+class RecognitionStatus(str, Enum):
+    UNKNOWN = "unknown"
+    CANDIDATE = "candidate"
+    AMBIGUOUS = "ambiguous"
+    RECOGNIZED = "recognized"
+
+
+@dataclass(frozen=True)
+class OpenSetRecognition:
+    status: RecognitionStatus
+    family: str | None
+    ranked: tuple[SemanticFamilyRecognition, ...]
+    reason: str
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
 @dataclass(frozen=True)
 class ObservedReport:
     node: DeviceNode
@@ -79,6 +113,7 @@ class ObservedReport:
     vendor_usage: bool
     usage_pages: tuple[int, ...] = ()
     application_usages: tuple[tuple[int, int], ...] = ()
+    interface_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +222,46 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         signatures=(
             ReportSignature("output", 0x72, exact_length=64, vendor_usage_required=True, weight=6),
             ReportSignature("input", 0x72, exact_length=64, vendor_usage_required=True, weight=6),
+        ),
+        recognition=RecognitionRecipe(
+            discriminators=(
+                SemanticDiscriminator(
+                    "request-frame-length", DiscriminatorKind.FRAME_LENGTH,
+                    EvidenceCategory.FRAME, FrameSide.REQUEST, expected=64,
+                ),
+                SemanticDiscriminator(
+                    "response-frame-length", DiscriminatorKind.FRAME_LENGTH,
+                    EvidenceCategory.FRAME, FrameSide.RESPONSE, expected=64,
+                ),
+                SemanticDiscriminator(
+                    "request-report-marker", DiscriminatorKind.BYTE_EQUALS,
+                    EvidenceCategory.FRAME, FrameSide.REQUEST, offset=1, expected=0x72,
+                ),
+                SemanticDiscriminator(
+                    "response-report-marker", DiscriminatorKind.BYTE_EQUALS,
+                    EvidenceCategory.FRAME, FrameSide.RESPONSE, offset=0, expected=0x72,
+                ),
+                SemanticDiscriminator(
+                    "leading-request-checksum", DiscriminatorKind.SUM8_EQUALS,
+                    EvidenceCategory.INTEGRITY, FrameSide.REQUEST, offset=0, start=1, end=6,
+                ),
+                SemanticDiscriminator(
+                    "target-correlation", DiscriminatorKind.FIELD_EQUALS,
+                    EvidenceCategory.RELATIONSHIP, FrameSide.RESPONSE, offset=1,
+                    other_side=FrameSide.REQUEST, other_offset=2,
+                ),
+                SemanticDiscriminator(
+                    "sequence-correlation", DiscriminatorKind.FIELD_EQUALS,
+                    EvidenceCategory.RELATIONSHIP, FrameSide.RESPONSE, offset=2,
+                    other_side=FrameSide.REQUEST, other_offset=3,
+                ),
+                SemanticDiscriminator(
+                    "declared-semantic-reply-length", DiscriminatorKind.DECLARED_LENGTH,
+                    EvidenceCategory.RELATIONSHIP, FrameSide.RESPONSE, offset=4,
+                    other_side=FrameSide.REQUEST, other_offset=5, payload_offset=5,
+                ),
+            ),
+            minimum_independent_categories=3,
         ),
         transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
         write_scope=WriteScope.NEVER,
@@ -396,6 +471,99 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="64-byte command/subcommand/length/SUM8 envelope; battery uses a separate heartbeat transaction.",
     ),
     ProtocolFamily(
+        name="holtek-venus-feature-flash",
+        revision="fc55-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90%+ research payload — Holtek Venus",
+                SourceTrust.REFERENCE,
+                notes="Project-owned declarative facts only; no upstream capture or executable write recipe imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "feature", 0x02, exact_length=16,
+                required_usage_page=0xFFA0,
+                required_interface_number=2,
+                weight=8,
+            ),
+            ReportSignature(
+                "feature", 0x03, exact_length=64,
+                required_usage_page=0xFFA0,
+                required_interface_number=2,
+                weight=8,
+            ),
+        ),
+        vendor_ids=(0x04D9,),
+        product_ids=(0xFC55,),
+        transports=(TransportKind.HID_FEATURE_GET, TransportKind.HID_FEATURE_SET),
+        bindings=(
+            FieldBinding(
+                SemanticBehavior.REPORT_RATE_HZ,
+                "polling-representation",
+                0,
+                codec=_OBSERVED_POLLING_CODEC,
+                evidence_note="Representation only; command location and write semantics remain unresolved.",
+            ),
+        ),
+        write_scope=WriteScope.NEVER,
+        identity_required=True,
+        minimum_match_score=19,
+        notes=(
+            "F1 control, F2 read, F3 flash-data and F5 status/control are vocabulary facts. "
+            "Flash write, category commit and possible reset/re-enumeration are descriptive dialogue facts; "
+            "storage and physical effect remain separate and all writes are disabled."
+        ),
+    ),
+    ProtocolFamily(
+        name="keychron-m6-paired-namespaces",
+        revision="ffc1-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90%+ research payload — Keychron M6",
+                SourceTrust.REFERENCE,
+                notes="Project-owned structural fixture; semantic offsets and write packets were not imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("output", 0xB3, required_usage_page=0xFFC1, weight=6),
+            ReportSignature("input", 0xB4, required_usage_page=0xFFC1, weight=6),
+            ReportSignature("output", 0xB5, required_usage_page=0xFFC1, weight=6),
+            ReportSignature("input", 0xB6, required_usage_page=0xFFC1, weight=6),
+        ),
+        recognition=RecognitionRecipe(
+            discriminators=(
+                SemanticDiscriminator(
+                    "query-response-namespace-pair",
+                    DiscriminatorKind.REPORT_ID_PAIR,
+                    EvidenceCategory.DIALOGUE,
+                    request_report_id=0xB3,
+                    response_report_id=0xB4,
+                    match_all_exchanges=False,
+                ),
+                SemanticDiscriminator(
+                    "setting-ack-namespace-pair",
+                    DiscriminatorKind.REPORT_ID_PAIR,
+                    EvidenceCategory.DIALOGUE,
+                    request_report_id=0xB5,
+                    response_report_id=0xB6,
+                    match_all_exchanges=False,
+                ),
+            ),
+            minimum_independent_categories=3,
+        ),
+        transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=24,
+        notes=(
+            "B3→B4 is the query/status namespace and B5→B6 is the setting/ACK namespace. "
+            "The structural collision remains only a candidate until captured dialogue proves those pairings; "
+            "five LE16 DPI stages and dynamic report-rate capabilities are descriptive facts only."
+        ),
+    ),
+    ProtocolFamily(
         name="redragon-m724-feature-session",
         revision="m724-k1ng-1k-v1",
         sources=(
@@ -545,48 +713,172 @@ def recognize_family_semantics(
     candidate: FamilyCandidate,
     exchanges: Iterable[SemanticExchange],
 ) -> SemanticFamilyRecognition:
-    """Apply a safe passive semantic discriminator to a structural candidate."""
+    """Evaluate one family's data-only recipe against passive exchanges."""
 
-    if candidate.family.name != "bitmouse-72":
-        return SemanticFamilyRecognition(candidate, (), ("no-safe-semantic-discriminator",), ())
-    matched: set[str] = set()
-    missing: set[str] = set()
+    recipe = candidate.family.recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-semantic-discriminator",), (), ()
+        )
+    observed = tuple(exchanges)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-request-response-exchange",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories: set[EvidenceCategory] = set()
+    if candidate.family.signatures:
+        categories.add(EvidenceCategory.FRAME)
+    if candidate.exact_identity:
+        categories.add(EvidenceCategory.IDENTITY)
+    if any(
+        signature.required_usage_page is not None
+        or signature.required_application_usage is not None
+        or signature.required_interface_number is not None
+        for signature in candidate.family.signatures
+    ):
+        categories.add(EvidenceCategory.TOPOLOGY)
+    for discriminator in recipe.discriminators:
+        results = tuple(
+            _discriminator_matches(discriminator, exchange) for exchange in observed
+        )
+        passed = all(results) if discriminator.match_all_exchanges else any(results)
+        if passed:
+            matched.append(discriminator.name)
+            categories.add(discriminator.category)
+        else:
+            missing.append(discriminator.name)
+
     records: list[bytes] = []
-    seen = False
-    for exchange in exchanges:
-        request, response = exchange.request, exchange.response
-        if len(request) != 64 or len(response) != 64:
-            missing.add("fixed-64-byte-hid-frame")
-            continue
-        seen = True
-        # Request: checksum, report, target, sequence, command, declared reply length.
-        if request[1] != 0x72 or response[0] != 0x72:
-            missing.add("asymmetric-0x72-report-placement")
-            continue
-        matched.add("asymmetric-0x72-report-placement")
-        semantic_end = 6
-        if request[0] != (sum(request[1:semantic_end]) & 0xFF):
-            missing.add("leading-request-checksum")
-        else:
-            matched.add("leading-request-checksum")
-        if response[1] != request[2]:
-            missing.add("target-correlation")
-        else:
-            matched.add("target-correlation")
-        if response[2] != request[3]:
-            missing.add("sequence-correlation")
-        else:
-            matched.add("sequence-correlation")
-        declared = response[4]
-        if declared != request[5] or 5 + declared > len(response):
-            missing.add("declared-semantic-reply-length")
-        else:
-            matched.add("declared-semantic-reply-length")
-            records.append(response[:5 + declared])
-    if not seen:
-        missing.add("passive-request-response-exchange")
+    length_rules = tuple(
+        item for item in recipe.discriminators
+        if item.kind is DiscriminatorKind.DECLARED_LENGTH and item.name in matched
+    )
+    if not missing and length_rules:
+        rule = length_rules[0]
+        for exchange in observed:
+            frame = _frame(exchange, rule.side)
+            declared = _field(frame, rule.offset, rule.width)
+            records.append(frame[:rule.payload_offset + declared])
+
     return SemanticFamilyRecognition(
-        candidate, tuple(sorted(matched)), tuple(sorted(missing)), tuple(records)
+        candidate,
+        tuple(sorted(matched)),
+        tuple(sorted(missing)),
+        tuple(records),
+        tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
+def _frame(exchange: SemanticExchange, side: FrameSide) -> bytes:
+    return exchange.request if side is FrameSide.REQUEST else exchange.response
+
+
+def _field(frame: bytes, offset: int, width: int) -> int:
+    end = offset + width
+    if end > len(frame):
+        raise ProtocolKnowledgeError("semantic discriminator exceeds frame bounds")
+    return int.from_bytes(frame[offset:end], "little")
+
+
+def _discriminator_matches(
+    discriminator: SemanticDiscriminator,
+    exchange: SemanticExchange,
+) -> bool:
+    try:
+        frame = _frame(exchange, discriminator.side)
+        if discriminator.kind is DiscriminatorKind.FRAME_LENGTH:
+            return len(frame) == discriminator.expected
+        if discriminator.kind is DiscriminatorKind.BYTE_EQUALS:
+            return _field(frame, discriminator.offset, discriminator.width) == discriminator.expected
+        if discriminator.kind is DiscriminatorKind.FIELD_EQUALS:
+            if discriminator.other_side is None:
+                return False
+            return _field(frame, discriminator.offset, discriminator.width) == _field(
+                _frame(exchange, discriminator.other_side),
+                discriminator.other_offset,
+                discriminator.width,
+            )
+        if discriminator.kind is DiscriminatorKind.SUM8_EQUALS:
+            end = len(frame) if discriminator.end is None else discriminator.end
+            if end > len(frame):
+                return False
+            return _field(frame, discriminator.offset, discriminator.width) == (sum(frame[discriminator.start:end]) & 0xFF)
+        if discriminator.kind is DiscriminatorKind.DECLARED_LENGTH:
+            if discriminator.other_side is None:
+                return False
+            declared = _field(frame, discriminator.offset, discriminator.width)
+            expected = _field(
+                _frame(exchange, discriminator.other_side),
+                discriminator.other_offset,
+                discriminator.width,
+            )
+            return declared == expected and discriminator.payload_offset + declared <= len(frame)
+        if discriminator.kind is DiscriminatorKind.REPORT_ID_PAIR:
+            return (
+                exchange.request_report_id == discriminator.request_report_id
+                and exchange.response_report_id == discriminator.response_report_id
+            )
+    except ProtocolKnowledgeError:
+        return False
+    return False
+
+
+def recognize_open_set(
+    physical: PhysicalDevice,
+    descriptors: Mapping[DeviceNode, ParsedHidDescriptor],
+    *,
+    exchanges: Mapping[str, Iterable[SemanticExchange]] | None = None,
+    families: Iterable[ProtocolFamily] = DEFAULT_REPERTOIRE,
+    minimum_margin: int = 3,
+) -> OpenSetRecognition:
+    """Recognize conservatively while preserving UNKNOWN and AMBIGUOUS states."""
+
+    if minimum_margin < 0:
+        raise ValueError("minimum_margin cannot be negative")
+    structural = match_repertoire(physical, descriptors, families=families)
+    if not structural:
+        return OpenSetRecognition(RecognitionStatus.UNKNOWN, None, (), "no structural candidate")
+
+    supplied = exchanges or {}
+    evaluated = tuple(
+        recognize_family_semantics(candidate, supplied.get(candidate.family.name, ()))
+        for candidate in structural
+    )
+
+    def score(item: SemanticFamilyRecognition) -> int:
+        weights = {
+            discriminator.name: discriminator.weight
+            for discriminator in (item.candidate.family.recognition.discriminators
+                                  if item.candidate.family.recognition else ())
+        }
+        return item.candidate.score + sum(weights.get(name, 0) for name in item.matched)
+
+    ranked = tuple(sorted(evaluated, key=lambda item: (-score(item), item.candidate.family.name)))
+    recognized = tuple(item for item in ranked if item.recognized)
+    if not recognized:
+        if len(ranked) == 1:
+            return OpenSetRecognition(
+                RecognitionStatus.CANDIDATE, ranked[0].candidate.family.name, ranked,
+                "structural evidence requires semantic confirmation",
+            )
+        return OpenSetRecognition(
+            RecognitionStatus.AMBIGUOUS, None, ranked,
+            "multiple structural candidates remain unresolved",
+        )
+
+    winner = recognized[0]
+    runner_score = score(ranked[1]) if len(ranked) > 1 else -1
+    if len(recognized) > 1 or score(winner) - runner_score < minimum_margin:
+        return OpenSetRecognition(
+            RecognitionStatus.AMBIGUOUS, None, ranked,
+            "recognized candidate lacks the required margin",
+        )
+    return OpenSetRecognition(
+        RecognitionStatus.RECOGNIZED, winner.candidate.family.name, ranked,
+        "required independent semantic discriminators passed",
     )
 
 
@@ -605,6 +897,7 @@ def observed_reports(
                     vendor_usage=any(0xFF00 <= page <= 0xFFFF for page in report.usage_pages),
                     usage_pages=report.usage_pages,
                     application_usages=report.application_usages,
+                    interface_number=node.interface_number,
                 )
             )
     return tuple(result)
@@ -634,6 +927,11 @@ def _signature_matches(signature: ReportSignature, report: ObservedReport) -> bo
     if (
         signature.required_application_usage is not None
         and signature.required_application_usage not in report.application_usages
+    ):
+        return False
+    if (
+        signature.required_interface_number is not None
+        and signature.required_interface_number != report.interface_number
     ):
         return False
     return True

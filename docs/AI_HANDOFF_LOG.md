@@ -1,5 +1,29 @@
 # AI handoff log
 
+## 2026-09-18 — open-set protocol-recognition corpus foundation
+
+- Starting point: clean `main` at `9deabf5`, isolated on local branch
+  `codex/discovery-90-corpus`. The supplied research payload was treated as a
+  substantial first ingestion milestone, not authority to invent missing
+  offsets, packets, semantics, or physical proof.
+- Added reusable declarative semantic predicates and explicit open-set
+  `UNKNOWN`/`CANDIDATE`/`AMBIGUOUS`/`RECOGNIZED` decisions with independent
+  evidence categories and a score margin. BITMOUSE checksum, marker, target,
+  sequence, and declared-length recognition now uses the generic recipe.
+- Added Keychron M6 paired-namespace recognition and exact Holtek Venus
+  structural knowledge. Holtek remains `CANDIDATE` without passive semantic
+  evidence. Both entries are `WriteScope.NEVER`; recognition itself always
+  reports write authorization false and has no execution primitive.
+- Added a collision matrix, explicit provenance/proof limits, project-owned
+  positive/near-miss/unknown/collision/identity-blinded fixtures, and metric
+  calculation for precision, recall, false recognition, coverage, abstention,
+  ambiguity, and per-family recall. The six-case fixture is intentionally too
+  small for a broad 90% claim.
+- Validation: focused discovery/protocol suite passed 60 tests; complete suite
+  passed 797 tests with one existing GLib warning; compileall and diff checks
+  passed. No physical device, install, push, merge, tag, release, or hardware
+  write was performed.
+
 ## 2026-09-18 — launcher / TUI first-frame performance pass
 
 - Starting point: `c4828c6cdf99f2f6dc1b9e459e99f170024920f9` on a new

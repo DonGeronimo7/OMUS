@@ -22,11 +22,15 @@ from mouse_control.protocol_repertoire import (
     DEFAULT_REPERTOIRE, ProtocolKnowledgeError, SemanticExchange,
     decode_redragon_m724_dpi, decode_ryunix_telemetry,
     encode_redragon_m724_dpi, match_repertoire, recognize_family_semantics,
+    recognize_open_set, RecognitionStatus,
 )
 from mouse_control.semantic_inference import infer_stage_hypotheses
 
 
-def node(path: str = "/dev/hidraw8", *, vendor: int = 0x1234, product: int = 0x5678):
+def node(
+    path: str = "/dev/hidraw8", *, vendor: int = 0x1234,
+    product: int = 0x5678, interface: int = 2,
+):
     return DeviceNode(
         path=Path(path),
         sysfs_path=None,
@@ -35,7 +39,7 @@ def node(path: str = "/dev/hidraw8", *, vendor: int = 0x1234, product: int = 0x5
         bus=3,
         vendor_id=vendor,
         product_id=product,
-        interface_number=2,
+        interface_number=interface,
         parent_key="parent:test",
     )
 
@@ -213,6 +217,82 @@ def test_bitmouse_semantic_phase_refuses_sequence_collision() -> None:
     assert "sequence-correlation" in semantic.missing
 
 
+@pytest.mark.parametrize(
+    ("mutation", "missing"),
+    (
+        (lambda request, response: request.__setitem__(0, request[0] ^ 0x01), "leading-request-checksum"),
+        (lambda request, response: response.__setitem__(1, response[1] ^ 0x01), "target-correlation"),
+        (lambda request, response: response.__setitem__(2, response[2] ^ 0x01), "sequence-correlation"),
+        (lambda request, response: response.__setitem__(4, 0xFF), "declared-semantic-reply-length"),
+    ),
+)
+def test_bitmouse_generic_recipe_turns_each_broken_relation_into_negative_evidence(
+    mutation, missing: str,
+) -> None:
+    n = node()
+    descriptor_map = {n: descriptor(
+        HidReportDefinition(0x72, "output", 64, (0xFF00,)),
+        HidReportDefinition(0x72, "input", 64, (0xFF00,)),
+    )}
+    request = bytearray(_bitmouse_request(target=4, sequence=9, reply_length=3))
+    response = bytearray(64)
+    response[:8] = bytes((0x72, 4, 9, 0, 3, 0x10, 0x20, 0x30))
+    mutation(request, response)
+    decision = recognize_open_set(
+        physical(n=n), descriptor_map,
+        exchanges={"bitmouse-72": (SemanticExchange(bytes(request), bytes(response)),)},
+    )
+    assert decision.status is RecognitionStatus.CANDIDATE
+    assert decision.family == "bitmouse-72"
+    assert missing in decision.ranked[0].missing
+    assert decision.write_authorized is False
+
+
+def test_open_set_recognizes_identity_blinded_bitmouse_grammar() -> None:
+    n = node(vendor=0xDEAD, product=0xBEEF)
+    descriptor_map = {n: descriptor(
+        HidReportDefinition(0x72, "output", 64, (0xFF00,)),
+        HidReportDefinition(0x72, "input", 64, (0xFF00,)),
+    )}
+    request = _bitmouse_request(target=7, sequence=22, reply_length=2)
+    response = bytearray(64)
+    response[:7] = bytes((0x72, 7, 22, 0, 2, 0xAA, 0x55))
+    decision = recognize_open_set(
+        physical(vendor=0xDEAD, product=0xBEEF, n=n), descriptor_map,
+        exchanges={"bitmouse-72": (SemanticExchange(request, bytes(response)),)},
+    )
+    assert decision.status is RecognitionStatus.RECOGNIZED
+    assert decision.family == "bitmouse-72"
+    assert decision.ranked[0].write_authorized is False
+
+
+def test_open_set_unknown_and_structural_collision_abstain() -> None:
+    n = node()
+    unknown = recognize_open_set(
+        physical(n=n),
+        {n: descriptor(HidReportDefinition(0x44, "input", 11, (0xFF33,)))},
+    )
+    assert unknown.status is RecognitionStatus.UNKNOWN
+    assert unknown.family is None
+
+    collision = recognize_open_set(
+        physical(n=n),
+        {n: descriptor(
+            HidReportDefinition(0x04, "feature", 520, (0xFF00,)),
+            HidReportDefinition(0x05, "feature", 6, (0xFF00,)),
+            HidReportDefinition(0xB3, "output", 64, (0xFFC1,)),
+            HidReportDefinition(0xB4, "input", 64, (0xFFC1,)),
+            HidReportDefinition(0xB5, "output", 64, (0xFFC1,)),
+            HidReportDefinition(0xB6, "input", 64, (0xFFC1,)),
+        )},
+    )
+    assert collision.status is RecognitionStatus.AMBIGUOUS
+    assert collision.family is None
+    assert {item.candidate.family.name for item in collision.ranked} >= {
+        "sinowealth-config-blob", "keychron-m6-paired-namespaces",
+    }
+
+
 def test_redragon_m724_requires_exact_identity_and_control_collection() -> None:
     n = node(vendor=0x04D9, product=0xFC7A)
     report = HidReportDefinition(
@@ -294,3 +374,64 @@ def test_ryunix_telemetry_is_exact_read_only_structure() -> None:
             n: descriptor(HidReportDefinition(0x05, "feature", 7, (0x0A,), ((0x0A, 0xC7),)))
         }
     ))
+
+
+def test_holtek_venus_requires_exact_identity_interface_and_both_feature_shapes() -> None:
+    n = node(vendor=0x04D9, product=0xFC55, interface=2)
+    reports = descriptor(
+        HidReportDefinition(0x02, "feature", 16, (0xFFA0,)),
+        HidReportDefinition(0x03, "feature", 64, (0xFFA0,)),
+    )
+    matches = match_repertoire(
+        physical(vendor=0x04D9, product=0xFC55, n=n), {n: reports}
+    )
+    venus = next(item for item in matches if item.family.name == "holtek-venus-feature-flash")
+    assert venus.exact_identity
+    assert venus.write_authorized is False
+    assert venus.family.transactions == ()
+
+    wrong_interface = node(vendor=0x04D9, product=0xFC55, interface=1)
+    assert not any(item.family.name == venus.family.name for item in match_repertoire(
+        physical(vendor=0x04D9, product=0xFC55, n=wrong_interface),
+        {wrong_interface: reports},
+    ))
+    assert not any(item.family.name == venus.family.name for item in match_repertoire(
+        physical(vendor=0x04D9, product=0xFC55, n=n),
+        {n: descriptor(HidReportDefinition(0x02, "feature", 16, (0xFFA0,)))},
+    ))
+
+
+def test_keychron_namespace_shape_is_candidate_not_confident_recognition() -> None:
+    n = node(vendor=0x3434, product=0x0B30)
+    reports = descriptor(
+        HidReportDefinition(0xB3, "output", 64, (0xFFC1,)),
+        HidReportDefinition(0xB4, "input", 64, (0xFFC1,)),
+        HidReportDefinition(0xB5, "output", 64, (0xFFC1,)),
+        HidReportDefinition(0xB6, "input", 64, (0xFFC1,)),
+    )
+    decision = recognize_open_set(
+        physical(vendor=0x3434, product=0x0B30, n=n), {n: reports}
+    )
+    assert decision.status is RecognitionStatus.CANDIDATE
+    assert decision.family == "keychron-m6-paired-namespaces"
+    assert decision.write_authorized is False
+
+    partial = recognize_open_set(
+        physical(vendor=0x3434, product=0x0B30, n=n), {n: reports},
+        exchanges={"keychron-m6-paired-namespaces": (
+            SemanticExchange(b"query", b"status", 0xB3, 0xB4),
+        )},
+    )
+    assert partial.status is RecognitionStatus.CANDIDATE
+    assert "setting-ack-namespace-pair" in partial.ranked[0].missing
+
+    paired = recognize_open_set(
+        physical(vendor=0x3434, product=0x0B30, n=n), {n: reports},
+        exchanges={"keychron-m6-paired-namespaces": (
+            SemanticExchange(b"query", b"status", 0xB3, 0xB4),
+            SemanticExchange(b"setting", b"ack", 0xB5, 0xB6),
+        )},
+    )
+    assert paired.status is RecognitionStatus.RECOGNIZED
+    assert paired.family == "keychron-m6-paired-namespaces"
+    assert paired.write_authorized is False
