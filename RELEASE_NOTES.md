@@ -1,3 +1,35 @@
+# Mouse Control v0.9.7-2
+
+Accepted responsiveness revision for the canonical desktop-launched TUI. It
+preserves Mouse Control's hardware authority and compatibility model while
+moving live backend initialization behind the first complete device-selection
+frame.
+
+## Fast canonical launcher
+
+- The real device-selection frame is shown before live backend, capability, and
+  exact-evidence initialization. One owned non-daemon worker performs that
+  unchanged work and is deterministically joined and cleaned up on every exit.
+- Hardware-dependent navigation remains explicitly unavailable until
+  initialization completes. Device selection, Help, resize, and Cancel remain
+  responsive while it runs.
+- Foreground service suspension is requested early but completed synchronously
+  before any hardware session opens; unsaved exits retain the established
+  external restoration behavior.
+- Evdev discovery no longer opens each event node solely for prevalidation;
+  normal candidate, capability, permission, stable-path, and Rediscover
+  validation stay authoritative.
+
+## Downloads
+
+- RPM: `mouse-control-0.9.7-2.fc44.noarch.rpm`
+- DEB: `mouse-control_0.9.7-2_all.deb`
+- AppImage: `Mouse-Control-0.9.7-2-x86_64.AppImage`
+- Wheel: `mouse_control-0.9.7.post2-py3-none-any.whl`
+- Source: `mouse_control-0.9.7.post2.tar.gz`
+- Integrity manifest: `SHA256SUMS`
+
+---
 # Mouse Control v0.9.7-1
 
 Measured performance and updater-correctness release. It preserves Mouse

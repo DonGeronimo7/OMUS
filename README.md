@@ -7,7 +7,7 @@ Mouse Control has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v0.9.7-1](https://img.shields.io/badge/release-v0.9.7--1-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.7-1)
+[![Current release: v0.9.7-2](https://img.shields.io/badge/release-v0.9.7--2-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.7-2)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
@@ -17,45 +17,45 @@ privacy-conscious report that helps expand support.
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v0.9.7-1](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.7-1).
+The current release is [v0.9.7-2](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.7-2).
 
 ## Install and run
 
 Download the package for your system from the
-[v0.9.7-1 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.7-1),
+[v0.9.7-2 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.7-2),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-1/mouse-control-0.9.7-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-2/mouse-control-0.9.7-2.fc44.noarch.rpm), then run:
 
 ```bash
-sudo dnf install ./mouse-control-0.9.7-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.9.7-2.fc44.noarch.rpm
 ```
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-1/mouse-control_0.9.7-1_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-2/mouse-control_0.9.7-2_all.deb), then run:
 
 ```bash
-sudo apt install ./mouse-control_0.9.7-1_all.deb
+sudo apt install ./mouse-control_0.9.7-2_all.deb
 ```
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-1/Mouse-Control-0.9.7-1-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-2/Mouse-Control-0.9.7-2-x86_64.AppImage), then run:
 
 ```bash
-chmod +x Mouse-Control-0.9.7-1-x86_64.AppImage
-./Mouse-Control-0.9.7-1-x86_64.AppImage setup
+chmod +x Mouse-Control-0.9.7-2-x86_64.AppImage
+./Mouse-Control-0.9.7-2-x86_64.AppImage setup
 ```
 
 Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-1/mouse_control-0.9.7.post1-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-1/mouse_control-0.9.7.post1.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-2/mouse_control-0.9.7.post2-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.7-2/mouse_control-0.9.7.post2.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:

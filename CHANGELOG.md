@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.7-2 — 2026-09-18
+
+### Accepted launcher/TUI responsiveness
+
+- Render the complete device-selection frame before live backend initialization.
+  One TUI-owned non-daemon worker performs the unchanged backend, capability,
+  and exact-evidence work; it is joined and closed on every exit path.
+- Queue background-service suspension early while requiring its completion
+  before hardware access. Preserve unsaved-exit restoration and service
+  preference semantics.
+- Remove duplicate evdev prevalidation without weakening the authoritative
+  candidate, capability, permission, stable-path, or explicit Rediscover paths.
+
+### Validation boundary
+
+- Fedora desktop-launcher acceptance was observed by the operator. The release
+  preserves the existing hardware-write authority, evidence, remapping, and
+  compatibility contracts.
+
 ## 0.9.7-1 — 2026-09-18
 
 ### Foreground-session lifecycle

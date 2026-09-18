@@ -1,3 +1,10 @@
+mouse-control (0.9.7-2) unstable; urgency=medium
+
+  * Render the interactive device-selection frame before live backend initialization.
+  * Preserve service-suspension ordering, complete Rediscover, and exact evidence checks.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Fri, 18 Sep 2026 16:00:00 -0400
+
 mouse-control (0.9.7-1) unstable; urgency=medium
 
   * Fix strict incremental-RPM update compatibility.
