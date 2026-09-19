@@ -12,6 +12,7 @@ def test_clusterfuzzlite_configuration_is_pinned_and_policy_compliant():
     assert validate_repository() == []
     dockerfile = (ROOT / ".clusterfuzzlite/Dockerfile").read_text(encoding="utf-8")
     assert "base-builder-python@sha256:" in dockerfile
+    assert "COPY .clusterfuzzlite/build.sh $SRC/build.sh" in dockerfile
     assert ":latest" not in dockerfile
 
 
