@@ -1,5 +1,34 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab Advanced Tools dashboard
+
+- Continued `codex/discovery-90-corpus` from clean TUI polish checkpoint
+  `35f4608`. Preserved the boxed unnumbered rail, shared hierarchy, responsive
+  curses layout, navigation keys, and default Full Automatic Lab path.
+- Added a grouped Advanced Tools dashboard with 28 repository-backed routes
+  across Inspect & Evidence, Protocol Analysis, Hardware Investigators,
+  Routing & Persistence, Experiment Planning, and Capture & Corpus. An explicit
+  audit mapping covers all 13 existing `LabInstrument` values.
+- Inspectors present bounded live context from existing discovery results,
+  descriptors/snapshots, canonical Lab experiments, differential/dialogue/
+  timing/dependency/integrity analysis, CPI/polling/power/freshness evidence,
+  routing/persistence/restoration state, action/planner state, imports, and
+  repertoire/corpus knowledge. Status vocabulary is limited to READY,
+  READ ONLY, NEEDS HARDWARE, NO EVIDENCE, OBSERVED, DECODED, PROVEN, or DISABLED.
+- Only two expert routes execute: the existing `execute_lab_plan` path and the
+  existing vendor importer. Every tool shows description, status, and current
+  context before opening. No raw HID transmission, new executor, write path,
+  authority promotion, protocol behavior, persistence behavior, or backend
+  behavior was added.
+- Validation: focused TUI/Lab/analyzer/importer coverage passed 237 tests; the
+  prescribed Automatic Discovery/runtime set passed 90 tests; the complete
+  suite passed 1070 tests with the existing GLib warning. Compileall and
+  `git diff --check` passed. A known threaded DPI-monitor timing assertion
+  appeared only when the runtime set was combined with the new UI test module;
+  the test passed alone, the prescribed runtime set passed both here and from
+  archived clean `35f4608`, and the complete suite passed. Physical hardware
+  validation was not performed.
+
 ## 2026-09-18 — Final TUI hierarchy and navigation polish
 
 - Continued `codex/discovery-90-corpus` from clean wake checkpoint `f52a9e2`.

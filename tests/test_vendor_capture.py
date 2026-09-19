@@ -526,7 +526,7 @@ def test_tui_exposes_import_summary_and_cancellation_without_changing_lab_flow(t
     rows = app.detail_rows()
     assert any(row.text == "Run Full Automatic Lab" for row in rows)
     assert any(row.text == "Import Vendor Capture" for row in rows)
-    app.row_cursor = 1
+    app.row_cursor = 2
     assert app.handle_key("ENTER").kind is ActionKind.IMPORT_VENDOR_CAPTURE
 
     imported = import_vendor_capture_bytes(

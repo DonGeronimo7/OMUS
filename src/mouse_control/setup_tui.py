@@ -54,6 +54,7 @@ class ActionKind(Enum):
     RETRY_DISCOVERY = auto()
     GUIDED_DISCOVERY = auto()
     RUN_DISCOVERY_LAB = auto()
+    OPEN_ADVANCED_TOOLS = auto()
     IMPORT_VENDOR_CAPTURE = auto()
     MEASURE_POLLING = auto()
     EDIT_DPI = auto()
@@ -723,7 +724,7 @@ class SetupController:
             # Automatic/retry, Discovery Lab, optional deeper discovery, continue.
             return 4 if self.guided_discovery_available else 3
         if self.section is SetupSection.LAB:
-            return 3
+            return 4
         if self.section is SetupSection.DPI:
             return len(self.choices.stages) if self.choices.dpi_writable else 1
         if self.section is SetupSection.POLLING:
@@ -859,6 +860,8 @@ class SetupController:
                     return ControllerAction()
                 return ControllerAction(ActionKind.RUN_DISCOVERY_LAB)
             if self.row_cursor == 1:
+                return ControllerAction(ActionKind.OPEN_ADVANCED_TOOLS)
+            if self.row_cursor == 2:
                 return ControllerAction(ActionKind.IMPORT_VENDOR_CAPTURE)
             self._go(self._next_configuration_section(SetupSection.LAB))
             return ControllerAction()
@@ -1298,10 +1301,11 @@ class SetupController:
                         ))
             rows.extend([
                 DisplayRow("Run Full Automatic Lab", 0, role="action"),
-                DisplayRow("Import Vendor Capture", 1, role="action"),
+                DisplayRow("Advanced Tools", 1, role="action"),
+                DisplayRow("Import Vendor Capture", 2, role="action"),
                 DisplayRow(
-                    f"Continue to {self._next_configuration_section(SetupSection.LAB).value.lower()} configuration",
-                    2,
+                    f"Continue to {self._next_configuration_section(SetupSection.LAB).value} configuration",
+                    3,
                     role="action",
                 ),
                 DisplayRow("Recognition and correlation never grant hardware write authority.", dim=True),

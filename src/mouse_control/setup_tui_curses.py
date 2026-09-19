@@ -21,6 +21,15 @@ from .discovery_lab import (
     PhysicalEvidence,
 )
 from .lab_orchestrator import execute_lab_plan, initial_lab_hypotheses, plan_next_experiment
+from .lab_expert_tools import (
+    GROUPS as EXPERT_TOOL_GROUPS,
+    ExpertTool,
+    ExpertToolAction,
+    tool_context,
+    tool_row,
+    tool_status,
+    tools_for_group,
+)
 from .calibrated_discovery import capture_calibrated_motion
 from .guided_discovery import (
     GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_deep_dpi_stage_learning,
@@ -326,7 +335,7 @@ class CursesSetupApp:
         if section is SetupSection.HARDWARE:
             return "run" if cursor == 0 else "open"
         if section is SetupSection.LAB:
-            return {0: "run", 1: "import"}.get(cursor, "next")
+            return {0: "run", 1: "open", 2: "import"}.get(cursor, "next")
         if section is SetupSection.DPI:
             return "edit"
         if section is SetupSection.POLLING:
@@ -724,6 +733,99 @@ class CursesSetupApp:
             yes="Enter Close",
             no="Esc Close",
         )
+
+    def _expert_menu(self, title: str, lines: list[str]) -> int | None:
+        """Select one bounded expert-dashboard row with the standard keys."""
+
+        cursor = 0
+        while True:
+            rendered = [
+                ("▶ " if index == cursor else "  ") + line
+                for index, line in enumerate(lines)
+            ]
+            self._modal(
+                title,
+                rendered,
+                prompt="↑↓/jk Move   g/G First/Last   Enter Open   b Back",
+            )
+            key = self.stdscr.getch()
+            if key == curses.KEY_RESIZE:
+                continue
+            moved = self._move_menu(key, cursor, len(lines))
+            if moved is not None:
+                cursor = moved
+                continue
+            if key in (27, ord("b"), ord("B")):
+                return None
+            if key in (10, 13, curses.KEY_ENTER):
+                return cursor
+
+    def _show_expert_tool_details(self, tool: ExpertTool) -> None:
+        lines = [
+            *tool_context(self.controller, tool),
+            "",
+            f"Existing implementation: {tool.implementation}",
+            "Advanced Tools cannot grant or bypass hardware write authority.",
+        ]
+        self._confirm(
+            tool.title + " — Details", lines,
+            yes="Enter Close", no="Esc Close",
+        )
+
+    def _activate_expert_tool(self, tool: ExpertTool) -> None:
+        """Preview one real tool, then inspect or use its existing safe route."""
+
+        statuses = tool_status(self.controller, tool)
+        context = tool_context(self.controller, tool)
+        preview = [
+            tool.description,
+            "Status: " + " · ".join(statuses),
+            "",
+            *context[:3],
+            "",
+            "No raw HID transmission or write-authority bypass is available here.",
+        ]
+        executable = tool.action is not ExpertToolAction.INSPECT and "DISABLED" not in statuses
+        if tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN:
+            verb = "Run authorized plan"
+        elif tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+            verb = "Open importer"
+        else:
+            verb = "Open details"
+        if not self._confirm(
+            tool.title,
+            preview,
+            yes=f"Enter {verb}",
+            no="b Back",
+        ):
+            return
+        if not executable:
+            self._show_expert_tool_details(tool)
+        elif tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN:
+            self._run_discovery_lab()
+        elif tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+            self._run_vendor_capture_import()
+
+    def _open_advanced_tools(self) -> None:
+        """Open the grouped expert dashboard without changing Lab authority."""
+
+        while True:
+            group_index = self._expert_menu(
+                "Discovery Lab — Advanced Tools",
+                list(EXPERT_TOOL_GROUPS),
+            )
+            if group_index is None:
+                return
+            group = EXPERT_TOOL_GROUPS[group_index]
+            tools = tools_for_group(group)
+            while True:
+                tool_index = self._expert_menu(
+                    group,
+                    [tool_row(self.controller, tool) for tool in tools],
+                )
+                if tool_index is None:
+                    break
+                self._activate_expert_tool(tools[tool_index])
 
     def _guided_prompt(self, step: GuidedStep) -> bool:
         return self._confirm(
@@ -1618,6 +1720,8 @@ class CursesSetupApp:
                     self._run_guided()
                 elif action.kind is ActionKind.RUN_DISCOVERY_LAB:
                     self._run_discovery_lab()
+                elif action.kind is ActionKind.OPEN_ADVANCED_TOOLS:
+                    self._open_advanced_tools()
                 elif action.kind is ActionKind.IMPORT_VENDOR_CAPTURE:
                     self._run_vendor_capture_import()
                 elif action.kind is ActionKind.MEASURE_POLLING:
