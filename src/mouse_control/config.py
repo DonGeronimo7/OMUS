@@ -69,7 +69,8 @@ def generate_config(
 def merge_setup_config(existing: dict[str, Any], device_info: Any, *,
                        mappings: dict[str, str], dpi_stages: list[int],
                        active_dpi: int, polling_rate_hz: int | None,
-                       macros: dict[str, list[dict[str, object]]] | None = None) -> str:
+                       macros: dict[str, list[dict[str, object]]] | None = None,
+                       lighting: dict[str, Any] | None = None) -> str:
     """Merge setup choices without discarding forward-compatible TOML."""
     result = copy.deepcopy(existing)
     device = result.setdefault("device", {})
@@ -97,6 +98,21 @@ def merge_setup_config(existing: dict[str, Any], device_info: Any, *,
     result["remap"] = dict(mappings)
     if macros is not None:
         result["macros"] = copy.deepcopy(macros)
+    if lighting is not None:
+        serialized: dict[str, Any] = {}
+        for zone_id, state in lighting.items():
+            entry: dict[str, Any] = {
+                "mode": state.mode.value,
+                "persistence": state.persistence.value,
+            }
+            if state.color is not None:
+                entry["color"] = state.color
+            if state.brightness is not None:
+                entry["brightness"] = state.brightness
+            if state.speed is not None:
+                entry["speed"] = state.speed
+            serialized[zone_id] = entry
+        result["lighting"] = serialized
     return _dump_toml(result)
 
 

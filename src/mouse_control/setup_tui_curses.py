@@ -39,6 +39,7 @@ from .polling_observation import measure_current_polling
 from .sensor_calibration import measure_sensor_state_auto
 from .learning_session import ReadOnlyLearningSession
 from .hardware import HardwareError
+from .hardware.capabilities import LightingMode, LightingState
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
 from .research_probe import ResearchProbeError, run_reversible_research_probes
@@ -369,8 +370,16 @@ class CursesSetupApp:
             return "set" if writable and cursor < len(rates) else "measure"
         if section is SetupSection.BUTTONS:
             return "edit"
+        if section is SetupSection.LIGHTING:
+            return "edit"
         if section is SetupSection.SERVICE:
             return "set"
+        if section is SetupSection.UPDATE:
+            return "check" if cursor == 0 else "update"
+        if section is SetupSection.TOOLS:
+            return "open"
+        if section is SetupSection.ABOUT:
+            return "view"
         return "save" if cursor == 0 else "edit"
 
     def _lab_view_enter_enabled(self) -> bool:
@@ -786,6 +795,181 @@ class CursesSetupApp:
             self.controller.status = "Capture path must be valid UTF-8."
             return None
         return text or None
+
+    def _lighting_editor(self, zone_index: int) -> None:
+        zone = self.controller.choices.lighting_zones[zone_index]
+        if not zone.writable:
+            self.controller.status = "Lighting knowledge is read-only; no write was attempted."
+            return
+        current = self.controller.choices.lighting.get(zone.zone_id)
+        labels = ", ".join(mode.value for mode in zone.modes)
+        entered = self._prompt_text(
+            f"Lighting — {zone.name}",
+            [
+                f"Native modes: {labels}",
+                "Enter: mode [#RRGGBB] [brightness] [speed]",
+                "Examples: off  |  static #8A2BE2 75  |  breathing #FF0000 50 40",
+            ],
+            maximum=64,
+        )
+        if entered is None:
+            return
+        parts = entered.split()
+        try:
+            mode = LightingMode(parts[0].lower())
+            color = parts[1] if len(parts) > 1 and parts[1].startswith("#") else None
+            numbers = [int(item) for item in parts[1:] if not item.startswith("#")]
+            brightness = numbers[0] if numbers else None
+            speed = numbers[1] if len(numbers) > 1 else None
+        except (ValueError, IndexError):
+            self.controller.status = "Lighting input must use a listed mode and numeric controls."
+            return
+        self.controller.set_lighting_state(LightingState(
+            zone_id=zone.zone_id,
+            mode=mode,
+            color=color,
+            brightness=brightness,
+            speed=speed,
+            persistence=(current.persistence if current is not None else zone.persistence[0]),
+        ))
+
+    def _run_update_action(self, *, install: bool) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        import io
+        from .updater import inspect_update, run_update
+        if install and not self._confirm(
+            "Update Mouse Control?",
+            [
+                "The canonical updater verifies the official release and checksum manifest.",
+                "The current installation is retained if verification fails.",
+            ],
+            yes="Enter Start update",
+            no="b Cancel",
+        ):
+            return
+        try:
+            if not install:
+                state = inspect_update()
+                self.controller.update_status = state
+                self.controller.status = (
+                    f"Update available: {state.installed_version} → {state.available_version}."
+                    if state.update_available else
+                    f"Mouse Control {state.installed_version} is up to date."
+                )
+                return
+            output = io.StringIO()
+            with redirect_stdout(output), redirect_stderr(output):
+                status = run_update(check=False, assume_yes=True)
+        except Exception as exc:
+            self.controller.status = f"Update failed safely: {exc}"
+            return
+        self.controller.status = (
+            "Update check finished."
+            if not install
+            else (
+                "Update finished successfully."
+                if status == 0
+                else "Update did not complete; existing installation retained."
+            )
+        )
+        detail = output.getvalue().strip()
+        if detail:
+            self._modal("Update result", detail.splitlines()[-8:])
+            self.stdscr.getch()
+
+    def _open_product_tool(self, index: int) -> None:
+        labels = (
+            ("Diagnostics / doctor", "Use the canonical read-only doctor checks."),
+            ("Permissions", "Input, hidraw, and uinput access can be inspected without mutation."),
+            ("Support bundle", "Create the existing privacy-safe support report on explicit confirmation."),
+            ("Configuration path", "Inspect the active configuration path and saved settings."),
+            ("Read-only HID inspection", "Generic HID inspection never sends Output or Feature reports."),
+            ("Protocol / evidence inspection", "Use Discovery Lab → Advanced Tools for live evidence."),
+            ("Discovery export / rediscovery", "Evidence export and intentional rediscovery remain explicit actions."),
+            ("Logs and recovery guidance", "Inspect service status and journal guidance without resetting configuration."),
+        )
+        title, detail = labels[index]
+        lines = [detail]
+        if index == 0:
+            from .doctor import doctor_lines
+            lines = doctor_lines(list(self.controller.devices))
+        elif index == 1:
+            from contextlib import redirect_stderr, redirect_stdout
+            import io
+            from .permissions import permission_report
+            output = io.StringIO()
+            with redirect_stdout(output), redirect_stderr(output):
+                permission_report()
+            lines = output.getvalue().strip().splitlines()
+        elif index == 2:
+            from .support import probe, render_report
+            destination = self._prompt_text(
+                "Support bundle",
+                ["Enter a destination path for the privacy-safe selected-mouse report."],
+            )
+            if destination is None:
+                return
+            try:
+                report = probe(self.controller.selected, self.controller.backend)
+                Path(destination).expanduser().write_text(render_report(report), encoding="utf-8")
+            except (OSError, HardwareError) as exc:
+                self.controller.status = f"Support report could not be created: {exc}"
+                return
+            self.controller.status = f"Support report saved to {destination}."
+            return
+        elif index == 3:
+            from .config import get_config_path
+            path = get_config_path()
+            lines = [f"Active configuration: {path}",
+                     "State: present" if path.exists() else "State: not created yet"]
+        elif index == 5:
+            self.controller.nav.go(SetupSection.LAB)
+            self.controller.row_cursor = 1
+            self._open_advanced_tools()
+            return
+        elif index == 6:
+            self.controller.nav.go(SetupSection.HARDWARE)
+            self.controller.row_cursor = 0
+            self.controller.status = "Hardware Discovery and intentional Rediscover are available here."
+            return
+        elif index == 7:
+            from contextlib import redirect_stderr, redirect_stdout
+            import io
+            from .service import status_service
+            output = io.StringIO()
+            with redirect_stdout(output), redirect_stderr(output):
+                status_service()
+            lines = output.getvalue().strip().splitlines() or ["No service status output was available."]
+        self._modal(title, [*lines, "CLI scripting remains available for machine-oriented output."])
+        while True:
+            key = self.stdscr.getch()
+            if key in (10, 13, curses.KEY_ENTER, 27, ord("b"), ord("B")):
+                break
+
+    def _run_service_action(self, operation: str) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        import io
+        from .service import restart_service, start_service, status_service, stop_service
+        actions = {
+            "status": status_service,
+            "start": start_service,
+            "stop": stop_service,
+            "restart": restart_service,
+        }
+        output = io.StringIO()
+        try:
+            with redirect_stdout(output), redirect_stderr(output):
+                result = actions[operation]()
+        except Exception as exc:
+            self.controller.status = f"Service {operation} failed: {exc}"
+            return
+        self.controller.status = f"Service {operation} completed."
+        lines = output.getvalue().strip().splitlines()
+        if isinstance(result, str):
+            lines.append(result)
+        if lines:
+            self._modal(f"Service {operation}", lines[-10:])
+            self.stdscr.getch()
 
     def _run_vendor_capture_import(self, *, show_intro: bool = True) -> None:
         if show_intro and not self._confirm(
@@ -1856,6 +2040,16 @@ class CursesSetupApp:
                         self._button_editor()
                     except ButtonCaptureError as exc:
                         self.controller.status = str(exc)
+                elif action.kind is ActionKind.EDIT_LIGHTING:
+                    self._lighting_editor(int(action.payload))
+                elif action.kind is ActionKind.CHECK_UPDATE:
+                    self._run_update_action(install=False)
+                elif action.kind is ActionKind.START_UPDATE:
+                    self._run_update_action(install=True)
+                elif action.kind is ActionKind.OPEN_PRODUCT_TOOL:
+                    self._open_product_tool(int(action.payload))
+                elif action.kind is ActionKind.SERVICE_ACTION:
+                    self._run_service_action(str(action.payload))
                 elif action.kind is ActionKind.SAVE:
                     if self._confirm(
                         "Save configuration?",

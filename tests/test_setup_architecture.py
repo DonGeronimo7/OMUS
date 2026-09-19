@@ -96,7 +96,11 @@ def test_setup_order_is_discovery_then_dpi_polling_buttons():
         SetupSection.DPI,
         SetupSection.POLLING,
         SetupSection.BUTTONS,
+        SetupSection.LIGHTING,
         SetupSection.SERVICE,
+        SetupSection.UPDATE,
+        SetupSection.TOOLS,
+        SetupSection.ABOUT,
         SetupSection.REVIEW,
     )
 

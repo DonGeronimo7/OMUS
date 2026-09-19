@@ -125,7 +125,7 @@ def test_button_and_review_rows_are_dense_complete_summaries():
     controller.section_index = 5
     assert any("BTN_SIDE" in row.text and "KEY_LEFTCTRL" in row.text
                for row in controller.detail_rows())
-    controller.section_index = 7
+    controller.section_index = SECTIONS.index(SetupSection.REVIEW)
     review = "\n".join(row.text for row in controller.detail_rows())
     assert "1234:5678" in review
     assert "usb-scan" in review

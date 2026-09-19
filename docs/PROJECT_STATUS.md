@@ -1,5 +1,32 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Post-v0.9.8 canonical TUI and lighting foundation
+
+- The canonical TUI now includes dedicated Lighting, Updates, Tools / Advanced,
+  About, and complete service-control surfaces. A checked-in product capability
+  inventory maps every public `mouse-control` command and installed research
+  entry point to its TUI route and shared implementation; regression coverage
+  prevents new top-level CLI commands from silently becoming TUI-only gaps.
+- Lighting is an optional protocol-neutral capability with multiple zones,
+  native Off/Static/Breathing/Spectrum modes, RGB24 `#RRGGBB`, brightness,
+  speed, per-mode persistence vocabulary, readback, and lighting-only versus
+  shared-device-config write scope. Existing configurations load unchanged.
+- Shared-device-config lighting is refused unless an exact backend explicitly
+  proves trustworthy baseline-preserving RMW. Volatile state is reconciled once
+  per live backend and after a genuine rebind; lighting failures remain isolated
+  from DPI, polling, remapping, buttons, battery, and service health.
+- OpenRGB-derived lighting facts are retained as source-backed, exact-fingerprint
+  knowledge with runtime writes disabled. The post-v0.9.8 audit records the
+  status and remaining hardware gate for every requested research family; no
+  new HID write path or support claim was created.
+- Automated validation passed 1122 tests with the existing GLib warning,
+  compileall, and whitespace checks. Wheel/sdist and installed-wheel smoke
+  validation passed; the final Fedora RPM and `%check` passed all 1122 tests
+  plus packaged command smoke checks.
+  Debian and AppImage build tools were unavailable locally; their launcher and
+  packaging structure remain covered by the full suite. Physical lighting and
+  device acceptance remain pending.
+
 ## 2026-09-18 — PR #6 clean-build and runtime-teardown remediation
 
 - The no-isolation reproducibility environment now installs explicit pinned

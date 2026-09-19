@@ -1,5 +1,17 @@
 # Mouse Control
 
+The full-screen TUI is the complete interactive Mouse Control application.
+The CLI remains available for scripting, diagnostics, and advanced workflows;
+ordinary product capabilities are reachable from the TUI.
+
+Lighting is an optional per-device capability. Mouse Control models native
+Off, Static, Breathing, and Spectrum effects, full `#RRGGBB` color, zones,
+brightness, speed, and persistence only when the exact hardware reports them.
+It does not provide host-streamed animation or whole-PC RGB synchronization,
+and lack of lighting support never reduces DPI, polling, remapping, button, or
+battery support. Source-backed protocol knowledge improves recognition without
+granting hardware write authority.
+
 **Native Linux mouse configuration backed by automatic hardware discovery.**
 
 Configure buttons, DPI, and polling where those controls are proven safe. If

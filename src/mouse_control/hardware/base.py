@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import threading
 from typing import Callable
 from ..discovery import MouseDevice
-from .capabilities import BatteryState, DpiState, HardwareCapabilities
+from .capabilities import BatteryState, DpiState, HardwareCapabilities, LightingState
 
 
 class HardwareError(RuntimeError):
@@ -108,6 +108,16 @@ class HardwareBackend(ABC):
 
     def set_polling_rate(self, device: MouseDevice, hz: int) -> None:
         raise HardwareError(f"{self.name}: polling rate is unsupported")
+
+    def get_lighting_state(self, device: MouseDevice, zone_id: str) -> LightingState | None:
+        return None
+
+    def supports_safe_shared_lighting_writes(self, device: MouseDevice, zone_id: str) -> bool:
+        """Whether this backend proves baseline-preserving whole-record writes."""
+        return False
+
+    def set_lighting_state(self, device: MouseDevice, state: LightingState) -> LightingState | None:
+        raise HardwareError(f"{self.name}: lighting is unsupported")
 
     def close(self) -> None:
         """Release backend resources. Implementations may safely call twice."""

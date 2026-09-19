@@ -1,5 +1,22 @@
 # AI handoff log
 
+## 2026-09-18 — Post-v0.9.8 unified addendum foundation
+
+- Started from clean tagged `v0.9.8` (`e3c48c5`) and created
+  `codex/post-v0.9.8-unified-addendum`; `main` was not modified.
+- Added complete canonical TUI product surfaces and an enforced CLI/TUI map;
+  update and service controls reuse the existing updater/service paths.
+- Added optional multi-zone native-lighting models, per-device config, RGB24
+  validation, persistence/write-scope vocabulary, volatile reconnect restore,
+  no-repeat reconciliation, and mandatory shared-record RMW proof gating.
+- Added source-backed/write-disabled lighting knowledge plus a comprehensive
+  research ledger. No generic HID writer or runtime authority was added.
+- Validation: 1122 full-suite tests passed with the existing GLib warning;
+  compileall and diff checks passed. Wheel/sdist, installed-wheel smoke, and
+  Fedora RPM `%check` passed at the packaging checkpoint. Debian/AppImage tools
+  and physical RGB hardware were unavailable. No install, push, merge, tag, or
+  release occurred.
+
 ## 2026-09-18 — PR #6 cloud CI remediation
 
 - Continued `codex/openssf-pre-v1-hardening` from pushed checkpoint `1c25ffc`.

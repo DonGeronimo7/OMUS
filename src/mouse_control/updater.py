@@ -58,6 +58,27 @@ class Installation:
                 "unknown": "unknown installation"}[self.kind]
 
 
+@dataclass(frozen=True)
+class UpdateStatus:
+    installed_version: str
+    available_version: str
+    update_available: bool
+    installation: Installation
+
+
+def inspect_update(*, executable: Path | None = None,
+                   fetcher: Callable[[], Release] = lambda: fetch_latest()) -> UpdateStatus:
+    """Return updater state without presentation or mutation."""
+    installation = detect_installation(executable)
+    release = fetcher()
+    return UpdateStatus(
+        installed_version=__version__,
+        available_version=release.version,
+        update_available=is_newer(release.version, __version__),
+        installation=installation,
+    )
+
+
 def is_newer(latest: str, installed: str) -> bool:
     """Compare release tags with PEP 440 parsing, never mixed Python types."""
     try:

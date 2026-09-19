@@ -147,8 +147,12 @@ def make_controller(backend=None, *, existing=None):
         (SetupSection.DPI, SetupSection.HARDWARE),
         (SetupSection.POLLING, SetupSection.DPI),
         (SetupSection.BUTTONS, SetupSection.POLLING),
-        (SetupSection.SERVICE, SetupSection.BUTTONS),
-        (SetupSection.REVIEW, SetupSection.SERVICE),
+        (SetupSection.LIGHTING, SetupSection.BUTTONS),
+        (SetupSection.SERVICE, SetupSection.LIGHTING),
+        (SetupSection.UPDATE, SetupSection.SERVICE),
+        (SetupSection.TOOLS, SetupSection.UPDATE),
+        (SetupSection.ABOUT, SetupSection.TOOLS),
+        (SetupSection.REVIEW, SetupSection.ABOUT),
     ],
 )
 def test_back_from_every_screen_is_logical(section, previous):

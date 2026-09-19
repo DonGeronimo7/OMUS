@@ -22,6 +22,16 @@ def future_release_version():
     return f"{major}.{minor}.{micro + 1}"
 
 
+def test_inspect_update_is_presentation_free_and_reuses_canonical_detection(monkeypatch):
+    installation = updater.Installation("source", Path("/tmp/mouse-control"))
+    monkeypatch.setattr(updater, "detect_installation", lambda _path=None: installation)
+    status = updater.inspect_update(fetcher=lambda: release(future_release_version()))
+    assert status.installation is installation
+    assert status.installed_version == updater.__version__
+    assert status.available_version == future_release_version()
+    assert status.update_available
+
+
 def asset(name, version="0.8.0"):
     return {
         "name": name,
