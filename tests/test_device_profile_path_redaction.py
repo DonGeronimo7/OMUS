@@ -129,5 +129,5 @@ def test_sudo_profile_directory_uses_invoking_users_home(monkeypatch, tmp_path):
     )
 
     assert device_profiles.get_profile_directory() == (
-        tmp_path / ".local" / "share" / "mouse-control" / "devices"
+        tmp_path / ".local" / "share" / "omus" / "devices"
     )

@@ -1,4 +1,4 @@
-# Contributing to Mouse Control
+# Contributing to OMUS
 
 Contributions are welcome, especially hardware compatibility reports. This
 project needs reports from mice that work perfectly as much as reports of
@@ -33,7 +33,7 @@ cache contents, and unrelated USB devices. Review every file before posting and
 remove anything you do not want to share.
 
 Include the exact model, connection type, distribution, installation method,
-Mouse Control version, what discovery recognized, what worked or failed,
+OMUS version, what discovery recognized, what worked or failed,
 whether DPI/polling changes were observed, and reconnect behavior. Do not spend
 time manually collecting identifiers already present in the generated reports.
 

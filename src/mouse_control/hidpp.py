@@ -17,6 +17,8 @@ import threading
 import time
 from typing import Any, Callable, Protocol
 
+from .identity import canonical_directory
+
 LOG = logging.getLogger(__name__)
 LOGITECH_VENDOR_ID = 0x046D
 HIDPP_REPORT_IDS = {0x10, 0x11, 0x12}
@@ -92,9 +94,7 @@ class HidppError(RuntimeError):
 
 
 def get_hidpp_cache_path() -> Path:
-    cache_home = os.environ.get("XDG_CACHE_HOME")
-    root = Path(cache_home) if cache_home else Path.home() / ".cache"
-    return root / "mouse-control" / "hidpp-capabilities.json"
+    return canonical_directory("cache") / "hidpp-capabilities.json"
 
 
 def _cache_key(vendor_id: int, product_id: int) -> str:

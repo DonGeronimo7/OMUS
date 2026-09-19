@@ -1,6 +1,6 @@
-# Mouse Control visual identity
+# OMUS visual identity
 
-Mouse Control is terminal-native, CLI-first, Linux gaming hardware software
+OMUS is terminal-native, CLI-first, Linux gaming hardware software
 with an ASCII/monospace visual language. Its personality is technical, open
 source, Linux-native, understated, developer-friendly, and gaming-oriented.
 

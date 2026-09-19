@@ -1,4 +1,4 @@
-# Mouse Control security policy
+# OMUS security policy
 
 ## Reporting a vulnerability
 
@@ -80,7 +80,7 @@ could observe permitted mouse input or synthesize input through uinput.
 ## Privacy and network behavior
 
 Normal remapping, discovery, notifications, macros, and hardware control do not
-require network access. Mouse Control has no telemetry, analytics, crash-report
+require network access. OMUS has no telemetry, analytics, crash-report
 upload, credential access, browser/cookie access, or automatic trace/report
 upload. Network access is limited to the explicit update command and to release
 build/package-manager dependency retrieval. Support and discovery reports stay
@@ -92,7 +92,7 @@ persisted. Macros are declarative synthetic key/button/delay sequences; they do
 not execute commands, shells, or dynamic code.
 
 Live usbmon capture is explicit and target-selected. The kernel usbmon stream
-can contain traffic for other devices on the same bus; Mouse Control filters to
+can contain traffic for other devices on the same bus; OMUS filters to
 the selected bus/address immediately and does not persist, report, or transmit
 unrelated records. Root or suitably privileged usbmon access remains inherently
 sensitive.
@@ -108,7 +108,7 @@ installation separately supplies narrowly scoped udev rules.
 
 ## Limitations
 
-Mouse Control handles device reports, configuration, and learned evidence as
+OMUS handles device reports, configuration, and learned evidence as
 untrusted input and aims to fail closed, but no claim of absolute security is
 made. Physical validation applies only to the hardware named in the project
 records. Report suspected parser denial of service, identity confusion, stale

@@ -22,7 +22,7 @@ proposal for a rewrite, protocol expansion, or new peripheral class.
 | Remapping and input ownership | `remapper.py`, `keyboard_capture.py` |
 | DPI, polling, battery, notifications, tray | `read_only_dpi_cycle.py`, `notifications.py`, `battery.py`, `polling_*.py` |
 | Updating and release-version mapping | `updater.py`, `release_version.py` |
-| Packaging | `mouse-control.spec`, `debian/`, `PKGBUILD`, `packaging/appimage/`, `.github/workflows/` |
+| Packaging | `omus.spec`, `debian/`, `PKGBUILD`, `packaging/appimage/`, `.github/workflows/` |
 
 The normal path is: desktop entry → `mouse-control-launcher` → terminal →
 `mouse-control` → transient foreground supervisor → canonical curses TUI.

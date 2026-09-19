@@ -1,6 +1,6 @@
 # Development and change-control policy
 
-Mouse Control accepts focused, reviewable changes that preserve the established
+OMUS accepts focused, reviewable changes that preserve the established
 remapping and hardware-safety contracts. The repository, tests, recorded
 hardware evidence, and project status are authoritative when they differ from a
 discussion or proposal.

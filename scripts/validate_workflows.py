@@ -61,7 +61,7 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0",
     ),
     "release-artifacts.yml": (
-        "mouse-control-${version}.cdx.json",
+        "omus-${version}.cdx.json",
         "sha256sum --check --strict SHA256SUMS",
         "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2",
         "subject-checksums: release-assets/SHA256SUMS",
@@ -69,7 +69,7 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "gh workflow run virustotal-release.yml",
         "gh attestation download",
         "gh attestation verify",
-        "mouse-control-v${version}.intoto.jsonl",
+        "omus-v${version}.intoto.jsonl",
     ),
     "virustotal-release.yml": (
         "cssnr/virustotal-action@5edfa4c982eb0caec6d568ea27cf715269f5c23b # v2.0.0",

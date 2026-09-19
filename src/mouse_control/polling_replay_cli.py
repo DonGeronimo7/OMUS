@@ -177,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         grammar.raw_for_rate(args.target)
         node = matching_interface_node(profile, physical)
 
-        print("Mouse Control — Generic Polling Replay Laboratory")
+        print("OMUS — Generic Polling Replay Laboratory")
         print("=================================================")
         print(
             f"Device: {mouse.name} "

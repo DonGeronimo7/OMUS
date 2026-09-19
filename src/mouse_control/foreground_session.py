@@ -18,7 +18,7 @@ from .service import (
 )
 
 
-SESSION_UNIT = "mouse-control-foreground.service"
+SESSION_UNIT = "omus-foreground.service"
 SESSION_ENV = "MOUSE_CONTROL_FOREGROUND_SESSION"
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 
@@ -29,7 +29,7 @@ def _runtime_directory() -> Path:
 
 
 def _state_path() -> Path:
-    return _runtime_directory() / "mouse-control" / "foreground-session.json"
+    return _runtime_directory() / "omus" / "foreground-session.json"
 
 
 def _write_state(state: dict[str, object]) -> None:

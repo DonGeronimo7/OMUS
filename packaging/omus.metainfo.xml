@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.DonGeronimo7.OMUS</id>
+  <name>OMUS</name>
+  <summary>One Linux system for every mouse</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>OMUS is One Mouse Universal System: a Linux-native application for safely discovering, configuring, and remapping mice across vendors and protocols. Every mouse. One system.</p>
+  </description>
+  <launchable type="desktop-id">omus.desktop</launchable>
+  <provides><binary>omus</binary></provides>
+  <developer id="io.github.dongeronimo7.omus"><name>OMUS contributors</name></developer>
+  <content_rating type="oars-1.1"/>
+  <url type="homepage">https://github.com/DonGeronimo7/mouse-control</url>
+</component>

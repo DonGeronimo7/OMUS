@@ -192,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     original_dpi: int | None = None
     demonstrations: list[tuple[int, tuple[RawHidTraceEvent, ...]]] = []
 
-    print("Mouse Control — Raw DPI Write Demonstration")
+    print("OMUS — Raw DPI Write Demonstration")
     print("==========================================")
     print(
         f"Device: {selected.name} "

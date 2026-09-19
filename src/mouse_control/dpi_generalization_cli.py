@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         validate_numeric_generalization(operation, args.baseline, args.candidates)
         node = matching_interface_node(operation, physical)
 
-        print("Mouse Control — Unseen DPI Numeric Generalization")
+        print("OMUS — Unseen DPI Numeric Generalization")
         print("================================================")
         print(
             f"Device: {mouse.name} "

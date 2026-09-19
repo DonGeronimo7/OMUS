@@ -1,4 +1,25 @@
-# Mouse Control Project Status
+# OMUS Project Status
+
+## 2026-09-19 — OMUS v0.10.0 rebrand candidate
+
+- Public identity is OMUS (One Mouse Universal System), with canonical `omus`
+  and `omus-launcher` entry points and the tagline “Every mouse. One system.”
+- The `mouse-control` entry point and `mouse_control` Python namespace remain
+  compatibility surfaces backed by the same application dispatcher.
+- Config, data, and cache state migrate by atomic copy into XDG `omus`
+  directories only when the canonical directory is absent. Legacy state is
+  retained; existing canonical state wins; repeated startup is idempotent.
+- The canonical user unit is `omus.service`. Installation disables/stops the
+  legacy unit before enabling OMUS, preventing duplicate evdev/HID ownership.
+- RPM/DEB package transitions provide/replace the old package identity, and the
+  updater accepts both v0.9.9-era and OMUS artifact names from the unchanged
+  GitHub repository endpoint.
+- The approved transparent Omega/mouse PNG is packaged as `omus` at 16, 24,
+  32, 48, 64, 128, 256, and 512 pixels with true RGBA alpha.
+- Automated validation passes 1,153 tests. Wheel/sdist and Fedora RPM builds,
+  RPM `%check`, installed wheel command smoke tests, desktop validation, and
+  AppStream validation pass. Debian/AppImage tools are unavailable locally.
+- No HID/discovery/remapping architecture or hardware write authority changed.
 
 ## 2026-09-19 — v0.9.9 release candidate
 

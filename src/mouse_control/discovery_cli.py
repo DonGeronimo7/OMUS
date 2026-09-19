@@ -248,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         mode = (
             "Known protocol detectors are disabled; unknown HID remains read-only and native control is preserved."
             if args.generic_only
-            else "Unknown HID is read-only and the normal mouse-control runtime is not being reconfigured."
+            else "Unknown HID is read-only and the normal OMUS runtime is not being reconfigured."
         )
         if args.full_access:
             mode += " Root/full-evidence acquisition is required for all correlated HID siblings."

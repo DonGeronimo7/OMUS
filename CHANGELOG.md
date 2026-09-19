@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 — OMUS
+
+- Rebrand the public product as OMUS — One Mouse Universal System.
+- Add canonical `omus` command, desktop metadata, icons, packages, and service.
+- Preserve v0.9.9 configuration, state, commands, service behavior, and updater compatibility.
+
 ## 0.9.9 — 2026-09-19
 
 ### Complete canonical TUI

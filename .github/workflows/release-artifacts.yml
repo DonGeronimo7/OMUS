@@ -41,6 +41,7 @@ jobs:
         run: |
           python -m pip install --require-hashes --requirement requirements/runtime.lock.txt
           python -m pip install --no-deps dist/*.whl
+          omus cpi --help
           mouse-control cpi --help
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
@@ -60,8 +61,9 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir artifacts
-          mv ../mouse-control_*.deb artifacts/
-          sudo apt-get install -y ./artifacts/mouse-control_*.deb
+          mv ../omus_*.deb artifacts/
+          sudo apt-get install -y ./artifacts/omus_*.deb
+          omus cpi --help
           mouse-control cpi --help
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
@@ -77,14 +79,14 @@ jobs:
         with:
           persist-credentials: false
       - run: dnf -y install dnf-plugins-core rpm-build rpmdevtools
-      - run: dnf -y builddep mouse-control.spec
+      - run: dnf -y builddep omus.spec
       - run: |
           python3 -m build --sdist
-          rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
+          rpmbuild -ba omus.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: fedora-rpm
-          path: rpms/noarch/mouse-control-*.rpm
+          path: rpms/noarch/omus-*.rpm
           if-no-files-found: error
 
   appimage:
@@ -105,14 +107,14 @@ jobs:
         run: ARCH=x86_64 sh packaging/appimage/build-appimage.sh
       - name: Smoke-test AppImage
         run: |
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --version
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage --help
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage cpi --help
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Mouse-Control-*-x86_64.AppImage update --check
+          APPIMAGE_EXTRACT_AND_RUN=1 ./OMUS-*-x86_64.AppImage --version
+          APPIMAGE_EXTRACT_AND_RUN=1 ./OMUS-*-x86_64.AppImage --help
+          APPIMAGE_EXTRACT_AND_RUN=1 ./OMUS-*-x86_64.AppImage cpi --help
+          APPIMAGE_EXTRACT_AND_RUN=1 ./OMUS-*-x86_64.AppImage update --check
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: appimage
-          path: Mouse-Control-*.AppImage
+          path: OMUS-*.AppImage
           if-no-files-found: error
 
   publish:
@@ -144,42 +146,42 @@ jobs:
           package_release=$(release_field rpm-release)
           python_version=$(release_field python-version)
           test "$GITHUB_REF_NAME" = "v${version}"
-          test -f "release-assets/mouse-control-${base_version}-${package_release}.fc44.noarch.rpm"
-          test -f "release-assets/mouse-control_${version}_all.deb"
-          test -f "release-assets/Mouse-Control-${version}-x86_64.AppImage"
-          test -f "release-assets/mouse_control-${python_version}-py3-none-any.whl"
-          test -f "release-assets/mouse_control-${python_version}.tar.gz"
+          test -f "release-assets/omus-${base_version}-${package_release}.fc44.noarch.rpm"
+          test -f "release-assets/omus_${version}_all.deb"
+          test -f "release-assets/OMUS-${version}-x86_64.AppImage"
+          test -f "release-assets/omus-${python_version}-py3-none-any.whl"
+          test -f "release-assets/omus-${python_version}.tar.gz"
           find release-assets -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort > /tmp/release-files
           printf '%s\n' \
-            "Mouse-Control-${version}-x86_64.AppImage" \
-            "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
-            "mouse-control_${version}_all.deb" \
-            "mouse_control-${python_version}-py3-none-any.whl" \
-            "mouse_control-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
+            "OMUS-${version}-x86_64.AppImage" \
+            "omus-${base_version}-${package_release}.fc44.noarch.rpm" \
+            "omus_${version}_all.deb" \
+            "omus-${python_version}-py3-none-any.whl" \
+            "omus-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
           diff -u /tmp/expected-files /tmp/release-files
           ls -lah release-assets
       - name: Generate project dependency SBOM
         id: sbom
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          python3 -m venv /tmp/mouse-control-sbom-tool
-          /tmp/mouse-control-sbom-tool/bin/python -m pip install --require-hashes --requirement requirements/sbom.lock.txt
-          python3 -m venv /tmp/mouse-control-release-environment
-          /tmp/mouse-control-release-environment/bin/python -m pip install --require-hashes --requirement requirements/runtime.lock.txt
-          /tmp/mouse-control-release-environment/bin/python -m pip install --no-deps release-assets/*.whl
-          /tmp/mouse-control-release-environment/bin/python -m pip uninstall --yes pip setuptools
-          /tmp/mouse-control-sbom-tool/bin/cyclonedx-py environment \
-            /tmp/mouse-control-release-environment/bin/python \
+          python3 -m venv /tmp/omus-sbom-tool
+          /tmp/omus-sbom-tool/bin/python -m pip install --require-hashes --requirement requirements/sbom.lock.txt
+          python3 -m venv /tmp/omus-release-environment
+          /tmp/omus-release-environment/bin/python -m pip install --require-hashes --requirement requirements/runtime.lock.txt
+          /tmp/omus-release-environment/bin/python -m pip install --no-deps release-assets/*.whl
+          /tmp/omus-release-environment/bin/python -m pip uninstall --yes pip setuptools
+          /tmp/omus-sbom-tool/bin/cyclonedx-py environment \
+            /tmp/omus-release-environment/bin/python \
             --pyproject pyproject.toml \
             --mc-type application \
             --spec-version 1.6 \
             --output-reproducible \
             --output-format JSON \
-            --output-file "release-assets/mouse-control-${version}.cdx.json"
+            --output-file "release-assets/omus-${version}.cdx.json"
           python3 scripts/finalize_cyclonedx_sbom.py \
-            "release-assets/mouse-control-${version}.cdx.json" "$version"
-          python3 -m json.tool "release-assets/mouse-control-${version}.cdx.json" >/dev/null
-          printf 'path=release-assets/mouse-control-%s.cdx.json\n' "$version" >> "$GITHUB_OUTPUT"
+            "release-assets/omus-${version}.cdx.json" "$version"
+          python3 -m json.tool "release-assets/omus-${version}.cdx.json" >/dev/null
+          printf 'path=release-assets/omus-%s.cdx.json\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Finalize and verify release checksums
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
@@ -189,12 +191,12 @@ jobs:
           python_version=$(release_field python-version)
           find release-assets -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort > /tmp/release-files
           printf '%s\n' \
-            "Mouse-Control-${version}-x86_64.AppImage" \
-            "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
-            "mouse-control-${version}.cdx.json" \
-            "mouse-control_${version}_all.deb" \
-            "mouse_control-${python_version}-py3-none-any.whl" \
-            "mouse_control-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
+            "OMUS-${version}-x86_64.AppImage" \
+            "omus-${base_version}-${package_release}.fc44.noarch.rpm" \
+            "omus-${version}.cdx.json" \
+            "omus_${version}_all.deb" \
+            "omus-${python_version}-py3-none-any.whl" \
+            "omus-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-files
           diff -u /tmp/expected-files /tmp/release-files
           (cd release-assets && sha256sum * > SHA256SUMS)
           (cd release-assets && sha256sum --check --strict SHA256SUMS)
@@ -213,8 +215,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          provenance="release-assets/mouse-control-v${version}.intoto.jsonl"
-          subject="release-assets/mouse-control-${version}.cdx.json"
+          provenance="release-assets/omus-v${version}.intoto.jsonl"
+          subject="release-assets/omus-${version}.cdx.json"
           bundle_dir=$(mktemp -d)
           trap 'rm -rf "$bundle_dir"' EXIT
           for attempt in 1 2 3 4 5; do
@@ -249,7 +251,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Mouse Control $GITHUB_REF_NAME" \
+            --title "OMUS $GITHUB_REF_NAME" \
             --notes-file release-body.md \
             --verify-tag
 

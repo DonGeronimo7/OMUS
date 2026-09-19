@@ -17,7 +17,7 @@ the external Best Practices project and answer every criterion accurately.
 | Dependency management | Reviewed `requirements/*.in`, hash-checked locks, Dependabot, and the scheduled audit workflow |
 | Release integrity | Signed tags, exact checksums, SBOMs, SLSA provenance, and `docs/SECURITY_SUPPLY_CHAIN.md` |
 | Versioning and release notes | `CHANGELOG.md`, GitHub Releases, and version checks in the release workflow |
-| Cryptography | Mouse Control does not implement a custom cryptographic protocol; transport and artifact verification use maintained TLS, GitHub/Sigstore, and package-manager implementations |
+| Cryptography | OMUS does not implement a custom cryptographic protocol; transport and artifact verification use maintained TLS, GitHub/Sigstore, and package-manager implementations |
 
 ## Owner-maintained external evidence
 

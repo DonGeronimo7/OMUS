@@ -12,7 +12,7 @@ PROJECT_ID = "https://github.com/DonGeronimo7/mouse-control"
 
 
 def finalize(path: Path, version: str) -> str:
-    """Validate and finalize a reproducible Mouse Control CycloneDX document."""
+    """Validate and finalize a reproducible OMUS CycloneDX document."""
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("bomFormat") != "CycloneDX" or not document.get("specVersion"):
         raise ValueError("expected a CycloneDX JSON document with a specVersion")

@@ -1,4 +1,4 @@
-# Mouse Control Python Performance
+# OMUS Python Performance
 
 ## Measurement rules
 
@@ -157,7 +157,7 @@ split was justified by the profiles.
 
 ## Wireless wake instrumentation — 2026-09-18
 
-The runtime now measures only Mouse Control's contribution after Linux-visible
+The runtime now measures only OMUS's contribution after Linux-visible
 wake evidence:
 
 - T0: first matching kernel/udev return event, evdev input, or HID input report;

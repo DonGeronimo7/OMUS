@@ -1,6 +1,6 @@
 """Universal mouse hardware backend powered by Automatic Discovery.
 
-Every selected mouse is represented to the rest of Mouse Control through this
+Every selected mouse is represented to the rest of OMUS through this
 backend.  Discovery owns identity, passive evidence, learned read-side grammar,
 and capability exposure.  Proven vendor/protocol implementations are internal
 adapters: they may provide validated reads/writes, but callers no longer select

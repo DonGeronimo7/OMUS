@@ -121,19 +121,19 @@ def test_branding_is_monochrome_for_dumb_terminal(monkeypatch):
 
 
 def test_branding_uses_compact_or_no_logo_in_narrow_terminal():
-    assert "MOUSE CONTROL" in render_banner(columns=20, stream=TtyBuffer())
-    assert "MOUSE CONTROL" in render_banner(columns=8, stream=TtyBuffer())
+    assert "OMUS" in render_banner(columns=20, stream=TtyBuffer())
+    assert "OMUS" in render_banner(columns=8, stream=TtyBuffer())
 
 
 def test_desktop_entry_is_launcher_safe_and_complete():
     fields = {}
-    for line in (ROOT / "packaging/appimage/mouse-control.desktop").read_text().splitlines():
+    for line in (ROOT / "packaging/appimage/omus.desktop").read_text().splitlines():
         if "=" in line:
             key, value = line.split("=", 1)
             fields[key] = value
     assert fields["Type"] == "Application"
-    assert fields["Exec"] == "mouse-control-launcher"
-    assert fields["Icon"] == "mouse-control"
+    assert fields["Exec"] == "omus-launcher"
+    assert fields["Icon"] == "omus"
     assert fields["Terminal"] == "false"
     assert fields["Categories"] == "Utility;System;"
 
@@ -143,13 +143,13 @@ def test_all_packaged_interactive_launchers_use_application_entry():
         scripts = tomllib.load(handle)["project"]["scripts"]
     assert scripts["mouse-control"] == "mouse_control.app:main"
     assert scripts["mouse-control-launcher"] == "mouse_control.graphical_launcher:main"
-    assert sum(target == "mouse_control.app:main" for target in scripts.values()) == 1
+    assert scripts["omus"] == scripts["mouse-control"] == "mouse_control.app:main"
     assert all("setup_tui" not in target for target in scripts.values())
 
     appimage = (ROOT / "packaging/appimage/build-appimage.sh").read_text()
     assert 'exec "$appdir/usr/python/bin/python3" -m mouse_control "$@"' in appimage
     assert '-m mouse_control.graphical_launcher' in appimage
-    assert "MOUSE_CONTROL_APPIMAGE" in appimage
+    assert "OMUS_APPIMAGE" in appimage
     assert "-m mouse_control.cli" not in appimage
     assert not (ROOT / "packaging/mouse-control").exists()
     assert not hasattr(cli, "run_home_screen")
@@ -157,20 +157,20 @@ def test_all_packaged_interactive_launchers_use_application_entry():
 
 def test_package_definitions_own_desktop_entry_and_icon():
     assert list((ROOT / "packaging").rglob("*.desktop")) == [
-        ROOT / "packaging/appimage/mouse-control.desktop"
+        ROOT / "packaging/appimage/omus.desktop"
     ]
     debian = (ROOT / "debian/install").read_text()
-    rpm = (ROOT / "mouse-control.spec").read_text()
+    rpm = (ROOT / "omus.spec").read_text()
     arch = (ROOT / "PKGBUILD").read_text()
     for packaging in (debian, rpm, arch):
-        assert "mouse-control.desktop" in packaging
-        assert "mouse-control.png" in packaging
+        assert "omus.desktop" in packaging
+        assert "omus.png" in packaging
 
 
 def test_approved_png_icon_sizes_are_packaged_with_alpha():
-    expected_sizes = (512, 256, 128, 64, 48, 32)
+    expected_sizes = (512, 256, 128, 64, 48, 32, 24, 16)
     for size in expected_sizes:
-        icon = ROOT / f"assets/icons/hicolor/{size}x{size}/apps/mouse-control.png"
+        icon = ROOT / f"assets/icons/hicolor/{size}x{size}/apps/omus.png"
         assert icon.is_file()
         with icon.open("rb") as handle:
             header = handle.read(29)

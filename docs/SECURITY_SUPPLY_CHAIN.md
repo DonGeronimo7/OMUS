@@ -1,6 +1,6 @@
 # Release supply-chain security
 
-Mouse Control release workflows keep the default token read-only. The release
+OMUS release workflows keep the default token read-only. The release
 publication job alone receives narrowly scoped permission to publish the GitHub
 Release and create keyless GitHub artifact attestations. Release triggering
 separates validation, tag creation, and workflow dispatch so write permissions
@@ -32,7 +32,7 @@ entry against the expected repository, workflow, source commit, source ref, and
 SLSA predicate before release publication. It never synthesizes provenance.
 
 The published `mouse-control-VERSION.cdx.json` is a reproducible CycloneDX 1.6
-inventory of the installed Mouse Control wheel and its resolved Python runtime
+inventory of the installed OMUS wheel and its resolved Python runtime
 dependencies. The same SBOM is bound to the wheel, sdist, RPM, DEB, and AppImage
 digests through an SBOM attestation.
 

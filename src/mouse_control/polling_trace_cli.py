@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         original_rate = driver.get_report_rate()
         trace.clear()
 
-        print("Mouse Control — Raw Polling Write Demonstration")
+        print("OMUS — Raw Polling Write Demonstration")
         print("==============================================")
         print(
             f"Device: {mouse.name} "

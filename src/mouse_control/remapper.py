@@ -336,7 +336,7 @@ class MouseRemapper:
             self._macro_cancel.clear()
             self._macro_queue = queue.Queue()
             self._macro_thread = threading.Thread(
-                target=self._macro_worker, name="mouse-control-macros", daemon=True
+                target=self._macro_worker, name="omus-macros", daemon=True
             )
             self._macro_thread.start()
 
@@ -514,7 +514,7 @@ class MouseRemapper:
                         continue
                     if self.ui is None:
                         self.ui = UInput(self._capabilities(),
-                                        name=f"mouse-control: {self.device.name}")
+                                        name=f"omus: {self.device.name}")
                     if disconnected:
                         LOG.info("Mouse reconnected at %s", self.device.path)
                         if self.wake_coordinator is not None:

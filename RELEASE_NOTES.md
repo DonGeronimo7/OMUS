@@ -1,3 +1,20 @@
+# OMUS v0.10.0
+
+OMUS is One Mouse Universal System: the public successor to Mouse Control.
+This release introduces the `omus` command, OMUS desktop identity and canonical
+artwork, lossless/idempotent migration from legacy configuration, data, and
+cache paths, and package transitions that preserve upgrades from v0.9.9. The
+`mouse-control` command and `mouse_control` Python namespace remain compatible.
+
+The canonical service is `omus.service`. Installing it disables the legacy
+unit before enabling OMUS so only one remapper owns evdev/HID resources.
+Hardware write authority, discovery gates, remapping, reconnect behavior,
+DPI/polling, and independent notification replacement IDs are unchanged.
+
+Primary artifacts are `omus-0.10.0-1.fc44.noarch.rpm`,
+`omus_0.10.0_all.deb`, `OMUS-0.10.0-x86_64.AppImage`,
+`omus-0.10.0-py3-none-any.whl`, and `omus-0.10.0.tar.gz`.
+
 # Mouse Control v0.9.9
 
 Mouse Control v0.9.9 completes the canonical full-screen product experience,

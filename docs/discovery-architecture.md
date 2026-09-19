@@ -1,6 +1,6 @@
 # Automatic Hardware Discovery
 
-Mouse Control discovery treats a mouse as a physical graph of evdev and hidraw
+OMUS discovery treats a mouse as a physical graph of evdev and hidraw
 interfaces rather than as one `/dev` node. Device paths are live interfaces,
 not persistent identities.
 
@@ -37,7 +37,7 @@ VID:PID, a changing byte, or a successful read-side correlation alone.
 
 ## Evidence levels
 
-Mouse Control keeps four evidence levels distinct:
+OMUS keeps four evidence levels distinct:
 
 - `OBSERVED`: a fact was directly seen.
 - `CORRELATED`: a raw field/report repeatedly tracks a demonstrated behavior.
@@ -69,7 +69,7 @@ uses raw evdev relative motion and does not grant protocol write authority.
 DPI learning uses the physical sensor as an independent oracle rather than
 assuming a vendor register is available.
 
-For a ruler pass, Mouse Control:
+For a ruler pass, OMUS:
 
 - exclusively captures the selected physical evdev stream;
 - preserves kernel event timestamps for polling estimation;
@@ -118,7 +118,7 @@ Volatile `/dev` paths are rejected from persisted profiles.
 
 ## Native protocol knowledge and discovery repertoire
 
-Mouse Control's protocol knowledge has two deliberately different roles:
+OMUS's protocol knowledge has two deliberately different roles:
 
 1. **Runtime protocol adapters** may execute operations after exact identity,
    responder ownership, operation semantics, and verification requirements are

@@ -1,4 +1,4 @@
-"""Desktop launcher for the canonical terminal-native Mouse Control TUI."""
+"""Desktop launcher for the canonical terminal-native OMUS TUI."""
 
 from __future__ import annotations
 
@@ -26,12 +26,12 @@ TERMINAL_CANDIDATES = (
 
 
 def _mouse_control_command() -> list[str]:
-    appimage = os.environ.get("MOUSE_CONTROL_APPIMAGE")
+    appimage = os.environ.get("OMUS_APPIMAGE") or os.environ.get("MOUSE_CONTROL_APPIMAGE")
     if appimage:
         candidate = Path(appimage)
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return [str(candidate)]
-    executable = shutil.which("mouse-control")
+    executable = shutil.which("omus") or shutil.which("mouse-control")
     if executable:
         return [executable]
     return [sys.executable, "-m", "mouse_control"]
@@ -60,21 +60,21 @@ def _terminal_command(terminal: list[str], command: list[str]) -> list[str]:
     if name == "xdg-terminal-exec":
         return [*prefix, "--", *command]
     if name == "kitty":
-        return [*prefix, "--class", "MouseControl", "--title", "Mouse Control", *command]
+        return [*prefix, "--class", "OMUS", "--title", "OMUS", *command]
     if name == "foot":
-        return [*prefix, "--app-id=mouse-control", "--title=Mouse Control", *command]
+        return [*prefix, "--app-id=omus", "--title=OMUS", *command]
     if name == "alacritty":
-        return [*prefix, "--class", "MouseControl,MouseControl", "--title", "Mouse Control", "-e", *command]
+        return [*prefix, "--class", "OMUS,OMUS", "--title", "OMUS", "-e", *command]
     if name == "wezterm":
-        return [*prefix, "start", "--class", "MouseControl", "--always-new-process", "--", *command]
+        return [*prefix, "start", "--class", "OMUS", "--always-new-process", "--", *command]
     if name in {"gnome-terminal", "kgx", "mate-terminal"}:
-        return [*prefix, "--title=Mouse Control", "--", *command]
+        return [*prefix, "--title=OMUS", "--", *command]
     if name == "konsole":
-        return [*prefix, "--new-tab", "-p", "tabtitle=Mouse Control", "-e", *command]
+        return [*prefix, "--new-tab", "-p", "tabtitle=OMUS", "-e", *command]
     if name == "xfce4-terminal":
-        return [*prefix, "--title=Mouse Control", "--execute", *command]
+        return [*prefix, "--title=OMUS", "--execute", *command]
     if name == "xterm":
-        return [*prefix, "-T", "Mouse Control", "-e", *command]
+        return [*prefix, "-T", "OMUS", "-e", *command]
     # A user-supplied terminal takes precedence even when it is not one of the
     # recognized candidates.  The conventional -e interface is the only safe
     # generic contract available for that explicit override.
@@ -97,7 +97,7 @@ def _report_error(message: str) -> None:
     notifier = shutil.which("notify-send")
     if notifier:
         subprocess.run(
-            [notifier, "Mouse Control", message],
+            [notifier, "OMUS", message],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -108,7 +108,7 @@ def main() -> int:
     terminal = select_terminal()
     if terminal is None:
         _report_error(
-            "Mouse Control requires a terminal emulator for its setup interface. "
+            "OMUS requires a terminal emulator for its setup interface. "
             "Install a supported terminal or set $TERMINAL."
         )
         return 1
@@ -116,7 +116,7 @@ def main() -> int:
     try:
         subprocess.Popen(arguments, close_fds=True, start_new_session=True)
     except OSError as exc:
-        _report_error(f"Mouse Control could not start the terminal: {exc}")
+        _report_error(f"OMUS could not start the terminal: {exc}")
         return 1
     return 0
 

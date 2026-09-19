@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     if selected is None:
         return status
 
-    print("Mouse Control — Physically Calibrated DPI Discovery")
+    print("OMUS — Physically Calibrated DPI Discovery")
     print("===================================================")
     print(f"Device: {selected.name} [{(selected.vendor or 0):04x}:{(selected.product or 0):04x}]")
     print("Native protocol teacher: OFF")

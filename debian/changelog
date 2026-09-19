@@ -1,3 +1,9 @@
+omus (0.10.0) unstable; urgency=medium
+
+  * Rebrand as OMUS with lossless legacy configuration and command compatibility.
+
+ -- Marc-A. Geronimo <noreply@example.com>  Sat, 19 Sep 2026 12:00:00 -0400
+
 mouse-control (0.9.9) unstable; urgency=medium
 
   * Complete the canonical TUI, updater, service controls, and CLI parity.

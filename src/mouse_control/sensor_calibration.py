@@ -480,7 +480,7 @@ def capture_evdev_motion(
             device.close()
             raise CalibrationError(
                 "could not exclusively grab the physical mouse event stream; "
-                "stop mouse-control and any other program that has grabbed the mouse, "
+                "stop OMUS and any other program that has grabbed the mouse, "
                 "then retry calibration"
             ) from exc
 

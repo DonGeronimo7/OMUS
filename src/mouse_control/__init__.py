@@ -1,3 +1,3 @@
-"""Mouse Control: a headless Linux mouse remapper."""
+"""OMUS: One Mouse Universal System."""
 
-__version__ = "0.9.9"
+__version__ = "0.10.0"

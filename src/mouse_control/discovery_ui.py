@@ -130,7 +130,7 @@ def render_discovery_result(
     """Render one discovery result for a terminal hardware test."""
 
     lines = [
-        "Mouse Control Automatic Hardware Discovery",
+        "OMUS Automatic Hardware Discovery",
         "=" * 42,
         f"Device: {result.device.name} [{_identity(result)}]",
         f"Interfaces: {len(result.device.evdev_nodes)} evdev, {len(result.device.hidraw_nodes)} hidraw",

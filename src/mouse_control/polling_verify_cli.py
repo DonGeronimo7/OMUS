@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
         original_mode = driver.get_control_mode()
         original_rate = driver.get_report_rate()
 
-        print("Mouse Control — Polling Physical Verification")
+        print("OMUS — Polling Physical Verification")
         print("=============================================")
         print(f"Device: {mouse.name} [{(mouse.vendor or 0):04x}:{(mouse.product or 0):04x}]")
         print(f"Original polling/control state: {original_rate} Hz, mode 0x{original_mode:02x}")

@@ -133,7 +133,7 @@ def test_supported_install_owners_keep_their_updater_owned_labels_and_action():
         controller.apply_update_status(_status(kind))
         text = "\n".join(row.text for row in controller.detail_rows())
         assert f"Installation type: {label}" in text
-        assert "Update Mouse Control" in text
+        assert "Update OMUS" in text
 
     for kind in ("source", "unknown", "arch"):
         controller, _ = make_controller()

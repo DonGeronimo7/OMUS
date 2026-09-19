@@ -378,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
         onboard_grammar = operation.replay_grammar(PollingControlState.ONBOARD)
         host_grammar = operation.replay_grammar(PollingControlState.HOST)
 
-        print("Mouse Control — Polling State-Machine Promotion")
+        print("OMUS — Polling State-Machine Promotion")
         print("================================================")
         print(
             f"Device: {mouse.name} "

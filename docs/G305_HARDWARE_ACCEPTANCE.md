@@ -40,7 +40,7 @@ or protocol reasoning. Record the operator's observed result for each step.
 5. Follow service logs in a second terminal with
    `journalctl --user -u mouse-control.service -f`.
 
-Do not use tools that write onboard profile sectors. Mouse Control should make
+Do not use tools that write onboard profile sectors. OMUS should make
 only live mode, report-rate, and adjustable-DPI changes.
 
 ## Polling transaction
