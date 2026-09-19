@@ -134,6 +134,8 @@ def test_source_archive_includes_repository_security_scripts():
 
 def test_release_finalizes_reproducible_cyclonedx_for_attestation():
     workflow = _text(".github/workflows/release-artifacts.yml")
+    publish = workflow.split("  publish:", 1)[1]
+    assert "python-version: '3.14'" in publish
     assert "scripts/finalize_cyclonedx_sbom.py" in workflow
     assert workflow.index("cyclonedx-py environment") < workflow.index(
         "scripts/finalize_cyclonedx_sbom.py"
