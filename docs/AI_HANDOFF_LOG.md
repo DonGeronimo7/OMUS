@@ -1,5 +1,22 @@
 # AI handoff log
 
+## 2026-09-19 — G305 physical motion/wake acceptance evidence
+
+- Inspected operator-provided `motion-A/B/C.json` and `motion-wake.json` from
+  Fedora 44 on stabilization commit `5a1997f`. All four reports are internally
+  consistent with the supplied terminal results and report PASS.
+- Workloads A/B/C plus the ten-wake run contain 99,932 matched physical/virtual
+  motion frames and 160,291 matched events with every integrity failure counter
+  zero. B sustained about 992.6 effective frames/second.
+- Ten genuine hardware wake trials recorded first virtual input at minimum
+  0.086 ms, median 0.129 ms, and p95/p99/maximum 0.207 ms. Motion transparency
+  remained PASS; native polling mode preservation and 3000 DPI reconciliation
+  were observed.
+- Committed a privacy-safe checksum-backed evidence summary. The 36 MB raw frame
+  streams remain ignored local diagnostic artifacts because they add timestamps
+  and bulk but no stronger repository claim. No code, hardware authority, tag,
+  release, merge, push, or main-branch change occurred in this checkpoint.
+
 ## 2026-09-19 — Final pre-Rust input-path stabilization
 
 - Investigation found that the event-driven wake work in `f52a9e2` used one

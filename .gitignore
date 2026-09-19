@@ -17,3 +17,4 @@ work-rpmroot-log/
 .dnf-log/
 work-rpm-spec/
 work-rpm-build/
+/motion-*.json

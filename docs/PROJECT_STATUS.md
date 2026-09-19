@@ -1,5 +1,17 @@
 # OMUS Project Status
 
+## 2026-09-19 — G305 physical motion/wake acceptance
+
+- Operator-provided Fedora 44 evidence from the exact stabilization commit
+  physically validates workloads A/B/C and a ten-cycle genuine G305 wake soak.
+- Across 99,932 physical motion frames and 160,291 motion events, virtual counts
+  matched exactly with zero loss, duplication, modification, ordering,
+  coalescing, framing, `SYN_DROPPED`, batching, or latency-spike findings.
+- Ten wake trials recovered first virtual input in 0.086–0.207 ms (median
+  0.129 ms) with motion transparency retained. Native polling mode was
+  preserved and 3000 DPI reconciliation succeeded through the Native HID
+  adapter. Scope remains the exact Logitech G305 reference device.
+
 ## 2026-09-19 — Motion-frame transparency correction
 
 - The production remapper now buffers each physical evdev frame and emits one
