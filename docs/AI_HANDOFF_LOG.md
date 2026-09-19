@@ -1,5 +1,18 @@
 # AI handoff log
 
+## 2026-09-19 — v0.9.9 SBOM publication environment correction
+
+- The first v0.9.9 artifact run built and tested Python 3.12/3.13/3.14, wheel,
+  DEB, RPM, and AppImage successfully, then stopped before publication while
+  installing the hash-locked SBOM tool environment.
+- Root cause: the SBOM lock was generated for Python 3.14, while the publish job
+  used the Ubuntu runner's default Python 3.12. A Python-version-conditional
+  `typing_extensions` dependency was therefore absent from the reviewed lock
+  and hash enforcement correctly refused the install.
+- Correction: publish tools now use the same immutable-pinned setup-python 3.14
+  environment as the release's Python build. Dependency hashes and the release
+  artifact set are unchanged; no lock weakening or unpinned install was added.
+
 ## 2026-09-19 — v0.9.9 release candidate and VirusTotal gate
 
 - Advanced canonical release metadata from v0.9.8 to v0.9.9 and documented the
