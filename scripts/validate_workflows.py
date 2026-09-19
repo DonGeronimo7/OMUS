@@ -47,6 +47,7 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "python -m pip_audit --local --strict --progress-spinner off",
     ),
     "scorecard.yml": (
+        "branch_protection_rule:",
         "publish_results: true",
         "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4",
         "github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0",
