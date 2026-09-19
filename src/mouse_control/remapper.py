@@ -8,6 +8,7 @@ import queue
 import select
 import signal
 import threading
+import time
 from typing import Any
 import logging
 
@@ -209,7 +210,8 @@ class MouseRemapper:
                  retry_interval: float = 0.5,
                  event_observer: Any | None = None,
                  macros: object = None,
-                 wake_coordinator: Any | None = None) -> None:
+                 wake_coordinator: Any | None = None,
+                 motion_diagnostic: Any | None = None) -> None:
         self.device_path = device_path
         # An evdev event node is disposable.  Keep the selected mouse's
         # discovery identity separately so a changed eventN can be rebound.
@@ -237,6 +239,7 @@ class MouseRemapper:
         self.retry_interval = retry_interval
         self.event_observer = event_observer
         self.wake_coordinator = wake_coordinator
+        self.motion_diagnostic = motion_diagnostic
         self._pressed_keys: set[int] = set()
         self._held_chords: set[int] = set()
         self._chord_key_counts: dict[int, int] = {}
@@ -245,6 +248,8 @@ class MouseRemapper:
         self._macro_queue: queue.Queue[tuple[MacroStep, ...] | None] = queue.Queue()
         self._macro_cancel = threading.Event()
         self._macro_thread: threading.Thread | None = None
+        self._pending_frame: list[tuple[int, int, int]] = []
+        self._discard_until_syn_report = False
 
     def _capabilities(self) -> dict[int, list[int]]:
         assert self.device is not None
@@ -281,6 +286,9 @@ class MouseRemapper:
         with output_lock:
             assert self.ui is not None
             self.ui.write(event_type, code, value)
+            motion_diagnostic = getattr(self, "motion_diagnostic", None)
+            if motion_diagnostic is not None:
+                motion_diagnostic.virtual_event(event_type, code, value)
             if event_type == ecodes.EV_KEY:
                 pressed_keys = getattr(self, "_pressed_keys", None)
                 if pressed_keys is None:
@@ -446,14 +454,26 @@ class MouseRemapper:
         self.device.close()
         self.device = None
 
-    def _handle(self, event_type: int, code: int, value: int) -> None:
+    def _observe_event(self, event_type: int, code: int, value: int) -> None:
         observe = getattr(getattr(self, "event_observer", None), "observe_evdev_event", None)
         if callable(observe):
             try:
                 observe(event_type, code, value)
             except Exception as exc:
                 LOG.warning("Calibrated evdev observation failed: %s", exc)
+
+    def _invalidate_observer_continuity(self) -> None:
+        invalidate = getattr(
+            self.event_observer, "invalidate_observer_continuity", None
+        )
+        if callable(invalidate):
+            invalidate()
+
+    def _handle(self, event_type: int, code: int, value: int) -> None:
+        self._observe_event(event_type, code, value)
         if event_type == ecodes.EV_SYN:
+            if code not in {ecodes.SYN_REPORT, ecodes.SYN_DROPPED}:
+                self._emit(event_type, code, value)
             return
         if event_type != ecodes.EV_KEY:
             self._emit(event_type, code, value)
@@ -477,6 +497,63 @@ class MouseRemapper:
             self._handle_chord(code, action, value)
         elif action.code is not None:
             self._emit(ecodes.EV_KEY, action.code, value)
+
+    def _process_event(
+        self,
+        event_type: int,
+        code: int,
+        value: int,
+        *,
+        timestamp_ns: int | None = None,
+        arrival_ns: int | None = None,
+    ) -> bool:
+        """Buffer and forward one physical evdev frame.
+
+        Return True after a complete, usable physical frame was emitted.  A
+        SYN_DROPPED marker means the kernel client queue overflowed: the
+        incomplete frame and all events through the next SYN_REPORT are not
+        trustworthy and must not reach uinput.
+        """
+        if event_type == ecodes.EV_SYN and code == ecodes.SYN_DROPPED:
+            self._observe_event(event_type, code, value)
+            self._pending_frame.clear()
+            self._discard_until_syn_report = True
+            if self.motion_diagnostic is not None:
+                self.motion_diagnostic.dropped()
+            self._invalidate_observer_continuity()
+            self._stop_macros()
+            self._release_pressed_keys()
+            LOG.warning("Input events dropped; discarding through the next SYN_REPORT")
+            return False
+
+        if self._discard_until_syn_report:
+            if event_type == ecodes.EV_SYN and code == ecodes.SYN_REPORT:
+                self._discard_until_syn_report = False
+            return False
+
+        if event_type == ecodes.EV_SYN and code == ecodes.SYN_REPORT:
+            now_ns = time.monotonic_ns() if arrival_ns is None else arrival_ns
+            if self.motion_diagnostic is not None:
+                self.motion_diagnostic.physical_frame(
+                    self._pending_frame,
+                    now_ns if timestamp_ns is None else timestamp_ns,
+                    now_ns,
+                )
+            for pending_type, pending_code, pending_value in self._pending_frame:
+                self._handle(pending_type, pending_code, pending_value)
+            self._pending_frame.clear()
+            self._handle(event_type, code, value)
+            assert self.ui is not None
+            self.ui.syn()
+            if self.motion_diagnostic is not None:
+                self.motion_diagnostic.virtual_frame(time.monotonic_ns())
+            return True
+
+        # Other synchronization codes, including SYN_MT_REPORT and the
+        # obsolete SYN_CONFIG, belong to the current physical frame.  Preserve
+        # their ordering instead of mistaking them for a frame boundary.
+        self._pending_frame.append((event_type, code, value))
+        return False
 
     def stop(self, *_: Any) -> None:
         self.shutdown_event.set()
@@ -532,21 +609,26 @@ class MouseRemapper:
                         if (self.wake_coordinator is not None and
                                 event.type != ecodes.EV_SYN):
                             self.wake_coordinator.activity("evdev-input")
-                        self._handle(event.type, event.code, event.value)
-                        if event.type != ecodes.EV_SYN:
-                            self.ui.syn()
-                            if self.wake_coordinator is not None:
-                                self.wake_coordinator.runtime_usable()
+                        event_timestamp_ns = getattr(event, "timestamp_ns", None)
+                        if event_timestamp_ns is None:
+                            event_timestamp_ns = (
+                                int(event.sec) * 1_000_000_000 + int(event.usec) * 1_000
+                            )
+                        usable_frame = self._process_event(
+                            event.type, event.code, event.value,
+                            timestamp_ns=event_timestamp_ns,
+                            arrival_ns=time.monotonic_ns(),
+                        )
+                        if usable_frame and self.wake_coordinator is not None:
+                            self.wake_coordinator.runtime_usable()
                 except OSError as exc:
                     if not self._is_disconnect(exc):
                         raise
                     self._stop_macros()
+                    self._pending_frame.clear()
+                    self._discard_until_syn_report = False
                     self._release_pressed_keys()
-                    invalidate = getattr(
-                        self.event_observer, "invalidate_observer_continuity", None
-                    )
-                    if callable(invalidate):
-                        invalidate()
+                    self._invalidate_observer_continuity()
                     self._close_device()
                     disconnected = True
                     if self.wake_coordinator is not None:
@@ -554,6 +636,8 @@ class MouseRemapper:
                     LOG.warning("Mouse disconnected; waiting for reconnect")
         finally:
             self._stop_macros()
+            self._pending_frame.clear()
+            self._discard_until_syn_report = False
             self._release_pressed_keys()
             self._close_device()
             if self.ui is not None:

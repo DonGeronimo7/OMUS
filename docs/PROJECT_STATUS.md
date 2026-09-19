@@ -1,5 +1,20 @@
 # OMUS Project Status
 
+## 2026-09-19 — Motion-frame transparency correction
+
+- The production remapper now buffers each physical evdev frame and emits one
+  virtual synchronization only at the corresponding `SYN_REPORT`; ordered
+  `REL_X`/`REL_Y` values and remapped buttons remain inside that frame.
+- `SYN_DROPPED` discards the incomplete frame and all input through the recovery
+  `SYN_REPORT`, invalidates observer continuity, cancels macros, and releases
+  tracked synthetic keys/buttons before normal framed forwarding resumes.
+- A production-path, read-only motion diagnostic records exact physical and
+  virtual motion frames, loss/duplication/modification/order/framing metrics,
+  effective rates, and forwarding latency without changing hardware authority.
+- Automated validation passes 1,171 tests. Physical G305 workloads A/B/C remain
+  pending because the implementation environment exposes no `/dev/input` or USB
+  device access.
+
 ## 2026-09-19 — OMUS v1.0.0 rebrand candidate
 
 - Public identity is OMUS (One Mouse Universal System), with canonical `omus`

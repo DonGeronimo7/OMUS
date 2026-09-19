@@ -1,5 +1,23 @@
 # AI handoff log
 
+## 2026-09-19 — Production evdev motion-frame transparency
+
+- Root cause: `MouseRemapper` discarded every `EV_SYN` event and called
+  `uinput.syn()` after each individual non-SYN event, splitting a physical XY
+  frame into separate virtual X and Y frames.
+- Correction: buffer one physical frame, transform its events in order, and
+  synchronize uinput only at `SYN_REPORT`. Non-boundary SYN codes remain within
+  the frame. `SYN_DROPPED` now discards untrustworthy input through the next
+  report and performs continuity/key-release recovery.
+- Added deterministic coverage for exact XY values/order/framing, multiple and
+  single-axis frames, mixed and remapped buttons, rapid button activity,
+  reconnect/shutdown release safety, and dropped-stream recovery. Added a
+  production-path JSON diagnostic for the three requested physical workloads.
+- Focused tests passed 89; full suite passed 1,171 with the existing GLib
+  warning; compileall and whitespace checks passed. No hardware access was
+  available, so physical G305 1000 Hz validation remains pending. No hardware
+  write authority, merge, tag, release, or main-branch change occurred.
+
 ## 2026-09-19 — OMUS public rebrand and compatibility migration
 
 - Rebranded current product surfaces to OMUS, added canonical command/desktop/

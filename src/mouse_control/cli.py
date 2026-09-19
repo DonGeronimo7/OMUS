@@ -163,6 +163,14 @@ def _build_parser(*, configure_cpi: bool = False) -> argparse.ArgumentParser:
     run_parser = sub.add_parser("run", help="apply the saved configuration")
     run_parser.add_argument("--config", type=Path,
                             help="use an explicit configuration file instead of the default")
+    run_parser.add_argument(
+        "--motion-diagnostic", type=Path, metavar="FILE",
+        help="record a read-only physical-to-virtual motion transparency report",
+    )
+    run_parser.add_argument(
+        "--motion-workload", choices=("A", "B", "C"), default="A",
+        help="label the diagnostic workload as A, B, or C (default: A)",
+    )
     sub.add_parser("show-config", help="print the active configuration path")
     sub.add_parser("check-permissions", help="check mouse and uinput access for this session")
     sub.add_parser("debug-dpi", help="discover Logitech HID++ capabilities and capture reports")
@@ -526,7 +534,7 @@ def _resolve_runtime_device(configured: MouseDevice) -> MouseDevice:
     return candidates[0] if len(candidates) == 1 else configured
 
 
-def run_from_config(path: Path | None = None) -> int:
+def run_from_config(path: Path | None = None, *, motion_diagnostic=None) -> int:
     import logging
     import threading
 
@@ -674,7 +682,8 @@ def run_from_config(path: Path | None = None) -> int:
         MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
                       target_device=mouse or configured_mouse,
                       event_observer=hardware, macros=macros,
-                      wake_coordinator=wake_coordinator).run()
+                      wake_coordinator=wake_coordinator,
+                      motion_diagnostic=motion_diagnostic).run()
     finally:
         # Establish shared teardown intent before waking any retry wait.  A
         # coordinator stop changes its generation, so stopping it first could
@@ -694,6 +703,10 @@ def run_from_config(path: Path | None = None) -> int:
                 "median %.3f ms, p95 %.3f ms, max %.3f ms",
                 stage, trial_count, values["minimum_ms"], values["median_ms"],
                 values["p95_ms"], values["maximum_ms"])
+        if motion_diagnostic is not None:
+            summary = motion_diagnostic.write_report()
+            result = "PASS" if summary["pass"] else "FAIL"
+            print(f"Motion transparency {result}: {motion_diagnostic.output}")
     return 0
 
 
@@ -717,7 +730,13 @@ def main(argv: list[str] | None = None) -> int:
         return run_setup_wizard()
 
     if args.command == "run":
-        return run_from_config(args.config)
+        if args.motion_diagnostic is None:
+            return run_from_config(args.config)
+        from .motion_transparency import MotionTransparencyDiagnostic
+        diagnostic = MotionTransparencyDiagnostic(
+            args.motion_diagnostic, args.motion_workload
+        )
+        return run_from_config(args.config, motion_diagnostic=diagnostic)
 
     if args.command == "show-config":
         print(get_config_path())

@@ -29,6 +29,7 @@ def test_enodev_read_closes_stale_device_and_rebinds_stable_path():
     new = device("/dev/input/event8", [
         MagicMock(type=ecodes.EV_KEY, code=ecodes.BTN_EXTRA, value=1),
         MagicMock(type=ecodes.EV_KEY, code=ecodes.BTN_TASK, value=1),
+        MagicMock(type=ecodes.EV_SYN, code=ecodes.SYN_REPORT, value=0),
     ])
     old.read.side_effect = OSError(errno.ENODEV, "No such device")
     stop = threading.Event()
@@ -60,6 +61,7 @@ def test_enodev_read_closes_stale_device_and_rebinds_stable_path():
 def test_disconnect_releases_held_chord_before_retry():
     old = device("/dev/input/event5", [
         MagicMock(type=ecodes.EV_KEY, code=ecodes.BTN_EXTRA, value=1),
+        MagicMock(type=ecodes.EV_SYN, code=ecodes.SYN_REPORT, value=0),
     ])
     old.read.side_effect = [old.read.return_value, OSError(errno.ENODEV, "disconnected")]
     stop = threading.Event()
