@@ -1,5 +1,5 @@
 -r dev.txt
 build==1.6.1
-cyclonedx-bom==7.3.1
+cyclonedx-bom==7.4.0
 pip==26.2.1
 pip-audit==2.10.1
