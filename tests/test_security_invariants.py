@@ -69,7 +69,7 @@ def test_workflow_actions_are_full_sha_pinned_and_token_scope_is_narrow():
         for reference in re.findall(r"uses:\s*([^\s#]+)", text):
             assert re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", reference), (workflow, reference)
     release = (ROOT / ".github/workflows/release-artifacts.yml").read_text(encoding="utf-8")
-    assert "permissions:\n  contents: read" in release
+    assert "permissions: read-all" in release
     assert "if: github.ref_type == 'tag'" in release
     assert "sha256sum * > SHA256SUMS" in release
 

@@ -4,20 +4,22 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  actions: write
+permissions: read-all
 
 jobs:
-  tag-and-dispatch:
+  validate:
     if: startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
+    outputs:
+      release-tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate release commit
+        id: release
         env:
           RELEASE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
@@ -30,27 +32,42 @@ jobs:
               exit 1
               ;;
           esac
+          printf 'tag=v%s\n' "$version" >> "$GITHUB_OUTPUT"
 
+  create-tag:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
       - name: Create release tag
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release-tag }}
         run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          tag="v${version}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
-            echo "Tag ${tag} already exists; leaving it unchanged."
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists; leaving it unchanged."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$tag" -m "Mouse Control ${tag}"
-            git push origin "$tag"
+            git tag -a "$RELEASE_TAG" -m "Mouse Control ${RELEASE_TAG}"
+            git push origin "$RELEASE_TAG"
           fi
 
+  dispatch:
+    needs: [validate, create-tag]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
       - name: Dispatch release artifact workflow
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release-tag }}
         run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
           gh workflow run release-artifacts.yml \
             --repo "$GITHUB_REPOSITORY" \
-            --ref "v${version}"
+            --ref "$RELEASE_TAG"
