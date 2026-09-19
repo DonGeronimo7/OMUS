@@ -9,6 +9,8 @@ privacy-conscious report that helps expand support.
 
 [![Current release: v0.9.8](https://img.shields.io/badge/release-v0.9.8-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.8)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/DonGeronimo7/mouse-control/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/mouse-control/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/mouse-control)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
