@@ -11,6 +11,7 @@ from ..discovery import MouseDevice
 from .base import HardwareBackend, HardwareError
 from .capabilities import BatteryState, DpiState, HardwareCapabilities
 from .discovery_backend import DiscoveryBackend
+from ..runtime_wake import RuntimeWakeCoordinator
 
 LOG = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ class HardwareSupervisor(HardwareBackend):
                  backend_factory: Callable[[MouseDevice], HardwareBackend],
                  desired: DesiredHardwareState = DesiredHardwareState(),
                  device_resolver: Callable[[MouseDevice], MouseDevice] | None = None,
-                 discovery_pending: bool = False) -> None:
+                 discovery_pending: bool = False,
+                 wake_coordinator: RuntimeWakeCoordinator | None = None) -> None:
         self.device = device
         self._backend = backend
         self._backend_factory = backend_factory
@@ -48,6 +50,7 @@ class HardwareSupervisor(HardwareBackend):
         self._lock = threading.RLock()
         self._generation = 0
         self._closed = False
+        self._wake_coordinator = wake_coordinator
 
     @staticmethod
     def _backend_has_proven_adapter(backend: HardwareBackend) -> bool:
@@ -317,6 +320,9 @@ class HardwareSupervisor(HardwareBackend):
                     close()
             LOG.info("Rebound hardware backend to %s (generation %d)",
                      replacement.name, self._generation)
+            if self._wake_coordinator is not None:
+                self._wake_coordinator.recognized()
+                self._wake_coordinator.backend_usable()
             return True
 
     def get_device_name(self, device): return self._call("get_device_name", device)
@@ -341,6 +347,8 @@ class HardwareSupervisor(HardwareBackend):
     def set_polling_rate(self, device, hz): return self._call("set_polling_rate", device, hz)
 
     def observe_evdev_event(self, event_type, code, value) -> None:
+        if self._wake_coordinator is not None:
+            self._wake_coordinator.activity("evdev-input")
         with self._lock:
             if self._closed:
                 return
@@ -348,8 +356,12 @@ class HardwareSupervisor(HardwareBackend):
         observe = getattr(backend, "observe_evdev_event", None)
         if callable(observe):
             observe(event_type, code, value)
+        if self._wake_coordinator is not None:
+            self._wake_coordinator.backend_usable()
 
     def invalidate_observer_continuity(self) -> None:
+        if self._wake_coordinator is not None:
+            self._wake_coordinator.reconnecting()
         with self._lock:
             if self._closed:
                 return
@@ -375,7 +387,12 @@ class HardwareSupervisor(HardwareBackend):
                     and self._backend is backend
                 )
             if current:
+                if self._wake_coordinator is not None:
+                    self._wake_coordinator.activity("hid-input-report")
+                    self._wake_coordinator.backend_usable()
                 callback(state)
+                if self._wake_coordinator is not None:
+                    self._wake_coordinator.runtime_usable()
 
         backend.watch_dpi_events(
             device, current_generation_callback, shutdown_event, ready_callback)

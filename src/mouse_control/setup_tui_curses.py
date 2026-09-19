@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import curses
+from dataclasses import dataclass
 import errno
+from pathlib import Path
 import queue
 import threading
 from typing import Any, Callable
@@ -12,15 +14,44 @@ from evdev import InputDevice, ecodes
 
 from . import __version__
 from .device_topology import TopologyError
+from .discovery_lab import (
+    DiscoveryLabCancelled,
+    FieldSignal,
+    LabInstrument,
+    LabStep,
+    PhysicalEvidence,
+)
+from .lab_orchestrator import execute_lab_plan, initial_lab_hypotheses, plan_next_experiment
+from .lab_expert_tools import (
+    GROUPS as EXPERT_TOOL_GROUPS,
+    ExpertTool,
+    ExpertToolAction,
+    tool_context,
+    tool_row,
+    tool_status,
+    tools_for_group,
+)
+from .calibrated_discovery import capture_calibrated_motion
 from .guided_discovery import (
     GuidedDiscoveryCancelled, GuidedStep, run_automatic_discovery, run_deep_dpi_stage_learning,
 )
 from .polling_observation import measure_current_polling
+from .sensor_calibration import measure_sensor_state_auto
+from .learning_session import ReadOnlyLearningSession
 from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
 from .research_probe import ResearchProbeError, run_reversible_research_probes
-from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
+from .setup_tui import ActionKind, DisplayRow, SECTIONS, SetupController, SetupSection
+from .tui_presentation import (
+    LayoutMode,
+    footer_hint,
+    frame_layout,
+    status_label,
+    visible_window,
+    wrap_text,
+)
+from .vendor_capture import VendorCaptureError, VendorCaptureStore
 from .wizard import ButtonCaptureError, get_button_name
 
 
@@ -32,6 +63,17 @@ def _dpi_number(value: Any) -> int | None:
     if isinstance(value, tuple):
         value = value[0]
     return int(value)
+
+
+@dataclass
+class _LabView:
+    """One in-place Discovery Lab content view with retained local state."""
+
+    kind: str
+    group: str | None = None
+    tool: ExpertTool | None = None
+    cursor: int = 0
+    offset: int = 0
 
 
 class DpiEditSession:
@@ -150,6 +192,8 @@ class CursesSetupApp:
         self._ok = curses.A_BOLD
         self._accent = curses.A_BOLD
         self._warn = 0
+        self._error = curses.A_BOLD
+        self._panel = 0
         self._muted = curses.A_DIM
         self._initialization: threading.Thread | None = None
         self._initialization_results: queue.SimpleQueue[
@@ -157,6 +201,8 @@ class CursesSetupApp:
         ] = queue.SimpleQueue()
         self._initialization_target = getattr(controller, "selected_index", 0)
         self._pending_device_activation = False
+        self._content_offsets: dict[SetupSection, int] = {}
+        self._lab_views: list[_LabView] = []
 
     def _start_initialization(self, index: int) -> None:
         """Initialize one backend after the first frame, with one owned worker."""
@@ -182,11 +228,13 @@ class CursesSetupApp:
         )
         self._initialization.start()
 
-    def _poll_initialization(self) -> None:
+    def _poll_initialization(self) -> bool:
+        """Adopt one finished worker result and report whether presentation changed."""
+
         try:
             ready, error = self._initialization_results.get_nowait()
         except queue.Empty:
-            return
+            return False
         worker = self._initialization
         if worker is not None:
             worker.join()
@@ -194,7 +242,7 @@ class CursesSetupApp:
         if error is not None:
             self.controller.status = f"Hardware initialization failed: {error}"
             self._pending_device_activation = False
-            return
+            return True
         assert ready is not None
         requested = self.controller.device_cursor
         if ready.selected_index != requested:
@@ -203,13 +251,14 @@ class CursesSetupApp:
             except Exception:
                 pass
             self._start_initialization(requested)
-            return
+            return True
         self.controller = ready
         if self._pending_device_activation:
             self._pending_device_activation = False
             self.controller._go(SetupSection.HARDWARE)
             if not self.controller.discovery_complete:
                 self._run_automatic()
+        return True
 
     def _finish_initialization(self) -> None:
         """Join and close an unadopted backend during deterministic shutdown."""
@@ -248,23 +297,36 @@ class CursesSetupApp:
             curses.init_pair(2, curses.COLOR_GREEN, -1)
             curses.init_pair(3, curses.COLOR_CYAN, -1)
             curses.init_pair(4, curses.COLOR_YELLOW, -1)
+            curses.init_pair(5, curses.COLOR_RED, -1)
+            if getattr(curses, "COLORS", 0) >= 256:
+                curses.init_pair(6, 244, -1)
             self._highlight = curses.color_pair(1) | curses.A_BOLD
             self._ok = curses.color_pair(2) | curses.A_BOLD
             self._accent = curses.color_pair(3) | curses.A_BOLD
             self._warn = curses.color_pair(4)
+            self._error = curses.color_pair(5) | curses.A_BOLD
+            self._panel = curses.color_pair(6) if getattr(curses, "COLORS", 0) >= 256 else 0
         except curses.error:
             # Monochrome/reverse-video defaults remain fully usable.
             pass
 
-    def _line_attr(self, text: str, *, selected: bool = False, dim: bool = False) -> int:
+    def _line_attr(
+        self, text: str, *, selected: bool = False, dim: bool = False, role: str = "normal"
+    ) -> int:
         if selected:
             return self._highlight
         if dim:
             return self._muted
+        if role == "primary":
+            return self._accent | curses.A_BOLD
+        if role in {"heading", "action"}:
+            return curses.A_BOLD
         if text.startswith("✓"):
             return self._ok
         if text.startswith("?"):
             return self._warn
+        if text.startswith("!"):
+            return self._error
         return 0
 
     @staticmethod
@@ -276,62 +338,231 @@ class CursesSetupApp:
             parts.append(str(device.path))
         return "   ".join(parts)
 
+    def _footer_action(self) -> str:
+        """Name the exact Enter action for the currently focused row."""
+
+        section = self.controller.section
+        cursor = self.controller.row_cursor
+        if section is SetupSection.LAB and self._lab_views:
+            view = self._lab_views[-1]
+            if view.kind in {"groups", "tools"}:
+                return "open"
+            if view.kind == "vendor":
+                return "select file"
+            if view.tool is not None:
+                if view.tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN:
+                    return "run"
+                if view.tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+                    return "open importer"
+            return "open"
+        if section is SetupSection.DEVICE:
+            return "open"
+        if section is SetupSection.HARDWARE:
+            return "run" if cursor == 0 else "open"
+        if section is SetupSection.LAB:
+            return {0: "run", 1: "open", 2: "import"}.get(cursor, "next")
+        if section is SetupSection.DPI:
+            return "edit"
+        if section is SetupSection.POLLING:
+            rates = getattr(self.controller.choices, "polling_rates", ())
+            writable = getattr(self.controller.choices, "polling_writable", False)
+            return "set" if writable and cursor < len(rates) else "measure"
+        if section is SetupSection.BUTTONS:
+            return "edit"
+        if section is SetupSection.SERVICE:
+            return "set"
+        return "save" if cursor == 0 else "edit"
+
+    def _lab_view_enter_enabled(self) -> bool:
+        if not self._lab_views or self.controller.section is not SetupSection.LAB:
+            return True
+        view = self._lab_views[-1]
+        if view.kind in {"groups", "tools", "vendor"}:
+            return True
+        if view.tool is None or view.tool.action is ExpertToolAction.INSPECT:
+            return False
+        return "DISABLED" not in tool_status(self.controller, view.tool)
+
+    def _lab_view_is_inspection(self) -> bool:
+        return bool(
+            self._lab_views
+            and self.controller.section is SetupSection.LAB
+            and self._lab_views[-1].kind == "detail"
+            and self._lab_view_row_count() == 0
+        )
+
+    def _lab_breadcrumb(self) -> str:
+        parts = ["Discovery Lab"]
+        for view in self._lab_views:
+            if view.kind == "groups":
+                parts.append("Advanced Tools")
+            elif view.kind == "tools" and view.group:
+                parts.append(view.group)
+            elif view.kind == "detail" and view.tool:
+                parts.append(view.tool.title)
+            elif view.kind == "vendor":
+                parts.append("Vendor Capture")
+        return " › ".join(parts)
+
+    def _lab_view_rows(self) -> list[DisplayRow]:
+        view = self._lab_views[-1]
+        if view.kind == "groups":
+            return [
+                *[
+                    self._display_row(group, index, role="action")
+                    for index, group in enumerate(EXPERT_TOOL_GROUPS)
+                ],
+                self._display_row(
+                    "Expert tools inspect existing evidence; they do not bypass write authority.",
+                    dim=True,
+                ),
+            ]
+        if view.kind == "tools" and view.group:
+            return [
+                *[
+                    self._display_row(tool_row(self.controller, tool), index, role="action")
+                    for index, tool in enumerate(tools_for_group(view.group))
+                ],
+                self._display_row("Select a tool to inspect its description and current context.", dim=True),
+            ]
+        if view.kind == "vendor":
+            return [
+                self._display_row("Vendor Capture Importer", role="heading"),
+                self._display_row(
+                    "Stage a bounded local JSON/JSONL capture as untrusted offline evidence.",
+                    role="primary",
+                ),
+                self._display_row("Packets are never replayed or transmitted.", dim=True),
+                self._display_row("Imported observations cannot enable writes or become PROVEN.", dim=True),
+                self._display_row("Select capture file", 0, role="action"),
+            ]
+        assert view.tool is not None
+        statuses = tool_status(self.controller, view.tool)
+        rows = [
+            self._display_row(view.tool.description, role="primary"),
+            self._display_row("Status: " + " · ".join(statuses), role="heading"),
+            self._display_row(""),
+            *[self._display_row(line) for line in tool_context(self.controller, view.tool)],
+            self._display_row(""),
+            self._display_row(f"Existing implementation: {view.tool.implementation}", dim=True),
+            self._display_row(
+                "No raw HID transmission or write-authority bypass is available here.", dim=True,
+            ),
+        ]
+        if view.tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN and "DISABLED" not in statuses:
+            rows.append(self._display_row("Run authorized plan", 0, role="action"))
+        elif view.tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+            rows.append(self._display_row("Open Vendor Capture Importer", 0, role="action"))
+        return rows
+
+    @staticmethod
+    def _display_row(
+        text: str,
+        cursor_index: int | None = None,
+        *,
+        dim: bool = False,
+        role: str = "normal",
+    ) -> DisplayRow:
+        return DisplayRow(text, cursor_index, dim, role)
+
+    def _lab_view_row_count(self) -> int:
+        return sum(row.cursor_index is not None for row in self._lab_view_rows())
+
     def _draw(self) -> None:
         assert self.stdscr is not None
         stdscr = self.stdscr
         height, width = stdscr.getmaxyx()
         stdscr.erase()
 
-        if height < 20 or width < 80:
+        layout = frame_layout(height, width)
+        if layout.mode is LayoutMode.TOO_SMALL:
             self._put(stdscr, 1, 2, f"Mouse Control — Setup v{__version__}", max(0, width - 4), curses.A_BOLD)
             self._put(
                 stdscr,
                 3,
                 2,
-                "Terminal is too small. Resize to at least 80×20.",
+                "Terminal is too small for safe setup. Resize to at least 48×12.",
                 max(0, width - 4),
             )
             self._put(
                 stdscr,
                 max(0, height - 2),
                 2,
-                "q Cancel   ? Help",
+                "q Quit   ? Help",
                 max(0, width - 4),
                 self._highlight,
             )
-            stdscr.refresh()
+            stdscr.noutrefresh()
+            curses.doupdate()
             return
 
-        sidebar = max(22, min(28, width // 4))
+        sidebar = layout.sidebar_width
         self._put(
             stdscr,
             0,
             2,
-            f" Mouse Control — Setup v{__version__} ",
+            f" Mouse Control  v{__version__} ",
             width - 4,
             curses.A_BOLD,
         )
+        device_name = getattr(self.controller.selected, "name", "No device")
+        readiness = (
+            "NO DEVICE" if not self.controller.devices
+            else "READY" if self.controller.backend_ready
+            else "INITIALIZING"
+        )
+        meta = f"{device_name}  ·  {readiness}"
+        self._put(stdscr, 0, max(2, width - len(meta) - 2), meta, width - 2, self._muted)
         try:
-            stdscr.vline(1, sidebar, curses.ACS_VLINE, height - 4)
+            if layout.mode is LayoutMode.FULL:
+                stdscr.vline(1, sidebar, curses.ACS_VLINE, height - 4)
+                panel_left = sidebar + 1
+                panel_right = width - 1
+                panel_bottom = height - 4
+                stdscr.hline(1, panel_left, curses.ACS_HLINE, panel_right - panel_left)
+                stdscr.hline(
+                    panel_bottom, panel_left, curses.ACS_HLINE, panel_right - panel_left
+                )
+                stdscr.vline(1, panel_left, curses.ACS_VLINE, panel_bottom)
+                stdscr.vline(1, panel_right, curses.ACS_VLINE, panel_bottom)
+                stdscr.addch(1, panel_left, curses.ACS_ULCORNER)
+                stdscr.addch(1, panel_right, curses.ACS_URCORNER)
+                stdscr.addch(panel_bottom, panel_left, curses.ACS_LLCORNER)
+                stdscr.addch(panel_bottom, panel_right, curses.ACS_LRCORNER)
             stdscr.hline(height - 3, 0, curses.ACS_HLINE, width)
         except curses.error:
             pass
 
-        for index, section in enumerate(SECTIONS):
-            label = f" {index + 1}. {section.value} "
-            self._put(
-                stdscr,
-                2 + index,
-                1,
-                label,
-                sidebar - 2,
-                self._highlight if section is self.controller.section else 0,
-            )
+        if layout.mode is LayoutMode.FULL:
+            self._put(stdscr, 2, 2, "NAVIGATION", sidebar - 3, self._muted)
+            for section_index, section in enumerate(SECTIONS):
+                inner_width = max(1, sidebar - 6)
+                label = "[ " + section.value[:inner_width].ljust(inner_width) + " ]"
+                self._put(
+                    stdscr,
+                    4 + section_index,
+                    1,
+                    label,
+                    sidebar - 2,
+                    self._highlight if section is self.controller.section else self._muted,
+                )
+        else:
+            breadcrumb = "  /  ".join(section.value for section in SECTIONS)
+            marker = f"[{self.controller.section.value}]"
+            self._put(stdscr, 1, 2, marker, width - 4, self._accent)
+            self._put(stdscr, 2, 2, breadcrumb, width - 4, self._muted)
 
-        x = sidebar + 2
-        content_width = width - x - 2
-        self._put(stdscr, 2, x, self.controller.section.value, content_width, self._accent)
-        y = 4
+        x = layout.content_x
+        content_width = layout.content_width
+        title_y = 2 if layout.mode is LayoutMode.FULL else layout.content_y
+        lab_view_active = bool(
+            self._lab_views and self.controller.section is SetupSection.LAB
+        )
+        title = self._lab_breadcrumb() if lab_view_active else self.controller.section.value.upper()
+        self._put(stdscr, title_y, x, title, content_width, self._accent)
+        y = layout.content_y
+        if layout.mode is LayoutMode.COMPACT:
+            y += 2
 
         if self.controller.section is SetupSection.DEVICE:
             self._put(stdscr, y, x, "Select a device", content_width, curses.A_BOLD)
@@ -345,9 +576,28 @@ class CursesSetupApp:
                 self._muted,
             )
             y += 2
-            for index, device in enumerate(self.controller.devices):
-                if y >= height - 5:
-                    break
+            if not self.controller.devices:
+                self._put(stdscr, y, x, "No mouse devices found", content_width, self._warn)
+                y += 1
+                self._put(
+                    stdscr, y, x,
+                    "Check /dev/input permissions or reconnect the mouse.",
+                    content_width, self._muted,
+                )
+                y += 1
+                self._put(
+                    stdscr, y, x,
+                    "No configuration or service state has been changed.",
+                    content_width, self._muted,
+                )
+            capacity = max(1, (height - 5 - y) // 3)
+            start, end = visible_window(
+                len(self.controller.devices), self.controller.device_cursor, capacity
+            )
+            if start:
+                self._put(stdscr, y - 1, x, f"↑ {start} device(s) above", content_width, self._muted)
+            for index in range(start, end):
+                device = self.controller.devices[index]
                 selected = index == self.controller.device_cursor
                 bound = index == self.controller.selected_index
                 prefix = "●" if bound else "○"
@@ -365,13 +615,52 @@ class CursesSetupApp:
                 if identity:
                     self._put(stdscr, y, x, f"    {identity}", content_width, self._muted)
                 y += 2
+            if end < len(self.controller.devices) and y < height - 4:
+                self._put(
+                    stdscr, y, x, f"↓ {len(self.controller.devices) - end} device(s) below",
+                    content_width, self._muted,
+                )
         else:
-            for row in self.controller.detail_rows():
+            rows = self._lab_view_rows() if lab_view_active else self.controller.detail_rows()
+            active_cursor = self._lab_views[-1].cursor if lab_view_active else self.controller.row_cursor
+            selected_position = next(
+                (index for index, row in enumerate(rows)
+                 if row.cursor_index == active_cursor),
+                None,
+            )
+            capacity = max(1, height - 4 - y)
+            maximum_start = max(0, len(rows) - capacity)
+            saved_offset = (
+                self._lab_views[-1].offset if lab_view_active
+                else self._content_offsets.get(self.controller.section, 0)
+            )
+            start = min(saved_offset, maximum_start)
+            end = min(len(rows), start + capacity)
+            if (
+                selected_position is not None
+                and not (start <= selected_position < end)
+                and rows and y < height - 4
+            ):
+                selected_row = rows[selected_position]
+                self._put(
+                    stdscr, y, x, "↳ Selected: " + selected_row.text,
+                    content_width, self._highlight,
+                )
+                y += 1
+                capacity = max(1, capacity - 1)
+                maximum_start = max(0, len(rows) - capacity)
+                start = min(start, maximum_start)
+                end = min(len(rows), start + capacity)
+            if start and y < height - 4:
+                self._put(stdscr, y, x, f"↑ {start} more line(s)", content_width, self._muted)
+                y += 1
+                end = min(len(rows), start + max(0, capacity - 1))
+            for row in rows[start:end]:
                 if y >= height - 4:
                     break
                 selected = (
                     row.cursor_index is not None
-                    and row.cursor_index == self.controller.row_cursor
+                    and row.cursor_index == active_cursor
                 )
                 self._put(
                     stdscr,
@@ -379,15 +668,49 @@ class CursesSetupApp:
                     x,
                     row.text,
                     content_width,
-                    self._line_attr(row.text, selected=selected, dim=row.dim),
+                    self._line_attr(
+                        row.text, selected=selected, dim=row.dim, role=row.role
+                    ),
                 )
                 y += 1
+            if end < len(rows) and y < height - 4:
+                self._put(stdscr, y, x, f"↓ {len(rows) - end} more line(s)", content_width, self._muted)
 
         status = self.controller.status or self.controller.notice
-        self._put(stdscr, height - 2, 1, f" {status} ", width - 2, self._accent)
-        footer = " Enter Select  ↑↓/jk Move  ←→/hl Sections  g/G Ends  q Quit  ? Help "
-        self._put(stdscr, height - 1, 0, footer, width, self._highlight)
-        stdscr.refresh()
+        status_lines = wrap_text(status, max(1, width - 13))
+        state = status_label(status)
+        state_attr = (
+            self._error if state == "ERROR" else self._warn if state == "CHECK"
+            else self._ok if state == "READY" else self._accent
+        )
+        badge = f" {state} "
+        text_x = len(badge) + 2
+        self._put(stdscr, layout.status_y, 1, badge, len(badge), state_attr)
+        self._put(stdscr, layout.status_y, text_x, status_lines[0], width - text_x - 1, self._muted)
+        if len(status_lines) > 1:
+            continuation = status_lines[1]
+            if len(status_lines) > 2 and len(continuation) >= 1:
+                continuation = continuation[:-1] + "…"
+            self._put(
+                stdscr, layout.status_y + 1, text_x, continuation,
+                width - text_x - 1, self._muted,
+            )
+        footer = footer_hint(
+            self.controller.section.value,
+            backend_ready=self.controller.backend_ready,
+            compact=layout.mode is LayoutMode.COMPACT or width < 110,
+            action=self._footer_action(),
+            enter_enabled=self._lab_view_enter_enabled(),
+            movement="scroll" if self._lab_view_is_inspection() else "move",
+            endpoints="top/bottom" if self._lab_view_is_inspection() else "first/last",
+        )
+        if self.controller.section is not SetupSection.DEVICE:
+            visible_rows = self._lab_view_rows() if lab_view_active else self.controller.detail_rows()
+            if len(visible_rows) > layout.content_height:
+                footer += "  PgUp/PgDn scroll"
+        self._put(stdscr, layout.footer_y, 0, " " + footer + " ", width, self._highlight)
+        stdscr.noutrefresh()
+        curses.doupdate()
 
     def _modal(self, title: str, lines: list[str], *, prompt: str = "Enter Continue   b Back") -> None:
         assert self.stdscr is not None
@@ -395,7 +718,12 @@ class CursesSetupApp:
         height, width = stdscr.getmaxyx()
         desired_w = max([len(title) + 6, *(len(line) + 6 for line in lines), len(prompt) + 6])
         box_w = min(max(4, width - 4), max(20, desired_w))
-        box_h = min(max(4, height - 2), max(5, len(lines) + 6))
+        wrapped_lines = [
+            wrapped
+            for line in lines
+            for wrapped in wrap_text(line, max(1, box_w - 4))
+        ]
+        box_h = min(max(4, height - 2), max(5, len(wrapped_lines) + 6))
         if box_w < 4 or box_h < 4:
             return
         y0 = max(0, (height - box_h) // 2)
@@ -410,10 +738,11 @@ class CursesSetupApp:
         except curses.error:
             pass
         self._put(win, 1, 2, title, box_w - 4, curses.A_BOLD)
-        for index, line in enumerate(lines[: box_h - 5]):
+        for index, line in enumerate(wrapped_lines[: box_h - 5]):
             self._put(win, 3 + index, 2, line, box_w - 4)
         self._put(win, box_h - 2, 2, prompt, box_w - 4, self._highlight)
-        win.refresh()
+        win.noutrefresh()
+        curses.doupdate()
 
     def _confirm(self, title: str, lines: list[str], *, yes="Enter Confirm", no="b Back") -> bool:
         while True:
@@ -426,14 +755,112 @@ class CursesSetupApp:
             if key in (27, ord("b"), ord("B"), ord("q"), ord("Q")):
                 return False
 
+    def _prompt_text(self, title: str, lines: list[str], *, maximum: int = 4096) -> str | None:
+        """Collect one bounded local path; Escape/blank cancels without mutation."""
+
+        assert self.stdscr is not None
+        stdscr = self.stdscr
+        height, width = stdscr.getmaxyx()
+        self._modal(title, [*lines, "", "Capture path:"], prompt="Type path and press Enter   blank cancels")
+        y = max(1, min(height - 3, height // 2 + len(lines) // 2 + 2))
+        x = max(1, min(width - 3, width // 8))
+        limit = max(1, min(maximum, width - x - 2))
+        value = b""
+        try:
+            curses.echo()
+            curses.curs_set(1)
+            stdscr.move(y, x)
+            stdscr.clrtoeol()
+            value = stdscr.getstr(y, x, limit)
+        except curses.error:
+            return None
+        finally:
+            curses.noecho()
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+        try:
+            text = value.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            self.controller.status = "Capture path must be valid UTF-8."
+            return None
+        return text or None
+
+    def _run_vendor_capture_import(self, *, show_intro: bool = True) -> None:
+        if show_intro and not self._confirm(
+            "Import vendor capture",
+            [
+                "The file is parsed locally as untrusted offline evidence.",
+                "Captured packets are never replayed or transmitted.",
+                "Imported observations cannot enable writes or become PROVEN.",
+            ],
+            yes="Enter Select file",
+            no="b Cancel",
+        ):
+            self.controller.cancel_vendor_capture_import()
+            return
+        selected = self._prompt_text(
+            "Vendor capture file",
+            ["Enter a canonical Mouse Control JSON or JSONL capture path."],
+        )
+        if selected is None:
+            self.controller.cancel_vendor_capture_import()
+            return
+        store = VendorCaptureStore()
+        try:
+            imported = store.preview_file(Path(selected))
+        except VendorCaptureError as exc:
+            self.controller.status = f"Vendor capture import refused: {exc}"
+            self._confirm(
+                "Import refused",
+                [str(exc), "No evidence or runtime authority was changed."],
+                yes="Enter Continue", no="Esc Continue",
+            )
+            return
+        source = imported.source
+        provenance = source.provenance_category.value.replace("_", " ")
+        if not self._confirm(
+            "Review detected capture",
+            [
+                f"Format: {imported.manifest.parser_selected}",
+                f"Source: {source.source_name or 'unknown'}",
+                f"Provenance: {provenance}",
+                f"Digest: {source.content_sha256[:16]}…",
+                f"Records: {imported.manifest.accepted_records}/{imported.manifest.total_records}",
+                "Staging remains unreviewed and cannot enable writes.",
+            ],
+            yes="Enter Stage import",
+            no="b Cancel",
+        ):
+            self.controller.cancel_vendor_capture_import()
+            return
+        if not imported.manifest.duplicate_import:
+            try:
+                store.save(imported)
+            except OSError as exc:
+                self.controller.status = f"Could not persist vendor capture evidence: {exc}"
+                return
+        self.controller.apply_vendor_capture_import(imported)
+        manifest = imported.manifest
+        lines = [
+            f"Accepted: {manifest.accepted_records}/{manifest.total_records}",
+            f"Warnings: {len(manifest.warnings)}",
+            f"Conflicts: {len(manifest.conflicts)}",
+            f"Dangerous/suppressed: {manifest.dangerous_suppressed_records}",
+            "Review state: imported / unreviewed",
+            "Writes remain disabled; physical proof is unchanged.",
+        ]
+        self._confirm("Vendor capture staged", lines, yes="Enter Continue", no="Esc Continue")
+
     def _show_help(self) -> None:
         self._confirm(
             "Setup help",
             [
-                "↑ / ↓  navigate the current panel",
-                "j / k  navigate down / up",
-                "← / →  switch setup sections",
-                "h / l  move left / right",
+                "↑ / ↓  move through selectable items",
+                "j / k  move down / up",
+                "← / →  switch setup pages",
+                "h / l  previous / next page",
                 "g / G  jump to the first / last selectable item",
                 "Enter  select, edit, or continue",
                 "b / Esc  go back",
@@ -444,12 +871,94 @@ class CursesSetupApp:
             no="Esc Close",
         )
 
+    def _open_advanced_tools(self) -> None:
+        """Replace Lab content with the first expert-dashboard level."""
+
+        self._lab_views.append(_LabView("groups"))
+
+    def _open_vendor_capture_view(self) -> None:
+        """Replace Lab content with importer context before the file prompt."""
+
+        self._lab_views.append(_LabView("vendor"))
+
+    def _handle_lab_view_key(self, symbolic: str) -> bool:
+        """Handle one in-place Lab view key; return whether it was consumed."""
+
+        if not self._lab_views or self.controller.section is not SetupSection.LAB:
+            return False
+        view = self._lab_views[-1]
+        if symbolic == "HELP":
+            self._show_help()
+            return True
+        if symbolic in {"LEFT", "RIGHT"}:
+            self._lab_views.clear()
+            return False
+        if symbolic in {"BACK", "ESC"}:
+            self._lab_views.pop()
+            return True
+        if symbolic == "QUIT":
+            return False
+        count = self._lab_view_row_count()
+        if symbolic == "FIRST":
+            if count:
+                view.cursor = 0
+            else:
+                view.offset = 0
+            return True
+        if symbolic == "LAST":
+            if count:
+                view.cursor = count - 1
+            else:
+                view.offset = max(0, len(self._lab_view_rows()) - 1)
+            return True
+        if symbolic == "UP":
+            if count:
+                view.cursor = (view.cursor - 1) % count
+            else:
+                view.offset = max(0, view.offset - 1)
+            return True
+        if symbolic == "DOWN":
+            if count:
+                view.cursor = (view.cursor + 1) % count
+            else:
+                view.offset = min(max(0, len(self._lab_view_rows()) - 1), view.offset + 1)
+            return True
+        if symbolic != "ENTER":
+            return True
+        if view.kind == "groups":
+            self._lab_views.append(_LabView("tools", group=EXPERT_TOOL_GROUPS[view.cursor]))
+        elif view.kind == "tools" and view.group:
+            tools = tools_for_group(view.group)
+            self._lab_views.append(_LabView("detail", group=view.group, tool=tools[view.cursor]))
+        elif view.kind == "vendor":
+            self._run_vendor_capture_import(show_intro=False)
+        elif view.tool is not None:
+            statuses = tool_status(self.controller, view.tool)
+            if view.tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN and "DISABLED" not in statuses:
+                self._run_discovery_lab()
+            elif view.tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+                self._open_vendor_capture_view()
+        return True
+
     def _guided_prompt(self, step: GuidedStep) -> bool:
         return self._confirm(
             f"DPI learning — Step {step.index} of {step.total}",
             [step.instructions, "", "No unknown configuration commands will be sent."],
             yes="Enter Begin sample",
             no="b Cancel learning",
+        )
+
+    def _lab_prompt(self, step: Any) -> bool:
+        return self._confirm(
+            f"Discovery Lab — {step.title} {step.current}/{step.total}",
+            [
+                step.instruction,
+                "",
+                "Capture is bounded to the selected mouse and stays local.",
+                "No unknown configuration command will be sent.",
+            ],
+            yes="Enter Begin capture",
+            no="b Cancel Lab",
         )
 
     def _guided_progress(self, message: str) -> None:
@@ -642,6 +1151,78 @@ class CursesSetupApp:
             lines.append("? No runtime stage profile was promoted")
         lines.append("Write authority remains unchanged by deeper read-side learning.")
         self._confirm("Deeper discovery result", lines, yes="Enter Continue", no="Esc Continue")
+
+    def _run_discovery_lab(self) -> None:
+        """Plan and run the safest highest-information read-only Lab experiment."""
+
+        if self.controller.discovery_result is None or self.controller.discovery_engine is None:
+            self.controller.status = "Run Automatic Discovery before starting the Discovery Lab."
+            return
+        result = self.controller.discovery_result
+        engine = self.controller.discovery_engine
+        generation = int(getattr(self.controller.backend, "generation", 0) or 0)
+        previous = getattr(self.controller.lab_experiment, "timing_profile", None)
+        plan = plan_next_experiment(initial_lab_hypotheses(), timing_profile=previous)
+
+        def verify_cpi(_plan):
+            if not self._lab_prompt(LabStep(1, 1, "Physical CPI verification", "Move the mouse exactly 10 inches (254 mm) along a straight measured guide.")):
+                raise DiscoveryLabCancelled("user_cancelled")
+            session = ReadOnlyLearningSession(result.device, engine.descriptors)
+            captured = capture_calibrated_motion(
+                session, evdev_path=self.controller.selected.path, seconds=8.0,
+            )
+            measured = measure_sensor_state_auto(
+                captured.calibration_events, distance_mm=254.0,
+            )
+            return (
+                PhysicalEvidence("physical_cpi", measured.estimated_dpi, "CPI", "observed"),
+            )
+
+        def verify_polling(_plan):
+            if not self._lab_prompt(LabStep(1, 1, "Physical polling verification", "Move the selected mouse continuously and briskly during the capture.")):
+                raise DiscoveryLabCancelled("user_cancelled")
+            measured = measure_current_polling(self.controller.selected.path, seconds=3.0)
+            value = measured.standard_hz if measured.standard_hz is not None else (measured.inferred_hz or 0.0)
+            return (
+                PhysicalEvidence("physical_polling", value, "Hz", measured.confidence),
+            )
+
+        verifiers = {
+            LabInstrument.CPI_VERIFIER: verify_cpi,
+            LabInstrument.POLLING_VERIFIER: verify_polling,
+        }
+        try:
+            experiment = execute_lab_plan(
+                result.device,
+                engine.descriptors,
+                plan,
+                prompt=self._lab_prompt,
+                progress=lambda event: self._guided_progress(event.message),
+                connection_generation=generation,
+                verifier_runners=verifiers,
+            )
+        except DiscoveryLabCancelled:
+            self.controller.status = "Discovery Lab cancelled; retained evidence and authority are unchanged."
+            return
+        except (TopologyError, PermissionError, OSError, HardwareError, ValueError) as exc:
+            self.controller.status = f"Discovery Lab stopped safely: {exc}"
+            return
+        self.controller.apply_lab_experiment(experiment)
+        assert experiment.analysis is not None
+        correlated = [
+            item for item in experiment.analysis.ranked_fields
+            if FieldSignal.ACTION_CORRELATED in item.signals
+        ]
+        lines = [
+            f"✓ {len(experiment.observations)} selected-device protocol observation(s) retained",
+            f"✓ {len(correlated)} action-correlated field(s) ranked against the negative control",
+            f"• {len(experiment.analysis.integrity)} stream(s) checked for bounded integrity schemes",
+        ]
+        recommendation = experiment.analysis.next_recommended_experiment
+        if recommendation is not None:
+            lines.append(f"→ Next recommended experiment: {recommendation.experiment.replace('_', ' ')}")
+        lines.append("No hardware write was attempted or authorized.")
+        self._confirm("Automatic Discovery Lab", lines, yes="Enter Inspect result", no="Esc Inspect result")
 
     def _suspend_curses(self, function: Callable[[], Any]) -> Any:
         assert self.stdscr is not None
@@ -1008,7 +1589,8 @@ class CursesSetupApp:
                 "Resize the terminal to at least 56×16 to continue.",
                 max(0, width - 4),
             )
-            stdscr.refresh()
+            stdscr.noutrefresh()
+            curses.doupdate()
             return
 
         box_w = min(width - 6, 72)
@@ -1065,7 +1647,8 @@ class CursesSetupApp:
             box_w - 4,
             self._muted,
         )
-        win.refresh()
+        win.noutrefresh()
+        curses.doupdate()
 
     def _dpi_editor(self, index: int) -> None:
         session = DpiEditSession(self.controller, index)
@@ -1154,6 +1737,29 @@ class CursesSetupApp:
         }
         return mapping.get(key)
 
+    def _scroll_content(self, direction: int) -> None:
+        """Scroll dense evidence while leaving the selected action unchanged."""
+
+        if self.controller.section is SetupSection.DEVICE or self.stdscr is None:
+            return
+        lab_view_active = bool(
+            self._lab_views and self.controller.section is SetupSection.LAB
+        )
+        rows = self._lab_view_rows() if lab_view_active else self.controller.detail_rows()
+        height, width = self.stdscr.getmaxyx()
+        layout = frame_layout(height, width)
+        page = max(1, layout.content_height - 2)
+        current = (
+            self._lab_views[-1].offset if lab_view_active
+            else self._content_offsets.get(self.controller.section, 0)
+        )
+        target = current + direction * page
+        target = min(max(0, target), max(0, len(rows) - 1))
+        if lab_view_active:
+            self._lab_views[-1].offset = target
+        else:
+            self._content_offsets[self.controller.section] = target
+
     def run(self, stdscr) -> bool:
         self.stdscr = stdscr
         stdscr.keypad(True)
@@ -1167,20 +1773,30 @@ class CursesSetupApp:
         # sessions or querying live capabilities. Initialization is singular,
         # owned by this app, and joined on every exit path.
         self._draw()
-        self._start_initialization(self.controller.selected_index)
-        stdscr.timeout(50)
+        if self.controller.devices:
+            self._start_initialization(self.controller.selected_index)
+        stdscr.timeout(100)
         try:
+            dirty = True
             while True:
-                self._poll_initialization()
-                self._draw()
+                dirty = self._poll_initialization() or dirty
+                if dirty:
+                    self._draw()
+                    dirty = False
                 key = stdscr.getch()
                 if key == -1:
                     continue
+                dirty = True
                 if (
                     not self.controller.backend_ready
                     and key in (10, 13, curses.KEY_ENTER)
                     and self.controller.section is SetupSection.DEVICE
                 ):
+                    if not self.controller.devices:
+                        self.controller.status = (
+                            "No mouse is available to select; reconnect one and reopen setup."
+                        )
+                        continue
                     self._pending_device_activation = True
                     if self._initialization is None:
                         self._start_initialization(self.controller.device_cursor)
@@ -1193,8 +1809,13 @@ class CursesSetupApp:
                     continue
                 if key == curses.KEY_RESIZE:
                     continue
+                if key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
+                    self._scroll_content(-1 if key == curses.KEY_PPAGE else 1)
+                    continue
                 symbolic = self._symbolic_key(key)
                 if symbolic is None:
+                    continue
+                if self._handle_lab_view_key(symbolic):
                     continue
                 if (
                     not self.controller.backend_ready
@@ -1220,6 +1841,12 @@ class CursesSetupApp:
                     self._run_automatic(force=action.kind is ActionKind.RETRY_DISCOVERY)
                 elif action.kind is ActionKind.GUIDED_DISCOVERY:
                     self._run_guided()
+                elif action.kind is ActionKind.RUN_DISCOVERY_LAB:
+                    self._run_discovery_lab()
+                elif action.kind is ActionKind.OPEN_ADVANCED_TOOLS:
+                    self._open_advanced_tools()
+                elif action.kind is ActionKind.IMPORT_VENDOR_CAPTURE:
+                    self._open_vendor_capture_view()
                 elif action.kind is ActionKind.MEASURE_POLLING:
                     self._run_polling_measurement()
                 elif action.kind is ActionKind.EDIT_DPI:

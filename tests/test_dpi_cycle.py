@@ -319,8 +319,9 @@ def test_runtime_survives_unavailable_backend_at_startup_and_notifies_after_bind
         shutdown.wait(10),
     )
 
-    def supervisor(*args):
-        return DpiMonitorSupervisor(*args, notifier=notifier, retry_interval=0.01)
+    def supervisor(*args, **kwargs):
+        return DpiMonitorSupervisor(
+            *args, **kwargs, notifier=notifier, retry_interval=0.01)
 
     with patch.object(cli, 'load_config', return_value=config), \
          patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \
@@ -335,6 +336,55 @@ def test_runtime_survives_unavailable_backend_at_startup_and_notifies_after_bind
     assert select.call_count == 2
     backend.watch_dpi_events.assert_called_once()
     notifier.notify_dpi.assert_called_once_with(1500)
+
+
+def test_runtime_teardown_never_rebinds_or_repeats_hardware_writes():
+    config = {
+        "device": {"event_path": MOUSE.path},
+        "dpi": {"active": 800, "stages": [800, 1500]},
+        "polling": {"rate_hz": 1000},
+        "notifications": {"dpi_changes": True},
+        "remap": {"BTN_LEFT": "passthrough"},
+    }
+    backend = MagicMock(spec=HardwareBackend)
+    backend.name = "Test"
+    backend.supports_polling_rate_writes_without_takeover.return_value = True
+    backend.get_polling_rate.return_value = 1000
+    backend.supports_dpi_stages.return_value = False
+    backend.supports_dpi.return_value = True
+    backend.get_dpi.return_value = 800
+    backend.supports_dpi_cycle_trigger.return_value = False
+    dpi_waiting = threading.Event()
+    battery_waiting = threading.Event()
+    backend.supports_dpi_events.side_effect = (
+        lambda _device: dpi_waiting.set() or False
+    )
+    backend.supports_dpi_monitoring.return_value = False
+    backend.supports_battery.side_effect = (
+        lambda _device: battery_waiting.set() or False
+    )
+
+    def supervisor(*args, **kwargs):
+        return DpiMonitorSupervisor(
+            *args, **kwargs, notifier=MagicMock(), retry_interval=60,
+        )
+
+    def stop_after_retries_are_waiting():
+        assert dpi_waiting.wait(1)
+        assert battery_waiting.wait(1)
+
+    with patch.object(cli, "load_config", return_value=config), \
+         patch.object(cli, "get_mouse_devices", return_value=[MOUSE]), \
+         patch.object(cli, "get_backend", return_value=backend) as select, \
+         patch.object(cli, "DpiMonitorSupervisor", side_effect=supervisor), \
+         patch.object(cli, "MouseRemapper") as remapper:
+        remapper.return_value.run.side_effect = stop_after_retries_are_waiting
+        assert cli.run_from_config() == 0
+
+    select.assert_called_once_with(MOUSE, log_failures=True)
+    backend.set_polling_rate.assert_called_once_with(MOUSE, 1000)
+    backend.set_dpi.assert_called_once_with(MOUSE, 800)
+
 
 def test_runtime_literal_true_learned_cycle_trigger_creates_cycler():
     backend = runtime_backend()

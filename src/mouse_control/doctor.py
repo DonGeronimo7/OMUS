@@ -13,7 +13,7 @@ from typing import Callable
 from . import __version__
 from .discovery import MouseDevice, get_mouse_devices
 from .permissions import UINPUT_PATH
-from .service import SERVICE_NAME, is_service_active, service_path
+from .service import is_service_active, service_path
 
 
 def distribution() -> str:

@@ -82,6 +82,17 @@ def test_noninteractive_setup_rejects_before_importing_curses(monkeypatch, capsy
     assert "requires an interactive terminal" in capsys.readouterr().err
 
 
+def test_no_device_uses_canonical_tui_empty_state(monkeypatch):
+    empty = SetupTuiResult(False, None, None, SetupChoices())
+    with patch.object(cli, "get_mouse_devices", return_value=[]), \
+         patch.object(cli, "_load_setup_config", return_value=ESTABLISHED_CONFIG), \
+         patch.object(setup_entry, "run_setup_tui", return_value=empty) as tui, \
+         patch.object(cli, "save_config") as save:
+        assert setup_entry.run_tui_setup_wizard() == 0
+    tui.assert_called_once()
+    save.assert_not_called()
+
+
 def test_installed_entrypoint_delegates_without_setup_override():
     with patch.object(cli, "main", return_value=0) as delegated:
         assert app.main(["setup"]) == 0

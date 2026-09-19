@@ -283,7 +283,7 @@ def test_back_from_dpi_after_normal_discovery_returns_to_hardware():
     action = controller.handle_key("ENTER")
     assert action.kind is ActionKind.AUTOMATIC_DISCOVERY
     controller.discovery_complete = True
-    controller.row_cursor = 1  # writable device: Continue to DPI
+    controller.row_cursor = 2  # writable device: Continue to DPI after Discovery Lab
     controller.handle_key("ENTER")
     assert controller.section is SetupSection.DPI
     controller.handle_key("BACK")

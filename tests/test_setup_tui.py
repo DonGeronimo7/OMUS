@@ -328,9 +328,9 @@ def test_unknown_device_offers_deeper_learning_only_after_automatic_research_pla
     app.discovery_complete = True
     app.research_plan = SimpleNamespace(deeper_learning_recommended=True)
     assert app.guided_discovery_available is True
-    app.row_cursor = 1
-    assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
     app.row_cursor = 2
+    assert app.handle_key("ENTER").kind is ActionKind.GUIDED_DISCOVERY
+    app.row_cursor = 3
     assert app.handle_key("ENTER").kind is ActionKind.NONE
     # No verified write path is a successful result; skip non-configurable pages.
     assert app.section is SetupSection.BUTTONS
@@ -482,3 +482,115 @@ def test_device_switch_clears_exact_device_observed_evidence():
     app.handle_key("ENTER")
     assert app.selected is MOUSE2
     assert not app.observed_hardware.has_physical_calibration
+
+
+def test_hardware_discovery_opens_first_class_lab_and_runs_analyzer_action():
+    app, _ = controller()
+    app.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    app.discovery_complete = True
+    app.discovery_result = SimpleNamespace(device=SimpleNamespace())
+    app.discovery_engine = SimpleNamespace(repertoire_candidates=(
+        SimpleNamespace(family=SimpleNamespace(name="lamzu-aurora-feature64")),
+    ))
+    app.row_cursor = 1
+    assert app.handle_key("ENTER").kind is ActionKind.NONE
+    assert app.section is SetupSection.LAB
+    rows = app.detail_rows()
+    assert any("Run Full Automatic Lab" in row.text for row in rows)
+    assert any("Current question:" in row.text for row in rows)
+    assert any("Best experiment:" in row.text for row in rows)
+    assert any("Your part:" in row.text for row in rows)
+    assert any("Known protocol family candidate: LAMZU Aurora" in row.text for row in rows)
+    assert any("Exact hardware proof: incomplete" in row.text for row in rows)
+    assert any("Writes: disabled pending verification" in row.text for row in rows)
+    assert app.handle_key("ENTER").kind is ActionKind.RUN_DISCOVERY_LAB
+
+    analysis = SimpleNamespace(
+        ranked_fields=(SimpleNamespace(
+            stream_id="stream", offset=2,
+            signals=(SimpleNamespace(value="action_correlated"),), score=105,
+        ),),
+        next_recommended_experiment=SimpleNamespace(
+            experiment="alternate-negative-control",
+            reason="separate candidates",
+            requires_hardware_write=False,
+        ),
+        contradictions=(),
+    )
+    timing = SimpleNamespace(
+        summaries=(SimpleNamespace(
+            relationship=SimpleNamespace(value="request_response_latency"),
+            median_ns=3_000_000, accepted_count=3, spread_ns=200_000,
+            minimum_ns=2_900_000, maximum_ns=3_100_000,
+        ),),
+        differentials=(),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+    ))
+    text = "\n".join(row.text for row in app.detail_rows())
+    assert "Just learned: 1 action-correlated field" in text
+    assert "Protocol timing" in text
+    assert "median 3.0 ms, stable across 3 samples" in text
+    assert "Hardware write required: no" in text
+
+    assessment = SimpleNamespace(
+        effective_state=SimpleNamespace(value="state_physically_effective"),
+        classifications=(SimpleNamespace(value="reconnect_persistent"),),
+        strongest_confirmed_level=SimpleNamespace(name="DEVICE_RECONNECT"),
+        contradictions=("stale state superseded",),
+        restoration=SimpleNamespace(required=True),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+        persistence_assessment=assessment,
+    ))
+    effect_text = "\n".join(row.text for row in app.detail_rows())
+    assert "Effect / persistence" in effect_text
+    assert "state physically effective" in effect_text
+    assert "reconnect persistent" in effect_text
+    assert "Strongest tested level: device reconnect" in effect_text
+    assert "Restore original state manually" in effect_text
+
+    routing = SimpleNamespace(
+        summary=("child 0x01: high", "receiver-local: medium"),
+        evidence=(
+            SimpleNamespace(status=SimpleNamespace(value="confirmed_route")),
+        ),
+        ambiguities=("report 0x13 ownership",),
+        next_plan=SimpleNamespace(
+            selected_action=SimpleNamespace(label="power-cycle the selected mouse"),
+        ),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+        routing_analysis=routing,
+    ))
+    route_text = "\n".join(row.text for row in app.detail_rows())
+    assert "Receiver / Device Routing" in route_text
+    assert "child 0x01: high" in route_text
+    assert "Confirmed logical routes: 1" in route_text
+    assert "Unresolved routing questions: 1" in route_text
+    assert "Best next routing experiment: power-cycle the selected mouse" in route_text
+
+    power = SimpleNamespace(
+        summary=(
+            "Battery candidate: raw 73; percentage unknown",
+            "Update cadence: approximately 60 s",
+        ),
+        contradictions=("stale cache differs",),
+        pending_natural_observation=True,
+        next_plan=SimpleNamespace(
+            selected_action=SimpleNamespace(label="connect or disconnect charging once"),
+        ),
+    )
+    app.apply_lab_experiment(SimpleNamespace(
+        analysis=analysis, observations=(1, 2, 3), timing_profile=timing,
+        power_analysis=power,
+    ))
+    power_text = "\n".join(row.text for row in app.detail_rows())
+    assert "Battery / Power" in power_text
+    assert "percentage unknown" in power_text
+    assert "Power contradictions retained: 1" in power_text
+    assert "Passive follow-up" in power_text
+    assert "Best next power experiment: connect or disconnect charging once" in power_text

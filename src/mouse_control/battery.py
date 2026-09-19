@@ -274,22 +274,33 @@ class StatusNotifierTray:
 class BatteryMonitorSupervisor:
     """Slow battery polling through the shared hardware lifecycle owner."""
     def __init__(self, backend: HardwareBackend, device, backend_factory, shutdown_event,
-                 tray=None, interval: float = 60., retry_interval: float = 1.) -> None:
+                 tray=None, interval: float = 60., retry_interval: float = 1.,
+                 wake_coordinator=None) -> None:
         self.backend, self.device, self.backend_factory = backend, device, backend_factory
         self.shutdown_event, self.tray = shutdown_event, tray or StatusNotifierTray()
         self.interval, self.retry_interval, self._thread = interval, retry_interval, None
         self._consecutive_failures = 0
+        self.wake_coordinator = wake_coordinator
 
     def _run(self) -> None:
         backend = self.backend
         shown = False
         while not self.shutdown_event.is_set():
+            wake_generation = (self.wake_coordinator.generation
+                               if self.wake_coordinator is not None else None)
             generation = getattr(backend, "generation", None)
             try:
                 if not backend.supports_battery(self.device):
                     if not getattr(backend, "discovery_pending", True):
                         self._consecutive_failures = 0
-                        if self.shutdown_event.wait(self.interval):
+                        if self.wake_coordinator is None:
+                            stopped = self.shutdown_event.wait(self.interval)
+                        else:
+                            self.wake_coordinator.wait(
+                                wake_generation, self.interval, self.shutdown_event)
+                            stopped = (self.shutdown_event.is_set()
+                                       or self.wake_coordinator.stopping)
+                        if stopped:
                             break
                         continue
                     raise RuntimeError("battery unavailable")
@@ -300,7 +311,14 @@ class BatteryMonitorSupervisor:
                           state, state.percentage)
                 self.tray.update(state, self.device.name); shown = True
                 self._consecutive_failures = 0
-                if self.shutdown_event.wait(self.interval): break
+                if self.wake_coordinator is None:
+                    stopped = self.shutdown_event.wait(self.interval)
+                else:
+                    self.wake_coordinator.wait(
+                        wake_generation, self.interval, self.shutdown_event)
+                    stopped = (self.shutdown_event.is_set()
+                               or self.wake_coordinator.stopping)
+                if stopped: break
                 continue
             except Exception as exc:
                 self._consecutive_failures += 1
@@ -311,7 +329,15 @@ class BatteryMonitorSupervisor:
                 elif not self.shutdown_event.is_set():
                     LOG.debug("Battery monitoring unavailable (failure %d/%d): %s",
                               self._consecutive_failures, 3, exc)
-            if self.shutdown_event.wait(self.retry_interval): break
+            if self.wake_coordinator is not None:
+                self.wake_coordinator.reconnecting()
+                self.wake_coordinator.wait(
+                    wake_generation, self.retry_interval, self.shutdown_event)
+                stopped = (self.shutdown_event.is_set()
+                           or self.wake_coordinator.stopping)
+            else:
+                stopped = self.shutdown_event.wait(self.retry_interval)
+            if stopped: break
             try:
                 rebind = getattr(type(backend), "rebind", None)
                 if callable(rebind):
@@ -329,5 +355,6 @@ class BatteryMonitorSupervisor:
         self._thread.start()
     def stop(self) -> None:
         self.shutdown_event.set()
+        if self.wake_coordinator is not None: self.wake_coordinator.stop()
         if self._thread: self._thread.join(timeout=max(1., self.retry_interval + .5))
         self.tray.close()

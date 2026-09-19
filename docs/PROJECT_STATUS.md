@@ -1,5 +1,451 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — PR #6 clean-build and runtime-teardown remediation
+
+- The no-isolation reproducibility environment now installs explicit pinned
+  build backends: `setuptools==83.0.0` and `wheel==0.48.0`. The project build
+  contract retains its distro-compatible minimum while a regression test keeps
+  the clean CI environment synchronized with both required backend packages.
+- Runtime teardown now sets the shared shutdown event before moving the wake
+  coordinator to `STOPPING`. Coordinator stop notifications are not reported as
+  wake evidence, late activity cannot revive a stopped coordinator, and DPI and
+  battery retry loops treat `STOPPING` as terminal before backend rebind.
+- Regression coverage proves teardown performs no backend reselection and no
+  repeated DPI or polling reconciliation writes, both monitor loops exit
+  promptly, and real matching device-return evidence still cancels long
+  reconnect backoff. The three race-sensitive runtime cases passed 50 repeated
+  iterations each.
+- Focused lifecycle/wake/hardware/notification coverage passed 114 tests; the
+  full suite passed 1086 tests with the existing GLib warning. Compileall,
+  Ruff, workflow validation, dependency audit, wheel reproducibility, clean
+  no-isolation wheel/sdist builds, Fedora RPM build and `%check`, and
+  whitespace checks passed. The source manifest includes the pinned requirement
+  inputs required by package-level metadata tests. No physical hardware test,
+  merge, tag, release, or `main` modification occurred.
+
+## 2026-09-18 — Pre-v1 repository and release supply-chain hardening
+
+- GitHub workflows now default to read-only permissions; the only job-scoped
+  writes are the exact CodeQL/Scorecard SARIF, tag, dispatch, and release OIDC/
+  attestation/publication capabilities that need them. A repository-owned
+  validator rejects mutable remote Actions, broad or unallowlisted writes,
+  malformed workflow YAML, unsafe event interpolation, and incomplete security
+  workflow/Dependabot configuration.
+- Immutable-SHA CodeQL v4 `security-extended`, OpenSSF Scorecard publication,
+  resolved-environment `pip-audit`, and low-noise monthly Dependabot workflows
+  cover Python and GitHub Actions dependencies. Ruff enforces a deliberately
+  narrow correctness-oriented rule set without formatting or hardware changes.
+- Releases retain the five-artifact allowlist and SHA256SUMS, add a reproducible
+  CycloneDX 1.6 project dependency SBOM, and use keyless GitHub attestations to
+  bind provenance to the exact wheel, sdist, RPM, DEB, AppImage, and SBOM bytes
+  and bind that SBOM to the five primary artifacts before publication.
+- Two clean source-snapshot wheel builds were byte-identical. Sdist byte
+  reproducibility remains deferred because setuptools-generated directory and
+  metadata mtimes vary; RPM/DEB/AppImage reproducibility and an artifact-
+  filesystem AppImage SBOM remain separate future work rather than unsupported
+  claims.
+- Automated validation passed 1082 tests with the existing GLib warning,
+  compileall, Ruff, workflow-policy validation, dependency audit, and diff
+  checks. Wheel/sdist, isolated wheel, Fedora RPM, Debian, and AppImage builds
+  and packaged CLI smoke checks passed. Two already-documented threaded retry
+  assertions each passed immediately in isolation before the clean full rerun.
+- No runtime, hardware, Discovery, TUI, remapping, reconnect, wake, notification,
+  persistence, protocol, or write-authority behavior changed. Cloud CodeQL,
+  Scorecard publication, first-release attestations, and Best Practices owner
+  enrollment remain pending; no push, merge, tag, release, install on the host,
+  or physical hardware validation occurred.
+
+## 2026-09-18 — Event-driven wireless wake stabilization
+
+- The resident runtime now shares a Linux event-driven wake coordinator across
+  evdev remapping, the hardware supervisor, DPI events, and battery refresh.
+  Exact VID:PID kernel/udev add/change evidence cancels reconnect backoff;
+  mismatched identities only remain ordinary unrelated system events.
+- A receiver that remains enumerated retains its existing readers, backend,
+  protocol, capabilities, proof, desired state, and routing. Its first valid
+  evdev or HID report follows the existing kernel-blocking reader path without
+  discovery or backend reconstruction. A true node return still passes through
+  the established stable-identity resolver, adapter-affinity checks, generation
+  guard, and current interface/evidence validation before replacement.
+- Wake instrumentation records monotonic T0 (first matching Linux event/input),
+  T1 (recognized), T2 (backend usable), and T3 (runtime event handled), logs
+  each completed sample, and reports bounded repeated-trial minimum, median,
+  p95, and maximum statistics at runtime shutdown.
+- Deterministic tests cover retained-session wake, exact/mismatched device
+  events, cancellation of a simulated 60-second reconnect delay, ordered
+  latency statistics, event-driven shutdown, and no backend factory call on an
+  ordinary known-device wake. The wider reconnect/discovery/remapping/
+  notification/security set passed 123 tests; the complete suite passed 982
+  tests with the existing GLib warning. Compileall and whitespace checks
+  passed. Physical latency and first-click/motion acceptance on an actually
+  sleeping wireless mouse remain pending.
+
+## 2026-09-18 — Canonical TUI presentation and stabilization milestone
+
+- The existing curses setup application now uses a shared presentation model
+  for full/compact/minimum layouts, focus-preserving viewports, wrapped text,
+  semantic status labels, contextual key guides, and long-screen scrolling.
+  Normal terminals use a bordered dashboard/navigation rail; narrow terminals
+  retain the same controller and actions through a compact breadcrumb layout.
+- Device, capability, battery/power, button-mapping, Discovery Lab, vendor
+  capture, review, service, and no-device states are presented through the same
+  canonical TUI. Imported evidence and LAMZU/Aurora knowledge retain explicit
+  recognized/vendor/unverified/read-only boundaries; no write authority was
+  changed.
+- Idle timeout wakes no longer repaint the screen. Curses updates are batched,
+  the existing single initialization worker remains authoritative, and hardware
+  reads such as the battery snapshot occur during worker-owned initialization,
+  never in the redraw path.
+- All installed/source/desktop/AppImage dispatch routes remain structurally
+  converged on `mouse_control.app` and the canonical setup TUI. The no-device
+  path now opens a safe empty state instead of falling back to line output.
+- Automated validation at this checkpoint: the focused TUI/lifecycle/Lab/
+  importer suite passed 153 tests; the complete suite passed 976 tests with the
+  existing GLib warning; compileall and whitespace checks passed. Wheel, sdist,
+  isolated-wheel, and Fedora RPM builds passed; RPM `%check` passed all 976
+  tests and packaged command smoke checks. Debian/AppImage builders were not
+  locally available, so their launcher structure was checked by tests.
+- A live PTY probe in the available no-device environment reached its first
+  usable Help response in 228.6 ms median / 232.2 ms p95 across 12 runs and
+  emitted zero terminal bytes while consuming 0 ms sampled CPU over a settled
+  three-second idle interval. Physical mouse acceptance remains pending.
+
+## 2026-09-18 — Discovery Lab v1 Vendor Capture Importer
+
+- Discovery Lab now has a generic, offline vendor-capture ingestion layer with
+  adapter-based format detection/parsing, provenance-preserving normalization,
+  deterministic manifests, deduplication, conflict retention, staged review,
+  and content-addressed local persistence. V1 accepts canonical Mouse Control
+  JSON and JSONL; raw PCAP/PCAPNG remains an adapter extension rather than an
+  incomplete dependency claim.
+- Normalized records retain raw frames, original lengths/sequences, timing and
+  direction only when supplied, HID/USB channel metadata, transaction
+  relationships, warnings, and source references. Unknown facts remain unknown.
+  Imported evidence wraps existing `DiscoveryEvidence` and projects into the
+  existing Lab observation, temporal dialogue, timing, pushed-state, routing,
+  and power models where known grammar supports it.
+- Source SHA-256, provenance category, optional vendor/device/family identity,
+  dates, reference text, notes, parser version, review state, warnings, and
+  conflicts are persisted locally by digest. Independent sources remain
+  independent corroboration; temporal repetition is retained; contradictory
+  meanings, identities, and report lengths force conflicted evidence rather
+  than last-writer-wins behavior.
+- The first end-to-end fixture is the existing LAMZU Aurora repertoire. It
+  covers modern Feature-0 response alignment/status, Input-4 battery/DPI/
+  polling/LOD/profile/connection/performance pushes, Power Investigator,
+  routed VID/PID ambiguity, dangerous/unknown command suppression, bootloader
+  refusal, and the separate legacy report-8 family without duplicating the
+  Aurora protocol module.
+- Import status is `IMPORTED_UNREVIEWED`, `ACCEPTED`, or `REJECTED`. Even
+  accepted records remain no stronger than `OBSERVED`/`DECODED`; imports cannot
+  create experiments, `PROVEN` capabilities, setters, wider parameter ranges,
+  permissive `WriteScope`, routing certainty, or write authority.
+- Parsing is bounded for bytes, record count, frame length, nesting, node count,
+  timestamps, byte values, and content-addressed output paths. It is local-only,
+  executes no imported code, performs no network activity, opens no hardware,
+  and has no packet replay or HID write primitive.
+- Validation at this checkpoint: the focused importer/evidence/persistence/
+  grammar/temporal/routing/Lab/TUI/security/Aurora/power suite passed `238`
+  tests; the full suite passed `966` tests with one existing GLib deprecation
+  warning; `compileall` and `git diff --check` passed. LAMZU Thorn V2 physical
+  validation remains `UNVERIFIED — NEEDS PHYSICAL TEST`.
+
+## 2026-09-18 — LAMZU Aurora protocol-family knowledge milestone
+
+- Automatic Discovery now treats current LAMZU/Aurora as a declarative family:
+  64-byte Feature Report 0 control framing, sibling Input Report 4 events,
+  vendor-observed 0/1 response alignment, status/poll/resend bounds, command
+  recipes, model catalog, dependencies, and explicit provenance. The separate
+  VID `3554` report-8/16-byte/checksum/flash-layout generation remains a distinct
+  family and cannot collide with the modern grammar.
+- Thorn, Thorn V2, and 54H20 wired/wireless/receiver identities are retained as
+  vendor-declared model knowledge. USB receiver `0032` and routed/internal
+  identity `002e` remain separate and ambiguous until physical routing evidence
+  resolves them. Known mouse/receiver DFU identities are filtered from normal
+  selection and refused again at the Discovery boundary.
+- Vendor operations cover global state, battery, profile, sleep/debounce,
+  polling, DPI/XY, LOD, sensor model, Angle Tune/snapping, Motion Sync, ripple,
+  performance/20K, indicators, buttons, macros, Rapid Trigger, Scroll Bhop, and
+  routed identity. They are descriptive encoders/decoders only. No operation is
+  eligible for an automatic hardware request and both families use
+  `WriteScope.NEVER`.
+- Sensor codes 1/2/4, fine LOD, signed Angle Tune, BE16 fields, independent
+  Rapid Trigger buttons, Scroll Bhop modes/windows, and the Competition→20K
+  dependency are represented from vendor evidence. Catalog 50K/5-stage/8K
+  claims remain unverified rather than becoming capabilities.
+- Input Report 4 events project into the existing pushed-state model. Battery
+  percent/charging events feed the existing Power Investigator, preserving raw
+  100% while charging, freshness, stale-read replacement, route evidence, and
+  contradictions. Routed VID/PID replies create only candidate/ambiguous
+  Routing Mapper evidence and never prove ownership.
+- Factory/profile reset, identity/descriptor writes, pairing, DFU, erase,
+  firmware control, arbitrary targets, and unknown commands are explicit
+  `DO_NOT_PROBE` knowledge. Aurora vendor facts cannot authorize writes or
+  bypass per-operation exact-hardware proof.
+- Validation at this checkpoint: the focused Lab/discovery/protocol/TUI/security
+  suite passed `278` tests; the full suite passed `934` tests with one existing
+  GLib deprecation warning; `compileall` and `git diff --check` passed. Physical
+  validation remains `UNVERIFIED — NEEDS PHYSICAL TEST`.
+
+## 2026-09-18 — Discovery Lab battery/charging/power-state milestone
+
+- `LabExperiment` now retains canonical power evidence with raw and decoded
+  values, candidate semantics, explicit units only when proven, charging/source/
+  battery states, freshness, cadence, routed owner, confidence, proof state,
+  contradictions, and narrowly scoped cross-session provenance.
+- A value in `0..100` remains only a percentage candidate. Promotion requires
+  known protocol semantics, independent agreement, or repeated directional
+  evidence at distinct levels. Unknown buckets and voltage-like values retain
+  their exact representation without an invented percentage conversion.
+- Repeated controlled cable transitions can correlate a binary charging field;
+  the cable action alone never labels arbitrary changing bytes. Explicit
+  charging, external-power, full, low-battery, stale/fresh, and mouse-versus-
+  receiver evidence remain separate, and conflicting sources are not averaged.
+- Slow battery trends may accumulate across sessions only for the same exact
+  device-unique identity. When immediate evidence is insufficient, the planner
+  prefers one charging transition or a mouse-only power-cycle cache check and
+  otherwise leaves a passive candidate pending rather than asking the user to
+  drain the battery.
+- The existing orchestrator invokes the investigator after differential and
+  routing analysis when plans, semantic state, routed namespaces, or periodic
+  status evidence suggest power telemetry. The Lab page presents battery/power state,
+  confidence context, cadence, contradictions, passive follow-up, and the next
+  bounded experiment. Replay hashes source/owner identifiers and retains only
+  scoped power/protocol facts.
+- Focused Lab/discovery/protocol/TUI/security validation passes 232 tests; the
+  complete suite passes 905 with the existing GLib warning. Compileall and diff
+  checks pass. Physical hardware validation and passive runtime persistence
+  remain pending. No hardware write, forced discharge, network activity,
+  install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — Discovery Lab receiver/child routing milestone
+
+- `LabExperiment` now retains canonical generation-bound routing evidence and a
+  derived receiver/child graph. Physical receiver identity, logical child
+  candidates, receiver-local ownership, interfaces, endpoints, channels,
+  namespaces, reports, record types, internal targets, and asymmetric routes
+  remain distinct.
+- Target-field inference requires repeated controlled cross-child contrast.
+  Constant bytes are not treated as device IDs, indistinguishable children stay
+  ambiguous, and selected-device USB routes without child evidence stay
+  explicitly unmapped. Unrelated physical fingerprints are excluded.
+- Existing dialogue and pushed-state associations map cross-interface request/
+  response and asynchronous routes without requiring transport symmetry.
+  Repeated timing may strengthen an existing correlation but cannot establish
+  ownership by itself. Every routing analysis first feeds the Differential
+  Analyzer.
+- Route graphs support one or many children, many interfaces per child, shared
+  interfaces, receiver-local namespaces, and shared VID:PID with observed
+  internal targets. Old-generation routes are never carried forward; explicit
+  rediscovery comparison reports stable, remapped, missing, and new routes.
+- Ambiguity produces a bounded other-child control, repeated selected-child
+  action, or mouse-only power-cycle plan through the existing information-gain
+  and human-cost machinery. Persistence evidence may support a route candidate
+  but never proves ownership or storage location by itself.
+- Focused Lab/discovery/protocol/TUI/security validation passes 123 tests; the
+  complete suite passes 889 with the existing GLib warning. Compileall and diff
+  checks pass. Physical hardware validation remains pending. No hardware write,
+  slot scan, routing probe, install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — Discovery Lab state/effect/persistence verification milestone
+
+- `LabExperiment` now retains canonical effect evidence, cross-generation
+  persistence evidence, restoration requirements, and a derived persistence
+  assessment. Accepted requests, reported state, fresh/stale state, independent
+  physical effect, reversion, and unknown effect remain distinct.
+- The verifier implements a conservative seven-level evidence ladder from
+  immediate effect through idle, fresh reread, device reconnect, receiver
+  reconnect, power cycle, and host/session restart. Stronger persistence is
+  never inferred from a weaker checkpoint; stale post-reconnect state cannot
+  prove survival.
+- Protocol/physical disagreement, stale/fresh disagreement, automatic
+  reversion, and vendor/physical contradiction remain explicit. Commit/apply
+  and volatile-until-commit evidence can be identified without inventing or
+  executing an unknown commit command.
+- Power-cycle evidence may support device storage; observed host reapplication
+  supports host storage; host restart alone leaves storage location unknown.
+  Cross-generation state comparison is allowed only through persistence
+  evidence while protocol dialogue remains generation-isolated.
+- Persistence uncertainty produces bounded idle, reread, reconnect, receiver-
+  reconnect, or power-cycle plans through the existing information-gain and
+  human-cost planner. Disruptive testing can stop on user refusal or insufficient
+  value. Original-state restoration remains manual unless separately authorized.
+- Focused Lab/discovery/protocol/TUI/security validation passes 140 tests; the
+  complete suite passes 876 with the existing GLib warning. Compileall and diff
+  checks pass. Physical hardware validation remains pending. No hardware write,
+  install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — Discovery Lab controlled-action orchestration milestone
+
+- The Lab now models all supported physical, passive, external-vendor,
+  bounded-engine, and unavailable action classes. Eight initial templates cover
+  quiet, movement, generic buttons, one/multiple DPI stages, reconnect,
+  charging, and vendor-setting demonstrations.
+- `LabExperimentPlan` selects the safest maximum-information action, instruments,
+  bounded repeat count, semantic negative control, timing-derived observation
+  windows, success/stop criteria, and minimum human instruction. Equal-value
+  actions are ordered by physical effort, duration, risk, equipment, and repeat
+  burden. Bounded engine actions remain excluded without separate authority.
+- Execution is event-driven and feeds every completed plan into the existing
+  Differential Analyzer. Hypotheses retain strengthened, supported, weakened,
+  rejected, conflicted, or unresolved outcomes and negative evidence. An
+  unresolved result retains the recalculated next plan; resolved, conflicted,
+  cancelled, and no-safe-action outcomes retain explicit stop reasons.
+- DPI and polling ambiguity automatically select and invoke the existing
+  independent physical CPI and polling verifiers in the TUI. Timing profiles
+  determine bounded capture/settling windows when available; conservative
+  defaults explicitly retain uncertainty otherwise.
+- Focused Lab/protocol/TUI/measurement/authority/security validation passes 122
+  tests; the complete suite passes 858 with the existing GLib warning.
+  Compileall and diff checks pass. Physical hardware validation remains pending.
+  No hardware write, install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — Discovery Lab protocol timing profiler milestone
+
+- `LabExperiment` now retains canonical timing observations and profiles derived
+  from recorded timestamps. Evidence carries experiment/device/generation,
+  source IDs, exact start/end/duration, relationship, interval/repeat,
+  confidence/proof state, classification, and freshness where applicable.
+- The profiler automatically extracts request/response and ACK latency,
+  busy/poll cycles, existing burst timing and quiet completion, nudge/action/
+  periodic pushed-state timing, stale-read settling windows, and explicit
+  disconnect/reconnect/first-valid-state lifecycle timing. It never sleeps,
+  captures, polls, or writes hardware.
+- Repeated samples retain count/minimum/median/maximum/spread and MAD-based
+  rejected outliers. Timing classes are contextual rather than universal
+  millisecond thresholds; insufficient ordinary evidence remains `UNKNOWN`.
+- Baseline/action timing distributions produce separately ranked timing deltas
+  without assigning semantics. Timing uncertainty participates in the existing
+  information-gain recommendation path, and the cohesive Lab screen renders
+  normal-language timing summaries.
+- Focused Lab/discovery/protocol/TUI/security validation passes 171 tests; the
+  complete suite passes 849 with the existing GLib warning. No physical
+  validation, runtime write, install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — Discovery Lab differential analyzer milestone
+
+- The canonical setup TUI now exposes `Hardware Discovery → Discovery Lab →
+  Run Full Automatic Lab — Differential Analyzer milestone`. It runs a bounded
+  selected-device baseline/action/post-action/negative-control workflow with
+  three automatically chosen positive repeats.
+- `LabExperiment` is the common generation-isolated evidence record for Lab
+  instruments. It retains exact stable physical context, interval/repeat
+  identity, path-independent HID and Feature evidence, optional canonical USB,
+  logical-record and dialogue evidence, physical CPI/polling evidence,
+  provenance, confidence/proof state, analysis, and next recommendation.
+- The analyzer ranks constant, changed, action-correlated, counter, length,
+  status, integrity, and trailing padding/stale candidates. It also compares
+  timing, request/response transactions and echoes, reuses dependency and
+  integrity inference, retains contradictions, produces conservative labelled-
+  action hypotheses, and uses the existing information-gain planner.
+- Deterministic replay fixtures exclude volatile paths, evdev history, keyboard
+  history, clipboard content, and screen data. The Lab remains local-only and
+  read-only; ambiguity is refused, generation mixing is rejected, recognition
+  never grants writes, and `write_authorized` is always false.
+- Focused Lab/discovery/protocol/security validation passes 176 tests; the
+  complete suite passes 841 with the existing GLib warning. No physical
+  validation, hardware write, install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — fixed-frame logical-record reassembly milestone
+
+- Discovery now separates fixed HID transport reports from variable logical
+  records. The generic read-only reassembler handles one record per frame,
+  records spanning frames, adjacent records in one frame, and declared-length
+  tails without treating padding as protocol content.
+- Complete, incomplete, and invalid records retain source frames, transport and
+  logical lengths, timestamps, physical/source/channel/namespace/report/
+  generation identity, declared and captured lengths, integrity state, known
+  field bytes, and exact opaque regions. Reconnects invalidate partial old-
+  generation records; streams never cross source, physical device, channel,
+  namespace, report ID, direction, or transport boundaries.
+- Optional wrappers use the existing bounded integrity algorithms. A protected
+  record is valid only after validation; unsupported integrity stays `UNKNOWN`
+  and cannot be promoted, while a failed check makes the record `INVALID`.
+  Unwrapped records remain explicitly unknown rather than implicitly valid.
+- The repertoire adds a recognition-only RAWM-style declarative recipe over
+  independently reconstructed abstract fixtures. It requires coherent complete-
+  state record structure, preserves unresolved bytes, uses `WriteScope.NEVER`,
+  and adds no setter, whole-state write, or runtime transaction.
+- The retained benchmark grows from 18 to 27 cases: 12 recognized, 13
+  candidates, 1 unknown, and 1 ambiguous. Fixture-only coverage is 44.4%,
+  abstention 51.9%, ambiguity 3.7%, recognized precision/known-case recall
+  100%, and unknown/collision false recognition 0%; no broader 90% claim is
+  made.
+- Focused protocol/discovery validation passes 156 tests; the complete suite
+  passes 831 with the existing GLib warning. No physical validation, hardware
+  write, write-authority change, install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — asynchronous pushed-state recognition milestone
+
+- The generation-aware temporal assembler now represents meaningful state that
+  has no request owner. Records retain exact stream identity, semantic state
+  identity, decoded opaque state, freshness/reasons, periodic position, optional
+  subtype/transform proof, controlled-action correlation, and optional observed
+  read-side nudge association.
+- Freshness is explicit (`FRESH`, `STALE`, `UNKNOWN_FRESHNESS`). Successful
+  immediate reads start unknown; a later disagreeing accepted push demotes the
+  old read to stale. Periodic cadence, a bounded nudge, monotonic counters, and
+  controlled-action transitions can establish fresh evidence. Old-generation
+  pushes are retained as rejected stale evidence and cannot update current state.
+- The repertoire now recognizes MCHOSE Realtek/L7-style Input report `0x13`,
+  subtype `0x1D`, and actually verified XOR-FF source/result pairs through the
+  generic pushed-state recipe. It remains distinct from MCHOSE V3,
+  `WriteScope.NEVER`, semantic-offset agnostic, and has no nudge executor,
+  setter, capability, or runtime write path.
+- The benchmark grows from 11 to 18 cases: 8 recognized, 8 candidates, 1
+  unknown, and 1 ambiguous. Fixture-only coverage is 44.4%, abstention 50%,
+  ambiguity 5.6%, recognized precision/known-case recall 100%, and unknown/
+  collision false recognition 0%; no broader 90% claim is made.
+- Focused protocol/discovery validation passes 81 tests; the complete suite
+  passes 818 with the existing GLib warning. No physical validation, hardware
+  write, write-authority change, install, push, merge, tag, or release occurred.
+
+## 2026-09-18 — bounded response-burst recognition milestone
+
+- The existing temporal assembler now supports one trigger followed by zero or
+  more exactly correlated responses. Replay timestamps drive quiet-interval and
+  absolute-deadline completion; maximum-count, explicit-end, and connection-
+  generation completion are also distinct, bounded result states.
+- Burst isolation requires exact physical/source/transport/channel/namespace/
+  report/grammar/generation evidence plus transaction-tag equality when present.
+  Wrong mouse/dongle context, ordinary input events, late records, and stale
+  generations are excluded without wall-clock sleeps or hardware interaction.
+- The repertoire expresses Finalmouse ULX-style mouse and dongle telemetry as
+  generic bounded bursts with length+command+payload framing. It remains
+  recognition-only, `WriteScope.NEVER`, and contains no runtime setter or
+  semantic claim for opaque LE16 fields.
+- The project-owned benchmark grows from 6 to 11 cases: five recognized, four
+  candidates, one unknown, and one ambiguous. On this small fixture only,
+  precision/known-case recall remain 100%, unknown/collision false recognition
+  remain 0%, coverage is 45.5%, abstention 45.5%, and ambiguity 9.1%.
+- Focused protocol/discovery validation passes 69 tests; the complete suite
+  passes 806 tests with the existing GLib warning. No physical validation,
+  hardware write, write-authority change, install, push, merge, tag, or release
+  occurred.
+
+## 2026-09-18 — open-set protocol-recognition corpus foundation
+
+- Protocol-family semantic recognition is now data-driven. Reusable passive
+  discriminators cover frame length/constants, cross-frame field correlation,
+  SUM8 integrity, declared semantic length, and paired report namespaces; the
+  BITMOUSE path no longer contains a family-specific recognizer.
+- Recognition explicitly returns `UNKNOWN`, `CANDIDATE`, `AMBIGUOUS`, or
+  `RECOGNIZED`, requires independent evidence categories and a winner margin,
+  and converts broken checksum/target/sequence/length relations into negative
+  evidence instead of nearest-family matches.
+- Keychron M6 paired `B3→B4` and `B5→B6` dialogues and exact Holtek Venus
+  `04d9:fc55` interface/report topology are now declarative repertoire facts.
+  Holtek remains structural-only; all new knowledge has `WriteScope.NEVER` and
+  creates no capability, transaction, backend, or runtime write.
+- The initial project-owned six-case corpus includes identity-blinded positive,
+  near-miss, unknown, structural-collision, dialogue, and structure-only cases.
+  It reports 100% recognized precision/known-case recall, 0% unknown/collision
+  false recognition, 33.3% coverage, 50% abstention, and 16.7% ambiguity on
+  this small fixture only; it does not claim the broader 90% objective.
+- Focused discovery/protocol validation passes 60 tests. The complete suite
+  passes 797 tests with the existing GLib deprecation warning. Physical
+  hardware validation was not performed and no new hardware support is claimed.
+
 ## 2026-09-18 — launcher / TUI first-frame performance candidate
 
 - The canonical device-selection frame now renders before the live HID backend

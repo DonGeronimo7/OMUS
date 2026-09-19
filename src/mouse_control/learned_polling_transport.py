@@ -10,10 +10,9 @@ from __future__ import annotations
 from .learned_hid_session import LearnedHidSession, LearnedHidSessionError
 from .learned_polling import (
     LearnedPollingOperation,
-    LearnedPollingOperationError,
     PollingControlState,
 )
-from .polling_replay import PacketPattern, ReplayStep
+from .polling_replay import ReplayStep
 
 
 class LearnedPollingTransportError(RuntimeError):

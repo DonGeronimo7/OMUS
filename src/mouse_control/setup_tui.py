@@ -19,11 +19,23 @@ from .hardware import HardwareError, get_backend
 from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 from .performance import timed
+from .lab_orchestrator import initial_lab_hypotheses, plan_next_experiment
+
+
+def _format_timing_ns(value: int | None) -> str:
+    if value is None:
+        return "unknown"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f} ms"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f} µs"
+    return f"{value} ns"
 
 
 class SetupSection(Enum):
     DEVICE = "Device"
     HARDWARE = "Hardware Discovery"
+    LAB = "Discovery Lab"
     DPI = "DPI"
     POLLING = "Polling"
     BUTTONS = "Buttons"
@@ -41,6 +53,9 @@ class ActionKind(Enum):
     AUTOMATIC_DISCOVERY = auto()
     RETRY_DISCOVERY = auto()
     GUIDED_DISCOVERY = auto()
+    RUN_DISCOVERY_LAB = auto()
+    OPEN_ADVANCED_TOOLS = auto()
+    IMPORT_VENDOR_CAPTURE = auto()
     MEASURE_POLLING = auto()
     EDIT_DPI = auto()
     CAPTURE_BUTTONS = auto()
@@ -58,6 +73,7 @@ class DisplayRow:
     text: str
     cursor_index: int | None = None
     dim: bool = False
+    role: str = "normal"
 
 
 @dataclass(frozen=True)
@@ -129,7 +145,10 @@ class NavigationState:
             return
         index = SECTIONS.index(self.current)
         if index > 0:
-            self.current = SECTIONS[index - 1]
+            previous = SECTIONS[index - 1]
+            # The Lab is an instrument launched from Hardware Discovery, not a
+            # required configuration step between Hardware and DPI.
+            self.current = SetupSection.HARDWARE if previous is SetupSection.LAB else previous
 
     def edit_from_review(self, target: SetupSection) -> None:
         self.return_to = SetupSection.REVIEW
@@ -155,8 +174,6 @@ class SetupController:
         initialize_backend: bool = True,
         selected_index: int | None = None,
     ) -> None:
-        if not devices:
-            raise ValueError("setup requires at least one mouse")
         self.devices = tuple(devices)
         self.existing_config = existing_config
         self._choices_factory = choices_factory
@@ -175,10 +192,25 @@ class SetupController:
         self.research_plan: Any | None = None
         self.research_probe_outcome: Any | None = None
         self.discovery_engine: Any | None = None
+        self.lab_experiment: Any | None = None
+        self.vendor_capture_import: Any | None = None
         self.polling_measurement: Any | None = None
+        self.battery_state: Any | None = None
+        self.battery_error: str | None = None
         self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
+
+        self.choices = self._choices_factory(self.existing_config)
+        if not self.devices:
+            self.selected_index = 0
+            self.device_cursor = 0
+            self.selected = None
+            self.backend = None
+            self.status = (
+                "No mouse detected. Check input permissions or reconnect a device, then reopen setup."
+            )
+            return
 
         self.selected_index = (
             self._configured_device_index() if selected_index is None else selected_index
@@ -188,7 +220,6 @@ class SetupController:
         self.device_cursor = self.selected_index
         self.selected = self.devices[self.selected_index]
         self.backend: Any = None
-        self.choices = self._choices_factory(self.existing_config)
         if initialize_backend:
             self._bind_device(self.selected_index, restore_old=False, reset_choices=True)
         else:
@@ -254,6 +285,19 @@ class SetupController:
             discover_choices(self.backend, self.selected, self.choices)
         lines = [line.strip() for line in output.getvalue().splitlines() if line.strip()]
         self.notice = lines[-1] if lines else ""
+        self._refresh_battery_snapshot()
+
+    def _refresh_battery_snapshot(self) -> None:
+        """Read battery once during initialization, never in the redraw path."""
+
+        self.battery_state = None
+        self.battery_error = None
+        try:
+            if not self.backend.supports_battery(self.selected):
+                return
+            self.battery_state = self.backend.get_battery_state(self.selected)
+        except (HardwareError, AttributeError, OSError, TypeError, ValueError) as exc:
+            self.battery_error = str(exc)
 
     def _configured_identity_matches(self, device: Any) -> bool:
         configured = self.existing_config.get("device", {})
@@ -312,6 +356,8 @@ class SetupController:
         self.research_plan = None
         self.research_probe_outcome = None
         self.discovery_engine = None
+        self.lab_experiment = None
+        self.vendor_capture_import = None
         self.polling_measurement = None
         self.observed_hardware = ObservedHardwareState()
         self.status = f"Selected {self.selected.name}; ready for Automatic Discovery."
@@ -462,6 +508,37 @@ class SetupController:
         self.discovery_progress.clear()
         self.status = message
 
+    def apply_lab_experiment(self, experiment: Any) -> None:
+        """Retain one canonical Lab result for progressive TUI inspection."""
+
+        self.lab_experiment = experiment
+        analysis = getattr(experiment, "analysis", None)
+        correlated = 0
+        if analysis is not None:
+            correlated = sum(
+                1 for item in analysis.ranked_fields
+                if any(signal.value == "action_correlated" for signal in item.signals)
+            )
+        self.status = (
+            f"Differential analysis retained {correlated} action-correlated field(s); "
+            "write authority remains unchanged."
+        )
+
+    def apply_vendor_capture_import(self, imported: Any) -> None:
+        """Retain an offline import summary without changing runtime capabilities."""
+
+        self.vendor_capture_import = imported
+        manifest = imported.manifest
+        self.status = (
+            f"Imported {manifest.accepted_records} offline evidence record(s); "
+            "review state is unreviewed and write authority remains unchanged."
+        )
+
+    def cancel_vendor_capture_import(self) -> None:
+        """Cancellation changes no previously staged evidence or runtime state."""
+
+        self.status = "Vendor capture import cancelled; existing evidence is unchanged."
+
     @property
     def guided_discovery_available(self) -> bool:
         # Deeper learning is specifically the fallback for an unknown protocol
@@ -494,7 +571,13 @@ class SetupController:
 
     def hardware_lines(self) -> list[str]:
         """Render factual, independent capability state without collapsing failures."""
-        lines: list[str] = []
+        identity = "unknown"
+        if self.selected.vendor is not None and self.selected.product is not None:
+            identity = f"{self.selected.vendor:04x}:{self.selected.product:04x}"
+        lines: list[str] = [
+            f"• Device: {self.selected.name}  [{identity}]",
+            f"• Connection: {self.selected.phys or self.selected.path or 'unknown'}",
+        ]
         result = self.discovery_result
         if result is not None:
             device = result.device
@@ -567,6 +650,20 @@ class SetupController:
 
         if self._supports_dpi_events():
             lines.append("✓ Physical DPI events / stage notifications available")
+        if self.battery_state is not None:
+            battery = self.battery_state
+            parts = []
+            if getattr(battery, "percentage", None) is not None:
+                parts.append(f"{battery.percentage}%")
+            if getattr(battery, "voltage_mv", None) is not None:
+                parts.append(f"{battery.voltage_mv} mV")
+            if getattr(battery, "status", None):
+                parts.append(str(battery.status).replace("_", " "))
+            lines.append("✓ Battery / power: " + (", ".join(parts) or "state unknown"))
+        elif self.battery_error:
+            lines.append("? Battery / power: temporarily unavailable")
+        else:
+            lines.append("— Battery / power: unsupported or not reported")
         if self.guided_outcome and self.guided_outcome.dpi_action_identified:
             lines.append("✓ DPI button behavior identified")
             if not self.choices.dpi_writable:
@@ -595,6 +692,8 @@ class SetupController:
             if self.choices.polling_writable:
                 return SetupSection.POLLING
             return SetupSection.BUTTONS
+        if section is SetupSection.LAB:
+            return self._next_configuration_section(SetupSection.HARDWARE)
         if section is SetupSection.DPI:
             return SetupSection.POLLING if self.choices.polling_writable else SetupSection.BUTTONS
         if section is SetupSection.POLLING:
@@ -610,6 +709,8 @@ class SetupController:
             if self.choices.dpi_writable:
                 return SetupSection.DPI
             return SetupSection.HARDWARE
+        if section is SetupSection.LAB:
+            return SetupSection.HARDWARE
         if section is SetupSection.POLLING:
             return SetupSection.DPI if self.choices.dpi_writable else SetupSection.HARDWARE
         if section is SetupSection.DPI:
@@ -620,8 +721,10 @@ class SetupController:
         if self.section is SetupSection.DEVICE:
             return len(self.devices)
         if self.section is SetupSection.HARDWARE:
-            # Automatic/retry, optional deeper discovery, continue.
-            return 3 if self.guided_discovery_available else 2
+            # Automatic/retry, Discovery Lab, optional deeper discovery, continue.
+            return 4 if self.guided_discovery_available else 3
+        if self.section is SetupSection.LAB:
+            return 4
         if self.section is SetupSection.DPI:
             return len(self.choices.stages) if self.choices.dpi_writable else 1
         if self.section is SetupSection.POLLING:
@@ -647,6 +750,14 @@ class SetupController:
 
     def handle_key(self, key: str) -> ControllerAction:
         key = key.upper()
+        if self.section is SetupSection.DEVICE and not self.devices:
+            if key == "HELP":
+                return ControllerAction(ActionKind.HELP)
+            if key == "QUIT":
+                return ControllerAction(ActionKind.CANCEL)
+            if key == "ENTER":
+                self.status = "No mouse is available to select; reconnect one and reopen setup."
+            return ControllerAction()
         if key == "FIRST":
             if self.section is SetupSection.DEVICE:
                 self.device_cursor = 0
@@ -693,7 +804,7 @@ class SetupController:
             }:
                 self.nav.current = SetupSection.REVIEW
                 self.nav.return_to = None
-            elif self.section in {SetupSection.HARDWARE, SetupSection.DPI, SetupSection.POLLING}:
+            elif self.section in {SetupSection.HARDWARE, SetupSection.LAB, SetupSection.DPI, SetupSection.POLLING}:
                 self._go(self._next_configuration_section())
             else:
                 self.nav.sequential(1)
@@ -715,6 +826,9 @@ class SetupController:
 
     def activate(self) -> ControllerAction:
         if self.section is SetupSection.DEVICE:
+            if not self.devices:
+                self.status = "No mouse is available to select; reconnect one and reopen setup."
+                return ControllerAction()
             if self.device_cursor != self.selected_index:
                 self._bind_device(self.device_cursor)
             self._go(SetupSection.HARDWARE)
@@ -728,12 +842,28 @@ class SetupController:
                 return ControllerAction(
                     ActionKind.RETRY_DISCOVERY if self.discovery_complete else ActionKind.AUTOMATIC_DISCOVERY
                 )
+            if self.row_cursor == 1:
+                self._go(SetupSection.LAB)
+                return ControllerAction()
             if self.guided_discovery_available:
-                if self.row_cursor == 1:
+                if self.row_cursor == 2:
                     return ControllerAction(ActionKind.GUIDED_DISCOVERY)
                 self._go(self._next_configuration_section(SetupSection.HARDWARE))
                 return ControllerAction()
             self._go(self._next_configuration_section(SetupSection.HARDWARE))
+            return ControllerAction()
+
+        if self.section is SetupSection.LAB:
+            if self.row_cursor == 0:
+                if not self.discovery_complete or self.discovery_result is None:
+                    self.status = "Run Automatic Discovery before starting a Lab experiment."
+                    return ControllerAction()
+                return ControllerAction(ActionKind.RUN_DISCOVERY_LAB)
+            if self.row_cursor == 1:
+                return ControllerAction(ActionKind.OPEN_ADVANCED_TOOLS)
+            if self.row_cursor == 2:
+                return ControllerAction(ActionKind.IMPORT_VENDOR_CAPTURE)
+            self._go(self._next_configuration_section(SetupSection.LAB))
             return ControllerAction()
 
         if self.section is SetupSection.DPI:
@@ -901,8 +1031,15 @@ class SetupController:
             ]
 
         if self.section is SetupSection.HARDWARE:
-            rows = [DisplayRow("Mouse Control Hardware Discovery")]
-            rows.extend(DisplayRow(line) for line in self.hardware_lines())
+            rows = [DisplayRow("Mouse Control Hardware Discovery", role="heading")]
+            rows.extend(
+                DisplayRow(
+                    line,
+                    dim=index == 1 or line.startswith(("•", "—")),
+                    role="primary" if index == 0 else "normal",
+                )
+                for index, line in enumerate(self.hardware_lines())
+            )
             if self.discovery_progress:
                 rows.extend((DisplayRow(""), DisplayRow("Recent discovery progress", dim=True)))
                 for event in self.discovery_progress[-4:]:
@@ -918,15 +1055,17 @@ class SetupController:
                 DisplayRow(
                     "Retry Automatic Discovery" if self.discovery_complete else "Run Automatic Discovery",
                     0,
+                    role="action",
                 )
             )
             next_section = self._next_configuration_section(SetupSection.HARDWARE)
             next_label = f"Continue to {next_section.value.lower()} configuration"
+            rows.append(DisplayRow("Open Discovery Lab", 1, role="action"))
             if self.guided_discovery_available:
-                rows.append(DisplayRow(self.deep_learning_label, 1))
-                rows.append(DisplayRow(next_label, 2))
+                rows.append(DisplayRow(self.deep_learning_label, 2, role="action"))
+                rows.append(DisplayRow(next_label, 3, role="action"))
             else:
-                rows.append(DisplayRow(next_label, 1))
+                rows.append(DisplayRow(next_label, 2, role="action"))
             rows.append(
                 DisplayRow(
                     "Unknown hardware remains read-only until exact write semantics are PROVEN.",
@@ -935,24 +1074,266 @@ class SetupController:
             )
             return rows
 
+        if self.section is SetupSection.LAB:
+            experiment = self.lab_experiment
+            plan = (
+                getattr(experiment, "next_plan", None)
+                or getattr(experiment, "plan", None)
+                or plan_next_experiment(initial_lab_hypotheses())
+            )
+            rows = [
+                DisplayRow("Discovery Lab — Automatic Experiment Planner", role="heading"),
+                DisplayRow("Selected-device capture is local, bounded, and read-only.", dim=True),
+                DisplayRow(f"Current question: {plan.purpose}", role="primary"),
+            ]
+            repertoire = tuple(
+                getattr(self.discovery_engine, "repertoire_candidates", ())
+                if self.discovery_engine is not None else ()
+            )
+            lamzu = next((
+                item for item in repertoire
+                if item.family.name == "lamzu-aurora-feature64"
+            ), None)
+            if lamzu is not None:
+                rows.extend((
+                    DisplayRow("Known protocol family candidate: LAMZU Aurora  [RECOGNIZED]"),
+                    DisplayRow("Vendor knowledge: available  [VENDOR EVIDENCE]", dim=True),
+                    DisplayRow("Exact hardware proof: incomplete; physical qualification [UNVERIFIED]", dim=True),
+                    DisplayRow(
+                        "Writes: disabled pending verification; write authority [READ-ONLY]",
+                        dim=True,
+                    ),
+                ))
+            imported = self.vendor_capture_import
+            if imported is not None:
+                manifest = imported.manifest
+                rows.extend((
+                    DisplayRow("Vendor capture import", dim=True),
+                    DisplayRow(
+                        f"Format: {manifest.parser_selected}; "
+                        f"accepted {manifest.accepted_records}/{manifest.total_records} records"
+                    ),
+                    DisplayRow(f"Source digest: {manifest.source_digest[:12]}…"),
+                    DisplayRow(
+                        "Families: " + (
+                            ", ".join(manifest.protocol_families_recognized) or "unrecognized"
+                        )
+                    ),
+                    DisplayRow(
+                        f"Warnings: {len(manifest.warnings)}; conflicts: {len(manifest.conflicts)}; "
+                        f"dangerous/suppressed: {manifest.dangerous_suppressed_records}"
+                    ),
+                    DisplayRow(
+                        f"Review state: {manifest.review_status.value.replace('_', ' ')}"
+                    ),
+                    DisplayRow(
+                        "Imported evidence does not enable writes or grant hardware write authority."
+                    ),
+                ))
+            if plan.selected_action is not None:
+                rows.extend([
+                    DisplayRow(f"Best experiment: {plan.selected_action.label}"),
+                    DisplayRow(
+                        f"Why: expected information gain {plan.expected_information_gain_bits:.2f} bits; "
+                        f"{plan.safety_class.value.replace('_', ' ')}.",
+                        dim=True,
+                    ),
+                    DisplayRow(
+                        "Automatic: capture baseline/action/control, compare fields, and update hypotheses.",
+                        dim=True,
+                    ),
+                    DisplayRow(f"Your part: {plan.human_instructions[0]}"),
+                ])
+            analysis = getattr(experiment, "analysis", None)
+            if analysis is None:
+                rows.extend([
+                    DisplayRow("What is known: no Lab experiment has been run yet.", dim=True),
+                    DisplayRow("What is uncertain: action-specific protocol fields.", dim=True),
+                ])
+            else:
+                fields = analysis.ranked_fields
+                correlated = [
+                    item for item in fields
+                    if any(signal.value == "action_correlated" for signal in item.signals)
+                ]
+                rows.append(DisplayRow(
+                    f"Just learned: {len(correlated)} action-correlated field(s) across "
+                    f"{len(experiment.observations)} protocol observation(s)."
+                ))
+                for item in fields[:4]:
+                    labels = ", ".join(signal.value.replace("_", " ") for signal in item.signals)
+                    rows.append(DisplayRow(
+                        f"{item.stream_id[-12:]} byte {item.offset}: {labels} (rank {item.score:g})"
+                    ))
+                timing = getattr(experiment, "timing_profile", None)
+                rows.append(DisplayRow("Protocol timing", dim=True))
+                if timing is None or not timing.summaries:
+                    rows.append(DisplayRow(
+                        "No established temporal relationship was present in this capture.",
+                        dim=True,
+                    ))
+                else:
+                    for summary in timing.summaries[:4]:
+                        label = summary.relationship.value.replace("_", " → ", 1).replace("_", " ")
+                        detail = f"median {_format_timing_ns(summary.median_ns)}"
+                        if summary.accepted_count >= 2:
+                            stable = (
+                                summary.spread_ns is not None
+                                and summary.median_ns not in {None, 0}
+                                and summary.spread_ns / summary.median_ns <= 0.25
+                            )
+                            if stable:
+                                detail += f", stable across {summary.accepted_count} samples"
+                            else:
+                                detail += (
+                                    f", variable {_format_timing_ns(summary.minimum_ns)}–"
+                                    f"{_format_timing_ns(summary.maximum_ns)}"
+                                )
+                        else:
+                            detail += ", insufficient repeated evidence"
+                        rows.append(DisplayRow(f"{label}: {detail}"))
+                    stale = [
+                        item for item in timing.summaries
+                        if item.relationship.value == "read_to_fresh_state_latency"
+                    ]
+                    if stale:
+                        rows.append(DisplayRow(
+                            "Immediate readable state was superseded; freshness is questionable "
+                            f"for about {_format_timing_ns(stale[0].median_ns)}."
+                        ))
+                    for delta in timing.differentials[:2]:
+                        rows.append(DisplayRow(
+                            f"Timing delta: baseline {_format_timing_ns(delta.baseline_median_ns)} "
+                            f"→ action {_format_timing_ns(delta.action_median_ns)}"
+                        ))
+                recommendation = analysis.next_recommended_experiment
+                if recommendation is not None:
+                    rows.append(DisplayRow(
+                        f"Next: {recommendation.experiment.replace('_', ' ')} — "
+                        f"{recommendation.reason}"
+                    ))
+                    rows.append(DisplayRow(
+                        "Hardware write required: yes" if recommendation.requires_hardware_write
+                        else "Hardware write required: no"
+                    ))
+                if analysis.contradictions:
+                    rows.append(DisplayRow(
+                        f"Uncertain: {len(analysis.contradictions)} negative-control contradiction(s)."
+                    ))
+                updates = getattr(experiment, "hypothesis_updates", ())
+                strengthened = [item for item in updates if item.after.value in {"supported", "strengthened"}]
+                rejected = [item for item in updates if item.after.value in {"rejected", "weakened"}]
+                if strengthened:
+                    rows.append(DisplayRow(
+                        "Result: " + ", ".join(item.hypothesis_id for item in strengthened)
+                        + " gained evidence."
+                    ))
+                if rejected:
+                    rows.append(DisplayRow(
+                        "Rejected or weakened: " + ", ".join(item.hypothesis_id for item in rejected)
+                    ))
+                next_plan = getattr(experiment, "next_plan", None)
+                if next_plan is not None and next_plan.selected_action is not None:
+                    rows.append(DisplayRow(
+                        f"Next uncertainty: {next_plan.purpose}; try {next_plan.selected_action.label}."
+                    ))
+                assessment = getattr(experiment, "persistence_assessment", None)
+                if assessment is not None:
+                    rows.append(DisplayRow("Effect / persistence", dim=True))
+                    rows.append(DisplayRow(
+                        "Effect: " + assessment.effective_state.value.replace("_", " ")
+                    ))
+                    persistence = ", ".join(
+                        item.value.replace("_", " ") for item in assessment.classifications
+                    )
+                    rows.append(DisplayRow(f"Persistence: {persistence or 'unknown'}"))
+                    if assessment.strongest_confirmed_level is not None:
+                        rows.append(DisplayRow(
+                            "Strongest tested level: "
+                            + assessment.strongest_confirmed_level.name.lower().replace("_", " ")
+                        ))
+                    if assessment.contradictions:
+                        rows.append(DisplayRow(
+                            f"Contradictions retained: {len(assessment.contradictions)}"
+                        ))
+                    if assessment.restoration.required:
+                        rows.append(DisplayRow(
+                            "Restore original state manually, then verify restoration."
+                        ))
+                routing = getattr(experiment, "routing_analysis", None)
+                if routing is not None:
+                    rows.append(DisplayRow("Receiver / Device Routing", dim=True))
+                    for finding in routing.summary[:4]:
+                        rows.append(DisplayRow(finding))
+                    confirmed_routes = [
+                        item for item in routing.evidence
+                        if item.status.value == "confirmed_route"
+                    ]
+                    rows.append(DisplayRow(
+                        f"Confirmed logical routes: {len(confirmed_routes)}"
+                    ))
+                    if routing.ambiguities:
+                        rows.append(DisplayRow(
+                            f"Unresolved routing questions: {len(routing.ambiguities)}"
+                        ))
+                    if routing.next_plan is not None and routing.next_plan.selected_action is not None:
+                        rows.append(DisplayRow(
+                            "Best next routing experiment: "
+                            + routing.next_plan.selected_action.label
+                        ))
+                power = getattr(experiment, "power_analysis", None)
+                if power is not None:
+                    rows.append(DisplayRow("Battery / Power", dim=True))
+                    for finding in power.summary[:8]:
+                        rows.append(DisplayRow(finding))
+                    if power.contradictions:
+                        rows.append(DisplayRow(
+                            f"Power contradictions retained: {len(power.contradictions)}"
+                        ))
+                    if power.pending_natural_observation:
+                        rows.append(DisplayRow(
+                            "Passive follow-up: retain this candidate during normal future use."
+                        ))
+                    if power.next_plan is not None and power.next_plan.selected_action is not None:
+                        rows.append(DisplayRow(
+                            "Best next power experiment: "
+                            + power.next_plan.selected_action.label
+                        ))
+            rows.extend([
+                DisplayRow("Run Full Automatic Lab", 0, role="action"),
+                DisplayRow("Advanced Tools", 1, role="action"),
+                DisplayRow("Import Vendor Capture", 2, role="action"),
+                DisplayRow(
+                    f"Continue to {self._next_configuration_section(SetupSection.LAB).value} configuration",
+                    3,
+                    role="action",
+                ),
+                DisplayRow("Recognition and correlation never grant hardware write authority.", dim=True),
+            ])
+            return rows
+
         if self.section is SetupSection.DPI:
-            rows = [DisplayRow("DPI capability")]
-            if self.choices.current_dpi is not None:
-                rows.append(DisplayRow(f"Current hardware DPI: {self.choices.current_dpi}"))
             mode = (
                 "read/write" if self.choices.dpi_writable
                 else "read-only" if self.choices.dpi_readable
                 else "not yet discovered"
             )
-            rows.append(DisplayRow(f"Capability: {mode}"))
+            current = self.choices.current_dpi or self.choices.active_dpi
+            primary = f"{current} DPI" if current is not None else "DPI unknown"
+            rows = [DisplayRow(f"{primary:<14} {mode.upper()}", role="primary")]
             if self.choices.dpi_minimum is not None and self.choices.dpi_maximum is not None:
-                text = f"Range: {self.choices.dpi_minimum}–{self.choices.dpi_maximum} DPI"
+                text = f"Range {self.choices.dpi_minimum}–{self.choices.dpi_maximum} DPI"
                 if self.choices.dpi_increment:
-                    text += f"  step {self.choices.dpi_increment}"
-                rows.append(DisplayRow(text))
+                    text += f"  ·  Step {self.choices.dpi_increment}"
+                text += f"  ·  {len(self.choices.stages)} stages"
+                rows.append(DisplayRow(text, dim=True))
             elif self.choices.dpi_values:
-                rows.append(DisplayRow("Values: " + ", ".join(map(str, self.choices.dpi_values))))
-            rows.append(DisplayRow("Configured software stages"))
+                rows.append(DisplayRow(
+                    "Values " + " · ".join(map(str, self.choices.dpi_values))
+                    + f"  ·  {len(self.choices.stages)} stages",
+                    dim=True,
+                ))
+            rows.append(DisplayRow("Configured stages", role="heading"))
             if not self.choices.dpi_writable:
                 rows.append(
                     DisplayRow(
@@ -965,66 +1346,100 @@ class SetupController:
             for index, value in enumerate(self.choices.stages):
                 marker = "  ✓ verified" if value in self.choices.verified_dpi_values else ""
                 active = "  active" if value == self.choices.active_dpi else ""
-                rows.append(DisplayRow(f"Stage {index + 1}: {value} DPI{active}{marker}", index))
+                rows.append(DisplayRow(
+                    f"{index + 1:>2}.  {value:>5} DPI{active}{marker}",
+                    index,
+                    role="action",
+                ))
             rows.append(DisplayRow("Enter opens a reversible live-test/readback editor.", dim=True))
             return rows
 
         if self.section is SetupSection.POLLING:
-            rows = [DisplayRow("Polling / report rate")]
             mode = (
                 "read/write" if self.choices.polling_writable
                 else "read-only" if self.choices.polling_readable
                 else "not yet discovered"
             )
-            rows.append(DisplayRow(f"Protocol capability: {mode}"))
-            if self.choices.current_polling_rate is not None:
-                rows.append(
-                    DisplayRow(f"Protocol-reported current rate: {self.choices.current_polling_rate} Hz")
-                )
+            current = (
+                self.choices.current_polling_rate
+                or self.choices.measured_polling_rate
+                or self.choices.polling_rate
+            )
+            primary = f"{current} Hz" if current is not None else "Rate unknown"
+            rows = [DisplayRow(f"{primary:<14} {mode.upper()}", role="primary")]
+            if self.choices.polling_rates:
+                rows.append(DisplayRow(
+                    "Supported " + " · ".join(f"{hz} Hz" for hz in self.choices.polling_rates),
+                    dim=True,
+                ))
             if self.choices.measured_polling_rate is not None:
                 rows.append(
                     DisplayRow(
-                        f"Measured current rate: {self.choices.measured_polling_rate} Hz "
-                        f"({self.choices.measured_polling_confidence})"
+                        f"Motion measurement {self.choices.measured_polling_rate} Hz "
+                        f"· {self.choices.measured_polling_confidence}",
+                        dim=True,
                     )
                 )
             if self.choices.polling_writable and self.choices.polling_rates:
+                rows.append(DisplayRow("Available rates", role="heading"))
                 for index, hz in enumerate(self.choices.polling_rates):
                     selected = "  ✓ configured" if hz == self.choices.polling_rate else ""
-                    rows.append(DisplayRow(f"{hz} Hz{selected}", index))
+                    rows.append(DisplayRow(
+                        f"{hz:>5} Hz{selected}", index, role="action"
+                    ))
                 rows.append(
                     DisplayRow("Measure current rate from motion timing (read-only)",
-                               len(self.choices.polling_rates))
+                               len(self.choices.polling_rates), role="action")
                 )
                 rows.append(
                     DisplayRow("Selected writes are verified only during final apply.", dim=True)
                 )
             else:
-                rows.append(DisplayRow("Measure current rate from motion timing (read-only)", 0))
+                rows.append(DisplayRow(
+                    "Measure current rate from motion timing (read-only)", 0, role="action"
+                ))
                 rows.append(
                     DisplayRow("No unproven polling write will be attempted.", dim=True)
                 )
             return rows
 
         if self.section is SetupSection.BUTTONS:
-            return [
-                DisplayRow("Button mappings"),
-                DisplayRow(f"{len(self.choices.mappings)} mapping(s) configured."),
-                DisplayRow("Configure / edit mouse buttons", 0),
-                DisplayRow("Existing mappings are preserved unless you change a button.", dim=True),
+            rows = [
+                DisplayRow("Button mappings", role="heading"),
+                DisplayRow(f"{len(self.choices.mappings)} mapping(s) configured.", dim=True),
+                DisplayRow("Configure / edit mouse buttons", 0, role="action"),
             ]
+            for button, action in sorted(self.choices.mappings.items()):
+                rows.append(DisplayRow(f"{button:<18} → {action}"))
+            rows.extend((
+                DisplayRow(
+                    "Keyboard capture is exclusive; shortcuts are suppressed while recording.",
+                    dim=True,
+                ),
+                DisplayRow(
+                    "Existing mappings are preserved unless you change a button.", dim=True
+                ),
+            ))
+            return rows
 
         if self.section is SetupSection.SERVICE:
             return [
-                DisplayRow("Background service"),
-                DisplayRow("Enable at login" + ("  ✓" if self.choices.enable_service else ""), 0),
-                DisplayRow("Keep disabled" + ("  ✓" if not self.choices.enable_service else ""), 1),
+                DisplayRow("Background service", role="heading"),
+                DisplayRow("Enable at login" + ("  ✓" if self.choices.enable_service else ""), 0, role="action"),
+                DisplayRow("Keep disabled" + ("  ✓" if not self.choices.enable_service else ""), 1, role="action"),
             ]
 
         rows = [
-            DisplayRow("Final review"),
-            DisplayRow(f"Mouse:       {self.selected.name}"),
+            DisplayRow("Final review", role="heading"),
+            DisplayRow(f"Mouse:       {self.selected.name}", role="primary"),
         ]
+        if self.selected.vendor is not None and self.selected.product is not None:
+            rows.append(DisplayRow(
+                f"Identity:    {self.selected.vendor:04x}:{self.selected.product:04x}"
+            ))
+        rows.append(DisplayRow(
+            f"Connection:  {self.selected.phys or self.selected.path or 'unknown'}"
+        ))
         if self.observed_hardware.calibrated_dpi_cycle:
             rows.append(DisplayRow(
                 "Measured physical DPI cycle: ~"
@@ -1071,13 +1486,18 @@ class SetupController:
             ),
             DisplayRow(f"Buttons:     {len(self.choices.mappings)} mappings"),
             DisplayRow(f"Service:     {'enabled' if self.choices.enable_service else 'disabled'}"),
+            DisplayRow(
+                "Capability limitation: hardware writes require exact-device PROVEN evidence."
+                if not (self.choices.dpi_writable and self.choices.polling_writable)
+                else "Capability limitation: none for reviewed DPI and polling controls."
+            ),
             DisplayRow(""),
             *[DisplayRow(line) for line in self.hardware_lines()],
             DisplayRow(""),
-            DisplayRow("Save and Finish", 0),
-            DisplayRow("Edit DPI", 1),
-            DisplayRow("Edit polling", 2),
-            DisplayRow("Edit buttons", 3),
+            DisplayRow("Save and Finish", 0, role="action"),
+            DisplayRow("Edit DPI", 1, role="action"),
+            DisplayRow("Edit polling", 2, role="action"),
+            DisplayRow("Edit buttons", 3, role="action"),
         ])
         return rows
 

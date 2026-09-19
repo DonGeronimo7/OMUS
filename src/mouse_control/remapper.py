@@ -208,7 +208,8 @@ class MouseRemapper:
                  target_device: MouseDevice | None = None,
                  retry_interval: float = 0.5,
                  event_observer: Any | None = None,
-                 macros: object = None) -> None:
+                 macros: object = None,
+                 wake_coordinator: Any | None = None) -> None:
         self.device_path = device_path
         # An evdev event node is disposable.  Keep the selected mouse's
         # discovery identity separately so a changed eventN can be rebound.
@@ -235,6 +236,7 @@ class MouseRemapper:
         self.dpi_cycler = dpi_cycler
         self.retry_interval = retry_interval
         self.event_observer = event_observer
+        self.wake_coordinator = wake_coordinator
         self._pressed_keys: set[int] = set()
         self._held_chords: set[int] = set()
         self._chord_key_counts: dict[int, int] = {}
@@ -478,6 +480,8 @@ class MouseRemapper:
 
     def stop(self, *_: Any) -> None:
         self.shutdown_event.set()
+        if self.wake_coordinator is not None:
+            self.wake_coordinator.stop()
 
     def run(self) -> None:
         signal.signal(signal.SIGINT, self.stop)
@@ -488,12 +492,18 @@ class MouseRemapper:
             disconnected = False
             while not self.shutdown_event.is_set():
                 if self.device is None:
+                    wake_generation = (self.wake_coordinator.generation
+                                       if self.wake_coordinator is not None else None)
                     self.device = self._acquire_device()
                     if self.device is None:
                         if not disconnected:
                             LOG.warning("Mouse disconnected; waiting for reconnect")
                             disconnected = True
-                        self.shutdown_event.wait(self.retry_interval)
+                        if self.wake_coordinator is None:
+                            self.shutdown_event.wait(self.retry_interval)
+                        else:
+                            self.wake_coordinator.wait(
+                                wake_generation, self.retry_interval, self.shutdown_event)
                         continue
                     try:
                         self.device.grab()
@@ -507,6 +517,8 @@ class MouseRemapper:
                                         name=f"mouse-control: {self.device.name}")
                     if disconnected:
                         LOG.info("Mouse reconnected at %s", self.device.path)
+                        if self.wake_coordinator is not None:
+                            self.wake_coordinator.recognized()
                     if not announced:
                         print(f"Remapping: {self.device.name}")
                         print("Press Ctrl+C to stop.")
@@ -517,9 +529,14 @@ class MouseRemapper:
                     if not readable:
                         continue
                     for event in self.device.read():
+                        if (self.wake_coordinator is not None and
+                                event.type != ecodes.EV_SYN):
+                            self.wake_coordinator.activity("evdev-input")
                         self._handle(event.type, event.code, event.value)
                         if event.type != ecodes.EV_SYN:
                             self.ui.syn()
+                            if self.wake_coordinator is not None:
+                                self.wake_coordinator.runtime_usable()
                 except OSError as exc:
                     if not self._is_disconnect(exc):
                         raise
@@ -532,6 +549,8 @@ class MouseRemapper:
                         invalidate()
                     self._close_device()
                     disconnected = True
+                    if self.wake_coordinator is not None:
+                        self.wake_coordinator.reconnecting()
                     LOG.warning("Mouse disconnected; waiting for reconnect")
         finally:
             self._stop_macros()

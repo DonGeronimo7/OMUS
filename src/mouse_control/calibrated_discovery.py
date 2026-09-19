@@ -31,7 +31,7 @@ from .event_correlation import (
 from .learning_session import LearningSample, ReadOnlyLearningSession
 from .protocol_grammar import CodecKind, CodecSpec, SemanticBehavior
 from .semantic_inference import SemanticHypothesis
-from .sensor_calibration import CalibrationEvent, SensorCalibration
+from .sensor_calibration import CalibrationEvent
 
 
 @dataclass(frozen=True)

@@ -34,6 +34,7 @@ from .learned_operations import (
     matching_interface_node,
 )
 from .learned_polling import LearnedPollingOperationStore
+from .lamzu_aurora import is_lamzu_bootloader_identity
 from .protocol_grammar import SemanticBehavior
 from .protocol_discovery import (
     ProtocolAmbiguityError,
@@ -138,6 +139,10 @@ class DiscoveryEngine:
         self._reset_session_state()
         with measure("topology_construction"):
             physical = self.build_topology(mouse)
+        if is_lamzu_bootloader_identity(physical.vendor_id, physical.product_id):
+            raise ProtocolDetectionError(
+                "known LAMZU bootloader/DFU identity is excluded from normal discovery"
+            )
         if physical.ambiguous:
             return None
         with measure("persisted_evidence_lookup"):
@@ -176,6 +181,10 @@ class DiscoveryEngine:
         self._phase(DiscoveryPhase.ENUMERATE)
         with measure("topology_construction"):
             physical = self.build_topology(mouse)
+        if is_lamzu_bootloader_identity(physical.vendor_id, physical.product_id):
+            raise ProtocolDetectionError(
+                "known LAMZU bootloader/DFU identity is excluded from normal discovery"
+            )
         if not force and not physical.ambiguous:
             with measure("persisted_evidence_lookup"):
                 restored = self._profile_store.restore_result(physical)

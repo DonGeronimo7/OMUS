@@ -13,23 +13,38 @@ and a family match never grants write authority.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Iterable, Mapping
 
 from .discovery_models import DeviceNode, PhysicalDevice
 from .hid_descriptor import ParsedHidDescriptor
+from .logical_record import LogicalRecord, RecordCompleteness, RecordIntegrity
+from .lamzu_aurora import LAMZU_AURORA_FAMILIES
 from .protocol_codec import ProtocolCodecError, decode_value
 from .protocol_grammar import (
+    BurstRecognitionRecipe,
     CodecKind,
     CodecSpec,
+    DiscriminatorKind,
+    EvidenceCategory,
     FieldBinding,
+    FrameSide,
+    LogicalRecordRecognitionRecipe,
     ProtocolFamily,
     ProtocolSource,
+    PushedStateRecognitionRecipe,
+    RecognitionRecipe,
     ReportSignature,
+    SemanticDiscriminator,
     SessionGrammar,
     SemanticBehavior,
     SourceTrust,
     TransportKind,
     WriteScope,
+)
+from .temporal_dialogue import (
+    BurstDialogueResult, PushedStateAssociation, PushedStateRecord,
+    StateFreshness,
 )
 
 
@@ -37,6 +52,8 @@ from .protocol_grammar import (
 class SemanticExchange:
     request: bytes
     response: bytes
+    request_report_id: int | None = None
+    response_report_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -45,10 +62,22 @@ class SemanticFamilyRecognition:
     matched: tuple[str, ...]
     missing: tuple[str, ...]
     semantic_records: tuple[bytes, ...]
+    evidence_categories: tuple[EvidenceCategory, ...] = ()
 
     @property
     def recognized(self) -> bool:
-        return bool(self.matched) and not self.missing
+        recipe = (
+            self.candidate.family.recognition
+            or self.candidate.family.burst_recognition
+            or self.candidate.family.pushed_state_recognition
+            or self.candidate.family.logical_record_recognition
+        )
+        return (
+            recipe is not None
+            and bool(self.matched)
+            and not self.missing
+            and len(self.evidence_categories) >= recipe.minimum_independent_categories
+        )
 
     @property
     def write_authorized(self) -> bool:
@@ -70,6 +99,25 @@ class FamilyCandidate:
         return self.family.can_authorize_write(exact_model=self.exact_identity)
 
 
+class RecognitionStatus(str, Enum):
+    UNKNOWN = "unknown"
+    CANDIDATE = "candidate"
+    AMBIGUOUS = "ambiguous"
+    RECOGNIZED = "recognized"
+
+
+@dataclass(frozen=True)
+class OpenSetRecognition:
+    status: RecognitionStatus
+    family: str | None
+    ranked: tuple[SemanticFamilyRecognition, ...]
+    reason: str
+
+    @property
+    def write_authorized(self) -> bool:
+        return False
+
+
 @dataclass(frozen=True)
 class ObservedReport:
     node: DeviceNode
@@ -79,6 +127,7 @@ class ObservedReport:
     vendor_usage: bool
     usage_pages: tuple[int, ...] = ()
     application_usages: tuple[tuple[int, int], ...] = ()
+    interface_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -173,6 +222,7 @@ def _source(
 # classification but remain write-disabled until mouse-control proves them on
 # hardware or a modern upstream verification justifies promotion.
 DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
+    *LAMZU_AURORA_FAMILIES,
     ProtocolFamily(
         name="bitmouse-72",
         revision="semantic-frame-v1",
@@ -187,6 +237,46 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         signatures=(
             ReportSignature("output", 0x72, exact_length=64, vendor_usage_required=True, weight=6),
             ReportSignature("input", 0x72, exact_length=64, vendor_usage_required=True, weight=6),
+        ),
+        recognition=RecognitionRecipe(
+            discriminators=(
+                SemanticDiscriminator(
+                    "request-frame-length", DiscriminatorKind.FRAME_LENGTH,
+                    EvidenceCategory.FRAME, FrameSide.REQUEST, expected=64,
+                ),
+                SemanticDiscriminator(
+                    "response-frame-length", DiscriminatorKind.FRAME_LENGTH,
+                    EvidenceCategory.FRAME, FrameSide.RESPONSE, expected=64,
+                ),
+                SemanticDiscriminator(
+                    "request-report-marker", DiscriminatorKind.BYTE_EQUALS,
+                    EvidenceCategory.FRAME, FrameSide.REQUEST, offset=1, expected=0x72,
+                ),
+                SemanticDiscriminator(
+                    "response-report-marker", DiscriminatorKind.BYTE_EQUALS,
+                    EvidenceCategory.FRAME, FrameSide.RESPONSE, offset=0, expected=0x72,
+                ),
+                SemanticDiscriminator(
+                    "leading-request-checksum", DiscriminatorKind.SUM8_EQUALS,
+                    EvidenceCategory.INTEGRITY, FrameSide.REQUEST, offset=0, start=1, end=6,
+                ),
+                SemanticDiscriminator(
+                    "target-correlation", DiscriminatorKind.FIELD_EQUALS,
+                    EvidenceCategory.RELATIONSHIP, FrameSide.RESPONSE, offset=1,
+                    other_side=FrameSide.REQUEST, other_offset=2,
+                ),
+                SemanticDiscriminator(
+                    "sequence-correlation", DiscriminatorKind.FIELD_EQUALS,
+                    EvidenceCategory.RELATIONSHIP, FrameSide.RESPONSE, offset=2,
+                    other_side=FrameSide.REQUEST, other_offset=3,
+                ),
+                SemanticDiscriminator(
+                    "declared-semantic-reply-length", DiscriminatorKind.DECLARED_LENGTH,
+                    EvidenceCategory.RELATIONSHIP, FrameSide.RESPONSE, offset=4,
+                    other_side=FrameSide.REQUEST, other_offset=5, payload_offset=5,
+                ),
+            ),
+            minimum_independent_categories=3,
         ),
         transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
         write_scope=WriteScope.NEVER,
@@ -396,6 +486,134 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="64-byte command/subcommand/length/SUM8 envelope; battery uses a separate heartbeat transaction.",
     ),
     ProtocolFamily(
+        name="holtek-venus-feature-flash",
+        revision="fc55-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90%+ research payload — Holtek Venus",
+                SourceTrust.REFERENCE,
+                notes="Project-owned declarative facts only; no upstream capture or executable write recipe imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "feature", 0x02, exact_length=16,
+                required_usage_page=0xFFA0,
+                required_interface_number=2,
+                weight=8,
+            ),
+            ReportSignature(
+                "feature", 0x03, exact_length=64,
+                required_usage_page=0xFFA0,
+                required_interface_number=2,
+                weight=8,
+            ),
+        ),
+        vendor_ids=(0x04D9,),
+        product_ids=(0xFC55,),
+        transports=(TransportKind.HID_FEATURE_GET, TransportKind.HID_FEATURE_SET),
+        bindings=(
+            FieldBinding(
+                SemanticBehavior.REPORT_RATE_HZ,
+                "polling-representation",
+                0,
+                codec=_OBSERVED_POLLING_CODEC,
+                evidence_note="Representation only; command location and write semantics remain unresolved.",
+            ),
+        ),
+        write_scope=WriteScope.NEVER,
+        identity_required=True,
+        minimum_match_score=19,
+        notes=(
+            "F1 control, F2 read, F3 flash-data and F5 status/control are vocabulary facts. "
+            "Flash write, category commit and possible reset/re-enumeration are descriptive dialogue facts; "
+            "storage and physical effect remain separate and all writes are disabled."
+        ),
+    ),
+    ProtocolFamily(
+        name="keychron-m6-paired-namespaces",
+        revision="ffc1-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90%+ research payload — Keychron M6",
+                SourceTrust.REFERENCE,
+                notes="Project-owned structural fixture; semantic offsets and write packets were not imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("output", 0xB3, required_usage_page=0xFFC1, weight=6),
+            ReportSignature("input", 0xB4, required_usage_page=0xFFC1, weight=6),
+            ReportSignature("output", 0xB5, required_usage_page=0xFFC1, weight=6),
+            ReportSignature("input", 0xB6, required_usage_page=0xFFC1, weight=6),
+        ),
+        recognition=RecognitionRecipe(
+            discriminators=(
+                SemanticDiscriminator(
+                    "query-response-namespace-pair",
+                    DiscriminatorKind.REPORT_ID_PAIR,
+                    EvidenceCategory.DIALOGUE,
+                    request_report_id=0xB3,
+                    response_report_id=0xB4,
+                    match_all_exchanges=False,
+                ),
+                SemanticDiscriminator(
+                    "setting-ack-namespace-pair",
+                    DiscriminatorKind.REPORT_ID_PAIR,
+                    EvidenceCategory.DIALOGUE,
+                    request_report_id=0xB5,
+                    response_report_id=0xB6,
+                    match_all_exchanges=False,
+                ),
+            ),
+            minimum_independent_categories=3,
+        ),
+        transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=24,
+        notes=(
+            "B3→B4 is the query/status namespace and B5→B6 is the setting/ACK namespace. "
+            "The structural collision remains only a candidate until captured dialogue proves those pairings; "
+            "five LE16 DPI stages and dynamic report-rate capabilities are descriptive facts only."
+        ),
+    ),
+    ProtocolFamily(
+        name="finalmouse-ulx-bounded-telemetry",
+        revision="burst-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90% research payload — Finalmouse ULX bounded response bursts",
+                SourceTrust.REFERENCE,
+                notes="Independently reconstructed abstract fixture; no upstream source or capture imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("output", vendor_usage_required=True, weight=4),
+            ReportSignature("input", vendor_usage_required=True, weight=4),
+        ),
+        burst_recognition=BurstRecognitionRecipe(
+            namespace_pairs=(
+                ("finalmouse.mouse.command", "finalmouse.mouse.telemetry"),
+                ("finalmouse.dongle.command", "finalmouse.dongle.telemetry"),
+            ),
+            length_offset=0,
+            command_offset=1,
+            payload_offset=2,
+            minimum_responses=1,
+            maximum_responses=32,
+        ),
+        transports=(TransportKind.HID_OUTPUT, TransportKind.HID_INPUT),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=8,
+        notes=(
+            "Recognition-only length + command + payload record grammar. Mouse and dongle namespaces "
+            "are related family contexts but are never interchangeable. Established LE16 values remain "
+            "opaque because this fixture does not establish semantic field offsets."
+        ),
+    ),
+    ProtocolFamily(
         name="redragon-m724-feature-session",
         revision="m724-k1ng-1k-v1",
         sources=(
@@ -515,6 +733,80 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         notes="Read-only telemetry knowledge. Report 05 existence never implies configuration authority.",
     ),
     ProtocolFamily(
+        name="rawm-variable-logical-records",
+        revision="logical-record-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90% research payload — RAWM logical record framing",
+                SourceTrust.REFERENCE,
+                notes=(
+                    "Independently reconstructed abstract fixtures; record type values and "
+                    "field locations are corpus symbols, not imported device packets."
+                ),
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "input", vendor_usage_required=True, weight=4,
+            ),
+        ),
+        logical_record_recognition=LogicalRecordRecognitionRecipe(
+            grammar="rawm-style-state-v1",
+            namespace="rawm.records",
+            report_id=None,
+            required_field_names=(
+                "model", "sensor", "dpi-stage-count", "polling",
+                "power", "capabilities",
+            ),
+            minimum_records=1,
+            maximum_records=16,
+            allow_unwrapped_integrity=True,
+        ),
+        transports=(TransportKind.HID_INPUT,),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=4,
+        notes=(
+            "Recognition-only fixed-HID/variable-record architecture. Abstract fixture fields "
+            "represent complete-state presence while all uninterpreted bytes remain opaque. "
+            "Optional integrity may be valid or absent/unknown, never invalid. No setter, "
+            "whole-state write, or runtime transaction is represented."
+        ),
+    ),
+    ProtocolFamily(
+        name="mchose-realtek-l7-pushed-state",
+        revision="async-state-research-v1",
+        sources=(
+            _source(
+                "Mouse Control research corpus",
+                "DISCOVERY 90% research payload — MCHOSE Realtek/L7 pushed state",
+                SourceTrust.REFERENCE,
+                notes="Independently reconstructed read-side fixture; no upstream capture or command imported.",
+            ),
+        ),
+        signatures=(
+            ReportSignature("input", 0x13, vendor_usage_required=True, weight=8),
+        ),
+        pushed_state_recognition=PushedStateRecognitionRecipe(
+            namespace="mchose.realtek.state",
+            report_id=0x13,
+            subtype=0x1D,
+            payload_transform="xor_ff",
+            minimum_records=1,
+            maximum_records=64,
+            require_temporal_freshness=True,
+        ),
+        transports=(TransportKind.HID_INPUT, TransportKind.HID_FEATURE_GET),
+        write_scope=WriteScope.NEVER,
+        minimum_match_score=8,
+        notes=(
+            "Realtek/L7 generation only; deliberately distinct from MCHOSE V3. Input report 13, "
+            "subtype 1D and XOR-FF payload transformation are recognition facts. Periodic pushes "
+            "or an observed read-side nudge may establish freshness; immediate Feature data may "
+            "be stale. No nudge executor, setter, field offsets, or semantic state meanings exist."
+        ),
+    ),
+    ProtocolFamily(
         name="mchose-v3-block-rpc",
         revision="a7-v3",
         sources=(
@@ -545,48 +837,566 @@ def recognize_family_semantics(
     candidate: FamilyCandidate,
     exchanges: Iterable[SemanticExchange],
 ) -> SemanticFamilyRecognition:
-    """Apply a safe passive semantic discriminator to a structural candidate."""
+    """Evaluate one family's data-only recipe against passive exchanges."""
 
-    if candidate.family.name != "bitmouse-72":
-        return SemanticFamilyRecognition(candidate, (), ("no-safe-semantic-discriminator",), ())
-    matched: set[str] = set()
-    missing: set[str] = set()
+    recipe = candidate.family.recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-semantic-discriminator",), (), ()
+        )
+    observed = tuple(exchanges)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-request-response-exchange",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+    for discriminator in recipe.discriminators:
+        results = tuple(
+            _discriminator_matches(discriminator, exchange) for exchange in observed
+        )
+        passed = all(results) if discriminator.match_all_exchanges else any(results)
+        if passed:
+            matched.append(discriminator.name)
+            categories.add(discriminator.category)
+        else:
+            missing.append(discriminator.name)
+
     records: list[bytes] = []
-    seen = False
-    for exchange in exchanges:
-        request, response = exchange.request, exchange.response
-        if len(request) != 64 or len(response) != 64:
-            missing.add("fixed-64-byte-hid-frame")
-            continue
-        seen = True
-        # Request: checksum, report, target, sequence, command, declared reply length.
-        if request[1] != 0x72 or response[0] != 0x72:
-            missing.add("asymmetric-0x72-report-placement")
-            continue
-        matched.add("asymmetric-0x72-report-placement")
-        semantic_end = 6
-        if request[0] != (sum(request[1:semantic_end]) & 0xFF):
-            missing.add("leading-request-checksum")
-        else:
-            matched.add("leading-request-checksum")
-        if response[1] != request[2]:
-            missing.add("target-correlation")
-        else:
-            matched.add("target-correlation")
-        if response[2] != request[3]:
-            missing.add("sequence-correlation")
-        else:
-            matched.add("sequence-correlation")
-        declared = response[4]
-        if declared != request[5] or 5 + declared > len(response):
-            missing.add("declared-semantic-reply-length")
-        else:
-            matched.add("declared-semantic-reply-length")
-            records.append(response[:5 + declared])
-    if not seen:
-        missing.add("passive-request-response-exchange")
+    length_rules = tuple(
+        item for item in recipe.discriminators
+        if item.kind is DiscriminatorKind.DECLARED_LENGTH and item.name in matched
+    )
+    if not missing and length_rules:
+        rule = length_rules[0]
+        for exchange in observed:
+            frame = _frame(exchange, rule.side)
+            declared = _field(frame, rule.offset, rule.width)
+            records.append(frame[:rule.payload_offset + declared])
+
     return SemanticFamilyRecognition(
-        candidate, tuple(sorted(matched)), tuple(sorted(missing)), tuple(records)
+        candidate,
+        tuple(sorted(matched)),
+        tuple(sorted(missing)),
+        tuple(records),
+        tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
+def _candidate_evidence_categories(candidate: FamilyCandidate) -> set[EvidenceCategory]:
+    categories: set[EvidenceCategory] = set()
+    if candidate.family.signatures:
+        categories.add(EvidenceCategory.FRAME)
+    if candidate.exact_identity:
+        categories.add(EvidenceCategory.IDENTITY)
+    if any(
+        signature.required_usage_page is not None
+        or signature.required_application_usage is not None
+        or signature.required_interface_number is not None
+        for signature in candidate.family.signatures
+    ):
+        categories.add(EvidenceCategory.TOPOLOGY)
+    return categories
+
+
+def _burst_frame_valid(frame: bytes, recipe: BurstRecognitionRecipe) -> bool:
+    required = max(recipe.length_offset, recipe.command_offset)
+    if len(frame) <= required or len(frame) < recipe.payload_offset:
+        return False
+    declared = frame[recipe.length_offset]
+    return recipe.payload_offset + declared == len(frame)
+
+
+def recognize_burst_family_semantics(
+    candidate: FamilyCandidate,
+    bursts: Iterable[BurstDialogueResult],
+) -> SemanticFamilyRecognition:
+    """Evaluate a completed generic burst against declarative family facts."""
+
+    recipe = candidate.family.burst_recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-burst-discriminator",), (), ()
+        )
+    observed = tuple(bursts)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-response-burst",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+
+    namespaces_valid = all(
+        (
+            burst.request.report_namespace,
+            burst.responses[0].report_namespace if burst.responses else "",
+        ) in recipe.namespace_pairs
+        and all(
+            response.report_namespace
+            == (burst.responses[0].report_namespace if burst.responses else "")
+            for response in burst.responses
+        )
+        for burst in observed
+    )
+    if namespaces_valid:
+        matched.append("declared-burst-namespace-pair")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("declared-burst-namespace-pair")
+
+    cardinality_valid = all(
+        recipe.minimum_responses <= burst.response_count <= recipe.maximum_responses
+        for burst in observed
+    )
+    if cardinality_valid:
+        matched.append("bounded-burst-cardinality")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("bounded-burst-cardinality")
+
+    completion_valid = all(
+        burst.completion_reason.value in recipe.allowed_completion_reasons
+        for burst in observed
+    )
+    if completion_valid:
+        matched.append("bounded-burst-completion")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("bounded-burst-completion")
+
+    framing_valid = all(
+        _burst_frame_valid(burst.request.payload, recipe)
+        and all(
+            _burst_frame_valid(response.payload, recipe)
+            for response in burst.responses
+        )
+        for burst in observed
+    )
+    if framing_valid:
+        matched.append("length-command-payload-framing")
+        categories.add(EvidenceCategory.RELATIONSHIP)
+    else:
+        missing.append("length-command-payload-framing")
+
+    records = tuple(
+        response.payload for burst in observed for response in burst.responses
+    ) if not missing else ()
+    return SemanticFamilyRecognition(
+        candidate,
+        tuple(sorted(matched)),
+        tuple(sorted(missing)),
+        records,
+        tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
+def _pushed_transform_valid(record: PushedStateRecord, transform: str | None) -> bool:
+    if transform is None:
+        return True
+    if record.transform != transform:
+        return False
+    if transform == "xor_ff":
+        expected = bytes(value ^ 0xFF for value in record.transform_source)
+        return bool(record.transform_source) and record.transformed_payload == expected
+    return False
+
+
+def recognize_pushed_state_semantics(
+    candidate: FamilyCandidate,
+    records: Iterable[PushedStateRecord],
+) -> SemanticFamilyRecognition:
+    """Evaluate generic asynchronous state evidence against family facts."""
+
+    recipe = candidate.family.pushed_state_recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-pushed-state-discriminator",), (), ()
+        )
+    observed = tuple(records)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-pushed-state-evidence",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+
+    stream_identities = {
+        (
+            record.observation.source_id,
+            record.observation.physical_id,
+            record.observation.transport,
+            record.observation.channel_id,
+            record.observation.report_namespace,
+            record.observation.report_id,
+            record.observation.grammar,
+            record.observation.generation,
+            record.semantic_state_id,
+        )
+        for record in observed
+    }
+    if len(stream_identities) == 1:
+        matched.append("coherent-pushed-state-stream")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("coherent-pushed-state-stream")
+
+    current_generation = all(record.accepted for record in observed)
+    if current_generation:
+        matched.append("current-generation-pushed-state")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("current-generation-pushed-state")
+
+    namespace_valid = all(
+        record.observation.report_namespace == recipe.namespace
+        and (recipe.report_id is None or record.observation.report_id == recipe.report_id)
+        for record in observed
+    )
+    if namespace_valid:
+        matched.append("pushed-state-namespace")
+        categories.add(EvidenceCategory.FRAME)
+    else:
+        missing.append("pushed-state-namespace")
+
+    subtype_valid = all(
+        recipe.subtype is None or record.subtype == recipe.subtype
+        for record in observed
+    )
+    if subtype_valid:
+        matched.append("pushed-state-subtype")
+        categories.add(EvidenceCategory.FRAME)
+    else:
+        missing.append("pushed-state-subtype")
+
+    transform_valid = all(
+        _pushed_transform_valid(record, recipe.payload_transform)
+        for record in observed
+    )
+    if transform_valid:
+        matched.append("pushed-state-payload-transform")
+        categories.add(EvidenceCategory.RELATIONSHIP)
+    else:
+        missing.append("pushed-state-payload-transform")
+
+    cardinality_valid = recipe.minimum_records <= len(observed) <= recipe.maximum_records
+    if cardinality_valid:
+        matched.append("pushed-state-cardinality")
+    else:
+        missing.append("pushed-state-cardinality")
+
+    temporal_valid = any(
+        record.association is PushedStateAssociation.NUDGED
+        or record.periodic_index >= 2
+        or "monotonic-state-counter" in record.freshness_reasons
+        or "state-changed-after-controlled-action" in record.freshness_reasons
+        for record in observed
+    )
+    freshness_valid = any(record.freshness is StateFreshness.FRESH for record in observed)
+    if temporal_valid and (freshness_valid or not recipe.require_temporal_freshness):
+        matched.append("asynchronous-freshness-evidence")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("asynchronous-freshness-evidence")
+
+    semantic_records = tuple(
+        record.transformed_payload for record in observed
+    ) if not missing else ()
+    return SemanticFamilyRecognition(
+        candidate,
+        tuple(sorted(matched)),
+        tuple(sorted(missing)),
+        semantic_records,
+        tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
+def recognize_logical_record_semantics(
+    candidate: FamilyCandidate,
+    records: Iterable[LogicalRecord],
+) -> SemanticFamilyRecognition:
+    """Evaluate generic reconstructed records against declarative family facts."""
+
+    recipe = candidate.family.logical_record_recognition
+    if recipe is None:
+        return SemanticFamilyRecognition(
+            candidate, (), ("no-safe-logical-record-discriminator",), (), ()
+        )
+    observed = tuple(records)
+    if not observed:
+        return SemanticFamilyRecognition(
+            candidate, (), ("passive-logical-record-evidence",), (), ()
+        )
+
+    matched: list[str] = []
+    missing: list[str] = []
+    categories = _candidate_evidence_categories(candidate)
+    identities = {
+        (
+            record.source_frames[0].source_id,
+            record.source_frames[0].physical_id,
+            record.source_frames[0].transport,
+            record.channel_id,
+            record.report_namespace,
+            record.report_id,
+            record.grammar,
+            record.generation,
+        )
+        for record in observed if record.source_frames
+    }
+    if len(identities) == 1:
+        matched.append("coherent-logical-record-stream")
+        categories.add(EvidenceCategory.DIALOGUE)
+    else:
+        missing.append("coherent-logical-record-stream")
+
+    namespace_valid = all(
+        record.grammar == recipe.grammar
+        and record.report_namespace == recipe.namespace
+        and record.report_id == recipe.report_id
+        for record in observed
+    )
+    if namespace_valid:
+        matched.append("declared-logical-record-namespace")
+        categories.add(EvidenceCategory.FRAME)
+    else:
+        missing.append("declared-logical-record-namespace")
+
+    complete = all(
+        record.completeness is RecordCompleteness.COMPLETE
+        and record.declared_length == record.captured_logical_length
+        for record in observed
+    )
+    if complete:
+        matched.append("complete-declared-logical-length")
+        categories.add(EvidenceCategory.RELATIONSHIP)
+    else:
+        missing.append("complete-declared-logical-length")
+
+    integrity_valid = all(
+        record.integrity is RecordIntegrity.VALID
+        if record.integrity_protected
+        else recipe.allow_unwrapped_integrity
+        and record.integrity is RecordIntegrity.UNKNOWN
+        for record in observed
+    )
+    if integrity_valid:
+        matched.append("valid-or-unwrapped-integrity")
+        if any(record.integrity is RecordIntegrity.VALID for record in observed):
+            categories.add(EvidenceCategory.INTEGRITY)
+    else:
+        missing.append("valid-or-unwrapped-integrity")
+
+    cardinality = recipe.minimum_records <= len(observed) <= recipe.maximum_records
+    if cardinality:
+        matched.append("logical-record-cardinality")
+    else:
+        missing.append("logical-record-cardinality")
+
+    if recipe.required_record_types:
+        observed_types = {record.record_type for record in observed}
+        types_valid = set(recipe.required_record_types) <= observed_types
+        if types_valid:
+            matched.append("required-logical-record-types")
+            categories.add(EvidenceCategory.INTERNAL_IDENTITY)
+        else:
+            missing.append("required-logical-record-types")
+
+    observed_fields = {
+        name for record in observed for name in record.fields
+    }
+    fields_valid = set(recipe.required_field_names) <= observed_fields
+    if fields_valid:
+        matched.append("complete-state-field-presence")
+        categories.add(EvidenceCategory.INTERNAL_IDENTITY)
+    else:
+        missing.append("complete-state-field-presence")
+
+    semantic_records = tuple(record.data for record in observed) if not missing else ()
+    return SemanticFamilyRecognition(
+        candidate, tuple(sorted(matched)), tuple(sorted(missing)),
+        semantic_records, tuple(sorted(categories, key=lambda item: item.value)),
+    )
+
+
+def _frame(exchange: SemanticExchange, side: FrameSide) -> bytes:
+    return exchange.request if side is FrameSide.REQUEST else exchange.response
+
+
+def _field(frame: bytes, offset: int, width: int) -> int:
+    end = offset + width
+    if end > len(frame):
+        raise ProtocolKnowledgeError("semantic discriminator exceeds frame bounds")
+    return int.from_bytes(frame[offset:end], "little")
+
+
+def _discriminator_matches(
+    discriminator: SemanticDiscriminator,
+    exchange: SemanticExchange,
+) -> bool:
+    try:
+        frame = _frame(exchange, discriminator.side)
+        if discriminator.kind is DiscriminatorKind.FRAME_LENGTH:
+            return len(frame) == discriminator.expected
+        if discriminator.kind is DiscriminatorKind.BYTE_EQUALS:
+            return _field(frame, discriminator.offset, discriminator.width) == discriminator.expected
+        if discriminator.kind is DiscriminatorKind.FIELD_EQUALS:
+            if discriminator.other_side is None:
+                return False
+            return _field(frame, discriminator.offset, discriminator.width) == _field(
+                _frame(exchange, discriminator.other_side),
+                discriminator.other_offset,
+                discriminator.width,
+            )
+        if discriminator.kind is DiscriminatorKind.SUM8_EQUALS:
+            end = len(frame) if discriminator.end is None else discriminator.end
+            if end > len(frame):
+                return False
+            return _field(frame, discriminator.offset, discriminator.width) == (sum(frame[discriminator.start:end]) & 0xFF)
+        if discriminator.kind is DiscriminatorKind.SUM8_TOTAL_EQUALS:
+            end = len(frame) if discriminator.end is None else discriminator.end
+            if end > len(frame) or discriminator.expected is None:
+                return False
+            return (
+                _field(frame, discriminator.offset, discriminator.width)
+                + sum(frame[discriminator.start:end])
+            ) & 0xFF == discriminator.expected
+        if discriminator.kind is DiscriminatorKind.DECLARED_LENGTH:
+            if discriminator.other_side is None:
+                return False
+            declared = _field(frame, discriminator.offset, discriminator.width)
+            expected = _field(
+                _frame(exchange, discriminator.other_side),
+                discriminator.other_offset,
+                discriminator.width,
+            )
+            return declared == expected and discriminator.payload_offset + declared <= len(frame)
+        if discriminator.kind is DiscriminatorKind.REPORT_ID_PAIR:
+            return (
+                exchange.request_report_id == discriminator.request_report_id
+                and exchange.response_report_id == discriminator.response_report_id
+            )
+    except ProtocolKnowledgeError:
+        return False
+    return False
+
+
+def recognize_open_set(
+    physical: PhysicalDevice,
+    descriptors: Mapping[DeviceNode, ParsedHidDescriptor],
+    *,
+    exchanges: Mapping[str, Iterable[SemanticExchange]] | None = None,
+    bursts: Mapping[str, Iterable[BurstDialogueResult]] | None = None,
+    pushed_states: Mapping[str, Iterable[PushedStateRecord]] | None = None,
+    logical_records: Mapping[str, Iterable[LogicalRecord]] | None = None,
+    families: Iterable[ProtocolFamily] = DEFAULT_REPERTOIRE,
+    minimum_margin: int = 3,
+) -> OpenSetRecognition:
+    """Recognize conservatively while preserving UNKNOWN and AMBIGUOUS states."""
+
+    if minimum_margin < 0:
+        raise ValueError("minimum_margin cannot be negative")
+    supplied = exchanges or {}
+    supplied_bursts = bursts or {}
+    supplied_pushed = pushed_states or {}
+    supplied_records = logical_records or {}
+    structural = tuple(
+        candidate
+        for candidate in match_repertoire(physical, descriptors, families=families)
+        if candidate.family.burst_recognition is None
+        or candidate.family.name in supplied_bursts
+        if candidate.family.pushed_state_recognition is None
+        or candidate.family.name in supplied_pushed
+        if candidate.family.logical_record_recognition is None
+        or candidate.family.name in supplied_records
+    )
+    if not structural:
+        return OpenSetRecognition(RecognitionStatus.UNKNOWN, None, (), "no structural candidate")
+
+    evaluated = tuple(
+        (
+            recognize_burst_family_semantics(
+                candidate, supplied_bursts.get(candidate.family.name, ()),
+            )
+            if candidate.family.burst_recognition is not None
+            else recognize_pushed_state_semantics(
+                candidate, supplied_pushed.get(candidate.family.name, ()),
+            )
+            if candidate.family.pushed_state_recognition is not None
+            else recognize_logical_record_semantics(
+                candidate, supplied_records.get(candidate.family.name, ()),
+            )
+            if candidate.family.logical_record_recognition is not None
+            else recognize_family_semantics(
+                candidate, supplied.get(candidate.family.name, ()),
+            )
+        )
+        for candidate in structural
+    )
+
+    def score(item: SemanticFamilyRecognition) -> int:
+        if item.candidate.family.recognition is not None:
+            weights = {
+                discriminator.name: discriminator.weight
+                for discriminator in item.candidate.family.recognition.discriminators
+            }
+        elif item.candidate.family.burst_recognition is not None:
+            weights = {
+                "declared-burst-namespace-pair": 4,
+                "bounded-burst-cardinality": 3,
+                "bounded-burst-completion": 3,
+                "length-command-payload-framing": 4,
+            }
+        elif item.candidate.family.pushed_state_recognition is not None:
+            weights = {
+                "current-generation-pushed-state": 3,
+                "coherent-pushed-state-stream": 3,
+                "pushed-state-namespace": 3,
+                "pushed-state-subtype": 3,
+                "pushed-state-payload-transform": 4,
+                "pushed-state-cardinality": 2,
+                "asynchronous-freshness-evidence": 4,
+            }
+        else:
+            weights = {
+                "coherent-logical-record-stream": 3,
+                "declared-logical-record-namespace": 3,
+                "complete-declared-logical-length": 4,
+                "valid-or-unwrapped-integrity": 4,
+                "logical-record-cardinality": 2,
+                "required-logical-record-types": 4,
+                "complete-state-field-presence": 4,
+            }
+        return item.candidate.score + sum(weights.get(name, 0) for name in item.matched)
+
+    ranked = tuple(sorted(evaluated, key=lambda item: (-score(item), item.candidate.family.name)))
+    recognized = tuple(item for item in ranked if item.recognized)
+    if not recognized:
+        if len(ranked) == 1:
+            return OpenSetRecognition(
+                RecognitionStatus.CANDIDATE, ranked[0].candidate.family.name, ranked,
+                "structural evidence requires semantic confirmation",
+            )
+        return OpenSetRecognition(
+            RecognitionStatus.AMBIGUOUS, None, ranked,
+            "multiple structural candidates remain unresolved",
+        )
+
+    winner = recognized[0]
+    runner_score = score(ranked[1]) if len(ranked) > 1 else -1
+    if len(recognized) > 1 or score(winner) - runner_score < minimum_margin:
+        return OpenSetRecognition(
+            RecognitionStatus.AMBIGUOUS, None, ranked,
+            "recognized candidate lacks the required margin",
+        )
+    return OpenSetRecognition(
+        RecognitionStatus.RECOGNIZED, winner.candidate.family.name, ranked,
+        "required independent semantic discriminators passed",
     )
 
 
@@ -605,6 +1415,7 @@ def observed_reports(
                     vendor_usage=any(0xFF00 <= page <= 0xFFFF for page in report.usage_pages),
                     usage_pages=report.usage_pages,
                     application_usages=report.application_usages,
+                    interface_number=node.interface_number,
                 )
             )
     return tuple(result)
@@ -634,6 +1445,11 @@ def _signature_matches(signature: ReportSignature, report: ObservedReport) -> bo
     if (
         signature.required_application_usage is not None
         and signature.required_application_usage not in report.application_usages
+    ):
+        return False
+    if (
+        signature.required_interface_number is not None
+        and signature.required_interface_number != report.interface_number
     ):
         return False
     return True

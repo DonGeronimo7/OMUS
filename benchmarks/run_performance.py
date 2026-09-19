@@ -44,6 +44,7 @@ class Benchmark:
     rounds: int
     median_ns: int
     minimum_ns: int
+    p95_ns: int
     maximum_ns: int
 
 
@@ -67,8 +68,11 @@ def _measure(name: str, operation, rounds: int, warmups: int = 5) -> Benchmark:
             values.append(time.perf_counter_ns() - started)
     finally:
         gc.enable()
+    ordered = sorted(values)
+    p95_index = min(len(ordered) - 1, max(0, (95 * len(ordered) + 99) // 100 - 1))
     return Benchmark(
-        name, rounds, int(statistics.median(values)), min(values), max(values)
+        name, rounds, int(statistics.median(values)), min(values),
+        ordered[p95_index], max(values),
     )
 
 

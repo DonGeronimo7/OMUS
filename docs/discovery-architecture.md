@@ -145,6 +145,28 @@ structural or semantic discriminators; some intentionally set write scope to
 operation can execute. A vendor ID or familiar packet shape alone is never
 support and never write authority.
 
+## Transport frames and logical records
+
+Discovery does not assume one HID report is one protocol message. Protocols
+that need it can insert the generic `LogicalRecordReassembler` after raw HID
+observation and before temporal or semantic inference:
+
+```text
+raw HID observation
+        -> fixed transport frame
+        -> complete/incomplete/invalid logical record
+        -> temporal dialogue (when applicable)
+        -> semantic inference and proof
+```
+
+The record grammar is declarative and read-only. It keeps HID wire length and
+logical declared/captured length separate; can reassemble fragments or split
+adjacent records; retains exact opaque bytes; and uses the shared integrity
+algorithms for optional protected records. Stream keys include physical,
+source, channel, namespace, report, direction, transport, and connection
+generation, so reconstruction cannot bridge unrelated interfaces or reconnects.
+Simple one-report protocols continue directly to their existing paths.
+
 ## Universal backend contract
 
 Discovery is the one hardware-backend surface exposed to the rest of Mouse

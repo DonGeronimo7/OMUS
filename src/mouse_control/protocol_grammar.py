@@ -26,6 +26,8 @@ class SourceTrust(str, Enum):
     """How strongly an upstream protocol fact has been verified."""
 
     REFERENCE = "reference"
+    VENDOR_DECLARED = "vendor_declared"
+    VENDOR_IMPLEMENTED = "vendor_implemented"
     MAINTAINED = "maintained"
     HARDWARE_VERIFIED = "hardware_verified"
     LOCAL_PROVEN = "local_proven"
@@ -103,6 +105,184 @@ class SemanticBehavior(str, Enum):
     MOTION_SYNC = "motion_sync"
     RIPPLE_CONTROL = "ripple_control"
     SLEEP_TIMEOUT = "sleep_timeout"
+    SENSOR_MODEL = "sensor_model"
+    CONNECTION_STATE = "connection_state"
+    PERFORMANCE_SELECTOR = "performance_selector"
+    TRACKING_20K = "tracking_20k"
+    ANGLE_TUNE = "angle_tune"
+    RAPID_TRIGGER_LEFT = "rapid_trigger_left"
+    RAPID_TRIGGER_RIGHT = "rapid_trigger_right"
+    SCROLL_BHOP_MODE = "scroll_bhop_mode"
+    SCROLL_BHOP_WINDOW_MS = "scroll_bhop_window_ms"
+
+
+class EvidenceCategory(str, Enum):
+    """Independent categories used by open-set family recognition."""
+
+    IDENTITY = "identity"
+    TOPOLOGY = "topology"
+    FRAME = "frame"
+    RELATIONSHIP = "relationship"
+    DIALOGUE = "dialogue"
+    INTEGRITY = "integrity"
+    INTERNAL_IDENTITY = "internal_identity"
+
+
+class FrameSide(str, Enum):
+    REQUEST = "request"
+    RESPONSE = "response"
+
+
+class DiscriminatorKind(str, Enum):
+    """Small reusable predicates for passive request/response evidence."""
+
+    FRAME_LENGTH = "frame_length"
+    BYTE_EQUALS = "byte_equals"
+    FIELD_EQUALS = "field_equals"
+    SUM8_EQUALS = "sum8_equals"
+    DECLARED_LENGTH = "declared_length"
+    REPORT_ID_PAIR = "report_id_pair"
+    SUM8_TOTAL_EQUALS = "sum8_total_equals"
+
+
+@dataclass(frozen=True)
+class SemanticDiscriminator:
+    """One positive requirement whose failure is also negative evidence.
+
+    Offsets always refer to captured report bytes. ``FIELD_EQUALS`` compares
+    ``side/offset/width`` with ``other_side/other_offset/width``.
+    ``SUM8_EQUALS`` compares the byte at ``offset`` with the sum of the
+    half-open range ``[start:end]`` on the same side. ``DECLARED_LENGTH``
+    requires the value at ``offset`` to equal the other field and fit after
+    ``payload_offset`` in the frame. ``REPORT_ID_PAIR`` uses the exchange's
+    report metadata instead of frame bytes.
+    """
+
+    name: str
+    kind: DiscriminatorKind
+    category: EvidenceCategory
+    side: FrameSide = FrameSide.REQUEST
+    offset: int = 0
+    width: int = 1
+    expected: int | None = None
+    other_side: FrameSide | None = None
+    other_offset: int = 0
+    start: int = 0
+    end: int | None = None
+    payload_offset: int = 0
+    request_report_id: int | None = None
+    response_report_id: int | None = None
+    weight: int = 3
+    match_all_exchanges: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("semantic discriminator requires a name")
+        if self.offset < 0 or self.other_offset < 0 or self.start < 0:
+            raise ValueError("semantic discriminator offsets cannot be negative")
+        if self.width <= 0:
+            raise ValueError("semantic discriminator width must be positive")
+        if self.end is not None and self.end < self.start:
+            raise ValueError("semantic discriminator end cannot precede start")
+        if self.payload_offset < 0 or self.weight < 0:
+            raise ValueError("payload offset and weight cannot be negative")
+
+
+@dataclass(frozen=True)
+class RecognitionRecipe:
+    """Data-only semantic recipe evaluated by the generic recognizer."""
+
+    discriminators: tuple[SemanticDiscriminator, ...]
+    minimum_independent_categories: int = 2
+
+    def __post_init__(self) -> None:
+        if not self.discriminators:
+            raise ValueError("recognition recipe requires discriminators")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
+@dataclass(frozen=True)
+class BurstRecognitionRecipe:
+    """Passive framing and dialogue requirements for bounded response bursts."""
+
+    namespace_pairs: tuple[tuple[str, str], ...]
+    length_offset: int
+    command_offset: int
+    payload_offset: int
+    minimum_responses: int = 1
+    maximum_responses: int = 32
+    allowed_completion_reasons: tuple[str, ...] = (
+        "quiet_interval", "max_responses", "deadline", "explicit_end",
+    )
+    minimum_independent_categories: int = 3
+
+    def __post_init__(self) -> None:
+        if not self.namespace_pairs or any(
+            not left or not right for left, right in self.namespace_pairs
+        ):
+            raise ValueError("burst recognition requires namespace pairs")
+        if min(self.length_offset, self.command_offset, self.payload_offset) < 0:
+            raise ValueError("burst recognition offsets cannot be negative")
+        if self.minimum_responses <= 0:
+            raise ValueError("minimum_responses must be positive")
+        if self.maximum_responses < self.minimum_responses:
+            raise ValueError("maximum_responses cannot be below minimum_responses")
+        if not self.allowed_completion_reasons:
+            raise ValueError("burst recognition requires allowed completion reasons")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
+@dataclass(frozen=True)
+class PushedStateRecognitionRecipe:
+    """Passive requirements for periodic or nudged asynchronous state."""
+
+    namespace: str
+    report_id: int | None
+    subtype: int | None = None
+    payload_transform: str | None = None
+    minimum_records: int = 1
+    maximum_records: int = 64
+    require_temporal_freshness: bool = True
+    minimum_independent_categories: int = 3
+
+    def __post_init__(self) -> None:
+        if not self.namespace:
+            raise ValueError("pushed-state recognition requires a namespace")
+        if self.minimum_records <= 0:
+            raise ValueError("minimum_records must be positive")
+        if self.maximum_records < self.minimum_records:
+            raise ValueError("maximum_records cannot be below minimum_records")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
+
+
+@dataclass(frozen=True)
+class LogicalRecordRecognitionRecipe:
+    """Passive family facts evaluated on generic reconstructed records."""
+
+    grammar: str
+    namespace: str
+    report_id: int | None
+    required_record_types: tuple[int, ...] = ()
+    required_field_names: tuple[str, ...] = ()
+    minimum_records: int = 1
+    maximum_records: int = 64
+    allow_unwrapped_integrity: bool = True
+    minimum_independent_categories: int = 4
+
+    def __post_init__(self) -> None:
+        if not self.grammar or not self.namespace:
+            raise ValueError("logical-record recognition requires grammar and namespace")
+        if self.minimum_records <= 0 or self.maximum_records < self.minimum_records:
+            raise ValueError("logical-record recognition cardinality is invalid")
+        if any(not 0 <= value <= 0xFF for value in self.required_record_types):
+            raise ValueError("logical record types must fit in one byte")
+        if any(not name for name in self.required_field_names):
+            raise ValueError("logical record field names cannot be empty")
+        if self.minimum_independent_categories <= 0:
+            raise ValueError("minimum independent categories must be positive")
 
 
 @dataclass(frozen=True)
@@ -129,6 +309,7 @@ class ReportSignature:
     vendor_usage_required: bool | None = None
     required_usage_page: int | None = None
     required_application_usage: tuple[int, int] | None = None
+    required_interface_number: int | None = None
     required: bool = True
     weight: int = 4
 
@@ -158,6 +339,8 @@ class ReportSignature:
             not 0 <= value <= 0xFFFF for value in self.required_application_usage
         ):
             raise ValueError("required_application_usage values must fit in 16 bits")
+        if self.required_interface_number is not None and self.required_interface_number < 0:
+            raise ValueError("required_interface_number cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -267,6 +450,157 @@ class SessionGrammar:
 
 
 @dataclass(frozen=True)
+class ProtocolFrameGrammar:
+    """Declarative fixed-frame layout; descriptive and never an I/O primitive."""
+
+    name: str
+    report_type: str
+    report_id: int
+    size: int
+    status_offset: int | None = None
+    reserved_offset: int | None = None
+    target_offset: int | None = None
+    length_offset: int | None = None
+    page_offset: int | None = None
+    command_offset: int | None = None
+    payload_offset: int = 0
+    response_alignment_offsets: tuple[int, ...] = (0,)
+    checksum: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name or self.report_type not in {"input", "output", "feature"}:
+            raise ValueError("frame grammar requires a name and supported report type")
+        if not 0 <= self.report_id <= 0xFF or self.size <= 0:
+            raise ValueError("frame report ID and size are invalid")
+        offsets = (
+            self.status_offset, self.reserved_offset, self.target_offset,
+            self.length_offset, self.page_offset, self.command_offset,
+            self.payload_offset,
+        )
+        if any(value is not None and value < 0 for value in offsets):
+            raise ValueError("frame offsets cannot be negative")
+        if not self.response_alignment_offsets or any(
+            value not in (0, 1) for value in self.response_alignment_offsets
+        ):
+            raise ValueError("response alignment offsets must be the observed 0/1 forms")
+
+
+@dataclass(frozen=True)
+class ProtocolOperation:
+    """Sourced command knowledge, independent from runtime write authority."""
+
+    name: str
+    page: int
+    target: int
+    request_length: int
+    read_command: int | None = None
+    write_command: int | None = None
+    safety: SafetyClass = SafetyClass.UNKNOWN
+    payload_fields: tuple[str, ...] = ()
+    prerequisite: tuple[str, ...] = ()
+    vendor_evidence: str = ""
+    automatic_experiment_allowed: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.name or min(self.page, self.target, self.request_length) < 0:
+            raise ValueError("protocol operation identity and numeric fields are invalid")
+        commands = tuple(
+            value for value in (self.read_command, self.write_command)
+            if value is not None
+        )
+        if not commands or any(not 0 <= value <= 0xFF for value in commands):
+            raise ValueError("protocol operation requires valid read or write command")
+        if self.safety is SafetyClass.DANGEROUS and self.automatic_experiment_allowed:
+            raise ValueError("dangerous operations cannot be automatic experiments")
+        if self.automatic_experiment_allowed and self.read_command is None:
+            raise ValueError("automatic operation eligibility applies only to a known read side")
+
+
+@dataclass(frozen=True)
+class AsyncEventRecipe:
+    name: str
+    event_id: int
+    report_id: int
+    marker: int
+    bindings: tuple[FieldBinding, ...]
+    action: str = "decode"
+
+    def __post_init__(self) -> None:
+        if not self.name or any(
+            not 0 <= value <= 0xFF
+            for value in (self.event_id, self.report_id, self.marker)
+        ):
+            raise ValueError("async event identity is invalid")
+        if self.action not in {"decode", "reread"}:
+            raise ValueError("async event action must be decode or reread")
+
+
+class DeviceIdentityRole(str, Enum):
+    MOUSE = "mouse"
+    RECEIVER = "receiver"
+    INTERNAL_RECEIVER = "internal_receiver"
+    BOOTLOADER = "bootloader"
+
+
+@dataclass(frozen=True)
+class DeviceIdentityRecord:
+    model: str
+    vendor_id: int
+    product_id: int
+    connection: str
+    role: DeviceIdentityRole
+    capabilities: tuple[tuple[str, object], ...] = ()
+    vendor_evidence: str = "vendor_declared"
+    notes: str = ""
+
+    @property
+    def configurable(self) -> bool:
+        return self.role is not DeviceIdentityRole.BOOTLOADER
+
+
+@dataclass(frozen=True)
+class StateDependencyRule:
+    prerequisite: str
+    dependent: str
+    required_value: object
+    disable_dependent_when_unmet: bool = False
+    restrictions: tuple[str, ...] = ()
+    vendor_evidence: str = "vendor_implemented"
+
+
+@dataclass(frozen=True)
+class DangerousOperation:
+    name: str
+    reason: str
+    command: int | None = None
+    page: int | None = None
+    target: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name or not self.reason:
+            raise ValueError("dangerous-operation knowledge requires name and reason")
+
+
+@dataclass(frozen=True)
+class StatusTimingPolicy:
+    completed_statuses: tuple[int, ...]
+    poll_below: int | None = None
+    resend_above: int | None = None
+    maximum_receive_polls: int = 0
+    maximum_resends: int = 0
+    delay_priors_ms: tuple[int, ...] = ()
+    evidence_note: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.completed_statuses:
+            raise ValueError("status policy requires a terminal status")
+        if self.maximum_receive_polls < 0 or self.maximum_resends < 0:
+            raise ValueError("status-policy bounds cannot be negative")
+        if any(value <= 0 for value in self.delay_priors_ms):
+            raise ValueError("timing priors must be positive")
+
+
+@dataclass(frozen=True)
 class ProtocolFamily:
     """Reusable protocol-family knowledge.
 
@@ -285,6 +619,17 @@ class ProtocolFamily:
     bindings: tuple[FieldBinding, ...] = ()
     transactions: tuple[TransactionSpec, ...] = ()
     sessions: tuple[SessionGrammar, ...] = ()
+    recognition: RecognitionRecipe | None = None
+    burst_recognition: BurstRecognitionRecipe | None = None
+    pushed_state_recognition: PushedStateRecognitionRecipe | None = None
+    logical_record_recognition: LogicalRecordRecognitionRecipe | None = None
+    frame_grammars: tuple[ProtocolFrameGrammar, ...] = ()
+    operations: tuple[ProtocolOperation, ...] = ()
+    async_events: tuple[AsyncEventRecipe, ...] = ()
+    models: tuple[DeviceIdentityRecord, ...] = ()
+    dependencies: tuple[StateDependencyRule, ...] = ()
+    dangerous_operations: tuple[DangerousOperation, ...] = ()
+    status_timing: StatusTimingPolicy | None = None
     write_scope: WriteScope = WriteScope.NEVER
     identity_required: bool = False
     minimum_match_score: int = 4
@@ -294,9 +639,11 @@ class ProtocolFamily:
     def strongest_trust(self) -> SourceTrust:
         order = {
             SourceTrust.REFERENCE: 0,
-            SourceTrust.MAINTAINED: 1,
-            SourceTrust.HARDWARE_VERIFIED: 2,
-            SourceTrust.LOCAL_PROVEN: 3,
+            SourceTrust.VENDOR_DECLARED: 1,
+            SourceTrust.VENDOR_IMPLEMENTED: 2,
+            SourceTrust.MAINTAINED: 3,
+            SourceTrust.HARDWARE_VERIFIED: 4,
+            SourceTrust.LOCAL_PROVEN: 5,
         }
         if not self.sources:
             return SourceTrust.REFERENCE

@@ -16,7 +16,7 @@ from mouse_control.event_correlation import (
     PhysicalAction, diff_feature_snapshots, detect_repeated_changes,
 )
 from mouse_control.device_profiles import DeviceProfileError, DeviceProfileStore, result_to_profile, validate_profile
-from mouse_control.protocol_discovery import Hidpp20Detector
+from mouse_control.protocol_discovery import Hidpp20Detector, ProtocolDetectionError
 from mouse_control.discovery_engine import DiscoveryEngine
 from mouse_control.discovery_ui import render_discovery_result, result_to_dict
 
@@ -39,6 +39,20 @@ def test_capability_write_requires_proven_evidence():
         DiscoveryEvidence(EvidenceLevel.PROVEN, 'x', 'validated protocol')
     ])
     assert proven.normalized().writable is True
+
+
+def test_known_lamzu_bootloader_is_refused_before_normal_discovery():
+    bootloader = PhysicalDevice(
+        name="LAMZU bootloader", vendor_id=0x37B0, product_id=0x0041,
+        bus=3, parent_path=None, model_fingerprint="bootloader",
+    )
+    engine = DiscoveryEngine(
+        topology_builder=lambda _mouse: bootloader,
+        detectors=(), save_profiles=False,
+    )
+    mouse = MouseDevice("LAMZU bootloader", "/dev/input/event-test", vendor=0x37B0, product=0x0041)
+    with pytest.raises(ProtocolDetectionError, match="bootloader/DFU"):
+        engine.discover(mouse)
 
 
 def test_descriptor_parser_tracks_input_and_feature_lengths():

@@ -11,6 +11,8 @@ from .performance import timed
 
 from evdev import InputDevice, ecodes
 
+from .lamzu_aurora import is_lamzu_bootloader_identity
+
 
 @dataclass(frozen=True)
 class MouseDevice:
@@ -81,8 +83,12 @@ def get_mouse_devices() -> list[MouseDevice]:
             if not has_mouse_capabilities(device):
                 device.close()
                 continue
+            candidate = MouseDevice.from_input_device(device, path)
+            if is_lamzu_bootloader_identity(candidate.vendor, candidate.product):
+                device.close()
+                continue
             seen_realpaths.add(realpath)
-            devices.append(MouseDevice.from_input_device(device, path))
+            devices.append(candidate)
             device.close()
         except (OSError, PermissionError):
             continue
