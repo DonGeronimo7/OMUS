@@ -1,5 +1,46 @@
 # AI handoff log
 
+## 2026-09-18 — Maximum pre-v1 OpenSSF and supply-chain hardening
+
+- Created `codex/openssf-pre-v1-hardening` from the requested clean checkpoint
+  `96be5a1`. Workflow permissions now default to `read-all`; exact job-scoped
+  allowlists retain only CodeQL/Scorecard SARIF, tag, dispatch, and release
+  OIDC/attestation/publication writes. All remote Actions are pinned to verified
+  40-character SHAs with version comments.
+- Added CodeQL v4 Python `security-extended`, OpenSSF Scorecard publication,
+  monthly grouped Dependabot updates, scheduled resolved-environment
+  `pip-audit`, and a policy validator with regression tests for workflow YAML,
+  permissions, immutable pins, unsafe event interpolation, required security
+  wiring, and Dependabot configuration.
+- Release publication now verifies the exact five primary artifacts, generates
+  a deterministic CycloneDX 1.6 project dependency SBOM, verifies the exact
+  six-file checksum allowlist, attests those final digests, binds the SBOM to
+  the five primary artifacts, and only then publishes them with SHA256SUMS.
+  The SBOM is intentionally not described as an AppImage filesystem inventory.
+- Added conservative Ruff correctness checks and a clean-snapshot wheel
+  reproducibility gate. Wheels were byte-identical; sdist content/order matched
+  but setuptools build-time mtimes differed, so wider artifact reproducibility
+  was deferred. Fuzzing was deferred because a new Atheris dependency and CI
+  surface was not justified for this release-hardening milestone.
+- Validation: the clean full suite passed `1082 passed, 1 warning`; compileall,
+  Ruff, workflow validation, `git diff --check`, resolved-environment
+  `pip-audit` (`No known vulnerabilities found`), wheel reproducibility, and
+  CycloneDX JSON validation passed. Wheel/sdist and isolated installed-wheel
+  smokes passed. Fedora RPM built with `%check` (`1082 passed, 1 warning`) and
+  packaged smokes. A disposable Debian trixie environment built and installed
+  `mouse-control_0.9.7-2_all.deb`; a disposable Ubuntu 24.04 environment built
+  `Mouse-Control-0.9.7-2-x86_64.AppImage`; both passed version/help/CPI smokes.
+- Two known threaded hardware/DPI retry timing assertions each failed once in
+  separate full runs, passed immediately alone, and the clean full rerun passed.
+  No runtime or hardware code was changed. No hardware access, physical test,
+  host package install, push, merge, tag, or release occurred.
+- Cloud/owner gates: GitHub CodeQL is pending cloud analysis; OpenSSF Scorecard
+  is pending its post-push run; artifact attestation is pending the first
+  release execution; Best Practices badge status is pending owner enrollment
+  and self-certification. Branch/ruleset, account security, private
+  vulnerability reporting, Dependabot security-update settings, and repository
+  Actions/security settings remain owner actions.
+
 ## 2026-09-18 — Discovery Lab replacement-view navigation cleanup
 
 - Continued `codex/discovery-90-corpus` from clean Advanced Tools checkpoint

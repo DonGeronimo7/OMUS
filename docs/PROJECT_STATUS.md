@@ -1,5 +1,37 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Pre-v1 repository and release supply-chain hardening
+
+- GitHub workflows now default to read-only permissions; the only job-scoped
+  writes are the exact CodeQL/Scorecard SARIF, tag, dispatch, and release OIDC/
+  attestation/publication capabilities that need them. A repository-owned
+  validator rejects mutable remote Actions, broad or unallowlisted writes,
+  malformed workflow YAML, unsafe event interpolation, and incomplete security
+  workflow/Dependabot configuration.
+- Immutable-SHA CodeQL v4 `security-extended`, OpenSSF Scorecard publication,
+  resolved-environment `pip-audit`, and low-noise monthly Dependabot workflows
+  cover Python and GitHub Actions dependencies. Ruff enforces a deliberately
+  narrow correctness-oriented rule set without formatting or hardware changes.
+- Releases retain the five-artifact allowlist and SHA256SUMS, add a reproducible
+  CycloneDX 1.6 project dependency SBOM, and use keyless GitHub attestations to
+  bind provenance to the exact wheel, sdist, RPM, DEB, AppImage, and SBOM bytes
+  and bind that SBOM to the five primary artifacts before publication.
+- Two clean source-snapshot wheel builds were byte-identical. Sdist byte
+  reproducibility remains deferred because setuptools-generated directory and
+  metadata mtimes vary; RPM/DEB/AppImage reproducibility and an artifact-
+  filesystem AppImage SBOM remain separate future work rather than unsupported
+  claims.
+- Automated validation passed 1082 tests with the existing GLib warning,
+  compileall, Ruff, workflow-policy validation, dependency audit, and diff
+  checks. Wheel/sdist, isolated wheel, Fedora RPM, Debian, and AppImage builds
+  and packaged CLI smoke checks passed. Two already-documented threaded retry
+  assertions each passed immediately in isolation before the clean full rerun.
+- No runtime, hardware, Discovery, TUI, remapping, reconnect, wake, notification,
+  persistence, protocol, or write-authority behavior changed. Cloud CodeQL,
+  Scorecard publication, first-release attestations, and Best Practices owner
+  enrollment remain pending; no push, merge, tag, release, install on the host,
+  or physical hardware validation occurred.
+
 ## 2026-09-18 — Event-driven wireless wake stabilization
 
 - The resident runtime now shares a Linux event-driven wake coordinator across
