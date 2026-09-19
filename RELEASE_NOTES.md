@@ -1,66 +1,66 @@
-# Mouse Control v0.9.8
+# Mouse Control v0.9.9
 
-Mouse Control v0.9.8 is a security, reliability, and release-engineering
-hardening milestone. It preserves the established interface and hardware
-authority model while strengthening how every change and downloadable package
-is tested, built, verified, and published.
+Mouse Control v0.9.9 completes the canonical full-screen product experience,
+adds a conservative native-lighting foundation, and extends the hardened
+release pipeline with point-in-time VirusTotal analysis of every primary
+distributable.
 
-## Security and supply chain
+## Complete canonical TUI
 
-- CodeQL, resolved-environment dependency auditing, and OpenSSF Scorecard now
-  run as dedicated security checks, with low-noise Dependabot updates for
-  Python and GitHub Actions dependencies.
-- All remote GitHub Actions are pinned to full commit SHAs. Workflows default
-  to read-only access and grant only the narrow job-level write permissions
-  required for security reporting, tag creation, attestations, and release
-  publication.
-- A repository-owned policy validator checks workflow syntax, immutable action
-  pins, permission allowlists, safe event-data handling, required security
-  wiring, and Dependabot configuration.
-- Clean builds use declared, pinned build inputs. The Fedora `%check` path
-  explicitly provides PyYAML for the workflow-security tests without adding it
-  as an application runtime dependency.
-- Release validation checks wheel reproducibility and produces a verified
-  `SHA256SUMS` manifest plus a reproducible CycloneDX 1.6 project dependency
-  SBOM.
-- GitHub artifact attestations bind provenance to the exact RPM, DEB,
-  AppImage, wheel, source distribution, and SBOM bytes. A separate SBOM
-  attestation binds the SBOM to the five primary release artifacts.
-- Release automation now separates commit validation, tag creation, package
-  construction, integrity finalization, attestation, and publication. A public
-  release is created only after the package and supply-chain gates succeed.
+- The single canonical controller now includes dedicated Lighting, Updates,
+  Tools / Advanced, About, and complete Service-control pages.
+- A checked-in capability inventory enforces CLI/TUI parity while preserving
+  installed research and expert workflows under Tools / Advanced.
+- Update checks run only after an explicit action. RPM, DEB, AppImage, and pip
+  reuse the existing updater, checksum, trusted-origin, package-ownership,
+  approval, and service-restoration paths. Source, unknown, package-source, and
+  incompatible AppImage installs are represented honestly and cannot expose an
+  unsafe update action.
 
-## Runtime reliability
+## Safe native-lighting architecture
 
-- Shutdown intent is published before wake-coordination teardown, and
-  `STOPPING` is terminal.
-- Late device activity during shutdown can no longer revive wake handling or
-  backend rebind logic.
-- Shutdown no longer produces repeated DPI or polling reconciliation writes.
-- Genuine matching-device wake evidence still interrupts reconnect backoff and
-  retains the established recovery behavior.
+- Optional per-device lighting supports multiple zones and native Off, Static,
+  Breathing, and Spectrum modes, with RGB24 `#RRGGBB`, brightness, speed, and
+  per-mode persistence vocabulary.
+- Lighting failures remain independent from DPI, polling, remapping, buttons,
+  battery, and service health. Volatile state is reconciled once per live
+  backend and after a genuine rebind.
+- Shared-device-config lighting is refused unless the exact backend proves a
+  trustworthy baseline-preserving read/modify/write operation.
+- Source-backed lighting protocol knowledge remains write-disabled. No newly
+  sourced lighting family is claimed as physically validated, and unqualified
+  lighting writes remain disabled.
 
-## Compatibility and hardware safety
+## Retained discovery, reliability, and supply-chain protection
 
-The complete v0.8.2 behavior contract and the established v0.9.x native HID++,
-safe discovery, remapping, keyboard/chord, DPI, polling, battery, notification,
-reconnect, service, TUI, CPI, support-report, and evidence-engine behavior are
-preserved. Unknown or insufficiently proven hardware remains protected from
-writes; only independently PROVEN exact-model operations can authorize them.
+- Existing Automatic Discovery, protocol knowledge, native HID++, G305,
+  remapping, reconnect, notifications, service lifecycle, updater, and
+  PROVEN-only hardware-write behavior are retained.
+- CodeQL, OpenSSF Scorecard, dependency auditing, immutable action pins,
+  least-privilege permissions, workflow-policy checks, wheel reproducibility,
+  exact artifact allowlists, `SHA256SUMS`, CycloneDX SBOM generation, and
+  keyless GitHub provenance/SBOM attestations remain release gates.
+- The five primary artifacts are submitted at four per minute through the
+  immutable-pinned VirusTotal action. The follow-up verifier waits for completed
+  analyses, records filename, SHA-256, detection counts, and direct report links
+  in these release notes, and fails the scan workflow on any malicious or
+  suspicious result. VirusTotal is a point-in-time signal, not certification.
 
-The security and release-engineering changes were extensively tested through
-automated regression, packaging, and clean-build checks. This specific
-hardening pass did **not** include new physical-hardware acceptance testing and
-does not claim physical verification for any additional device.
+## Validation boundary
+
+The canonical TUI received user physical acceptance before this release. New
+lighting families and their write behavior remain unverified on physical
+hardware. Automated tests and hosted packaging checks do not broaden hardware
+write authority.
 
 ## Downloads
 
-- RPM: `mouse-control-0.9.8-1.fc44.noarch.rpm`
-- DEB: `mouse-control_0.9.8_all.deb`
-- AppImage: `Mouse-Control-0.9.8-x86_64.AppImage`
-- Wheel: `mouse_control-0.9.8-py3-none-any.whl`
-- Source: `mouse_control-0.9.8.tar.gz`
-- CycloneDX SBOM: `mouse-control-0.9.8.cdx.json`
+- RPM: `mouse-control-0.9.9-1.fc44.noarch.rpm`
+- DEB: `mouse-control_0.9.9_all.deb`
+- AppImage: `Mouse-Control-0.9.9-x86_64.AppImage`
+- Wheel: `mouse_control-0.9.9-py3-none-any.whl`
+- Source: `mouse_control-0.9.9.tar.gz`
+- CycloneDX SBOM: `mouse-control-0.9.9.cdx.json`
 - Integrity manifest: `SHA256SUMS`
 
 ---

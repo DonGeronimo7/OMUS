@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.9 — 2026-09-19
+
+### Complete canonical TUI
+
+- Complete the Lighting, Updates, Tools / Advanced, About, and Service surfaces
+  in the single canonical full-screen controller.
+- Enforce CLI/TUI capability parity and keep updater checks explicit, safe for
+  unsupported installation sources, and isolated from configuration saving.
+
+### Safe lighting foundation
+
+- Model optional per-device, multi-zone Off, Static, Breathing, and Spectrum
+  lighting with RGB24 color, brightness, speed, and persistence vocabulary.
+- Require exact backend proof for shared-device-config read/modify/write safety.
+  Source-backed protocol knowledge remains write-disabled, and no new lighting
+  family is claimed as physically validated.
+
+### Release verification
+
+- Scan only the RPM, DEB, AppImage, wheel, and source archive through a
+  SHA-pinned VirusTotal action at the standard four-submission-per-minute rate.
+- Wait for completed analyses, preserve artifact SHA-256 values and report
+  links in release notes, and fail on malicious or suspicious detections.
+- Retain the v0.9.8 security, provenance, SBOM, attestation, discovery,
+  protocol, remapping, reconnect, notification, and hardware-authority work.
+
 ## 0.9.8 — 2026-09-18
 
 ### Security and release engineering

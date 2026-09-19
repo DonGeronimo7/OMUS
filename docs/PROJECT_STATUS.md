@@ -1,5 +1,20 @@
 # Mouse Control Project Status
 
+## 2026-09-19 — v0.9.9 release candidate
+
+- Canonical release metadata now targets v0.9.9 and documents the accepted TUI,
+  updater, service, CLI-parity, and safe multi-zone lighting work.
+- A dedicated release-published workflow scans exactly the RPM, DEB, AppImage,
+  wheel, and source archive through `cssnr/virustotal-action` v2.0.0 pinned to
+  immutable commit `5edfa4c982eb0caec6d568ea27cf715269f5c23b` at four uploads per
+  minute. It excludes checksums, SBOM, and provenance material.
+- Repository-owned follow-up verification waits for each analysis, preserves
+  filename, SHA-256, detection counts, and direct links in release notes, and
+  fails on any malicious or suspicious result. The README badge reports only
+  workflow status; VirusTotal remains a point-in-time signal, not certification.
+- The release retains the existing exact-hardware proof gates. New sourced
+  lighting families remain write-disabled and are not physically validated.
+
 ## 2026-09-19 — Parallel pre-v1 TUI updater reconciliation
 
 - Reconciled the dedicated updater work at `d3bb3bb` into the broader canonical

@@ -19,8 +19,9 @@ Mouse Control has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v0.9.8](https://img.shields.io/badge/release-v0.9.8-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.8)
+[![Current release: v0.9.9](https://img.shields.io/badge/release-v0.9.9-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.9)
 [![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
+[![VirusTotal release scan](https://github.com/DonGeronimo7/mouse-control/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/virustotal-release.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
@@ -29,45 +30,45 @@ privacy-conscious report that helps expand support.
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v0.9.8](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.8).
+The current release is [v0.9.9](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.9).
 
 ## Install and run
 
 Download the package for your system from the
-[v0.9.8 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.8),
+[v0.9.9 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.9),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.8/mouse-control-0.9.8-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse-control-0.9.9-1.fc44.noarch.rpm), then run:
 
 ```bash
-sudo dnf install ./mouse-control-0.9.8-1.fc44.noarch.rpm
+sudo dnf install ./mouse-control-0.9.9-1.fc44.noarch.rpm
 ```
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.8/mouse-control_0.9.8_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse-control_0.9.9_all.deb), then run:
 
 ```bash
-sudo apt install ./mouse-control_0.9.8_all.deb
+sudo apt install ./mouse-control_0.9.9_all.deb
 ```
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.8/Mouse-Control-0.9.8-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/Mouse-Control-0.9.9-x86_64.AppImage), then run:
 
 ```bash
-chmod +x Mouse-Control-0.9.8-x86_64.AppImage
-./Mouse-Control-0.9.8-x86_64.AppImage setup
+chmod +x Mouse-Control-0.9.9-x86_64.AppImage
+./Mouse-Control-0.9.9-x86_64.AppImage setup
 ```
 
 Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.8/mouse_control-0.9.8-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.8/mouse_control-0.9.8.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse_control-0.9.9-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse_control-0.9.9.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:
@@ -103,8 +104,9 @@ Mouse Control can:
 - update supported installations without making users reinstall each release
   by hand.
 
-Mouse Control currently focuses on input, DPI, and polling. It does not manage
-RGB lighting, lighting effects, or general vendor profile suites.
+Mouse Control also models native per-device lighting where an exact backend
+reports independently proven capability and write authority. Unqualified and
+source-backed-only lighting writes remain disabled.
 
 ## Test an unsupported mouse
 

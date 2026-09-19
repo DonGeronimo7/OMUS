@@ -1,3 +1,11 @@
+mouse-control (0.9.9) unstable; urgency=medium
+
+  * Complete the canonical TUI, updater, service controls, and CLI parity.
+  * Add safe per-device, multi-zone lighting architecture.
+  * Add hardened VirusTotal scanning for primary release artifacts.
+
+ -- Marc-Anthony Geronimo <DonGeronimo7@users.noreply.github.com>  Sat, 19 Sep 2026 03:30:00 -0400
+
 mouse-control (0.9.8) unstable; urgency=medium
 
   * Harden release security, dependency auditing, provenance, and workflow policy.

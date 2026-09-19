@@ -17,7 +17,7 @@ from . import __version__
 from .calibrated_profiles import find_calibrated_profile
 from .guided_discovery import GuidedDiscoveryOutcome, load_known_device_state
 from .hardware import HardwareError, get_backend
-from .hardware.capabilities import LightingMode, LightingState
+from .hardware.capabilities import LightingState
 from .lighting import validate_lighting_state
 from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi

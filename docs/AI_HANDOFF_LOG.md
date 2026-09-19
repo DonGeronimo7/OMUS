@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-19 — v0.9.9 release candidate and VirusTotal gate
+
+- Advanced canonical release metadata from v0.9.8 to v0.9.9 and documented the
+  accepted canonical TUI, updater, complete Service controls, CLI/TUI parity,
+  safe multi-zone lighting model, and retained discovery/security work.
+- Added a release-published VirusTotal workflow for exactly the RPM, DEB,
+  AppImage, wheel, and source archive. `cssnr/virustotal-action` v2.0.0 is pinned
+  to immutable commit `5edfa4c982eb0caec6d568ea27cf715269f5c23b`; submissions are
+  limited to four per minute and use only `secrets.VT_API_KEY`. The successful
+  publisher explicitly dispatches the scan with job-scoped `actions: write`,
+  avoiding GitHub's workflow-token event suppression.
+- The repository-owned verifier waits for completed analyses, matches the
+  action's SHA-256 against the downloaded bytes, records direct report links and
+  malicious/suspicious counts in release notes, and fails the workflow when
+  either count is nonzero. Checksums, SBOM, and provenance are not submitted.
+- Removed the stale README no-lighting claim, added a truthful workflow-status
+  badge, and removed one unused Lighting TUI import exposed by the release Ruff
+  gate. No hardware behavior or write authority changed.
+- Local validation: focused TUI/updater/lighting/service/lifecycle coverage
+  passed 205 tests; release/security coverage passed 35 tests; the complete
+  suite passed 1135 tests with the existing GLib warning. Compileall, Ruff,
+  workflow-policy validation, `git diff --check`, and resolved-environment
+  `pip-audit` (no known vulnerabilities) passed. Wheel/sdist build, installed
+  wheel version/help/CPI smokes, Fedora 44 RPM build, RPM `%check` (1135 tests,
+  one warning), and packaged command smokes passed. The user's prior physical
+  TUI acceptance is retained; no new lighting family was physically validated.
+
 ## 2026-09-19 — Parallel canonical-TUI updater reconciliation
 
 - Compared the updater/TUI implementations at unified-addendum commit
