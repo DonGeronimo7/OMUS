@@ -288,11 +288,17 @@ class CursesSetupApp:
             # Monochrome/reverse-video defaults remain fully usable.
             pass
 
-    def _line_attr(self, text: str, *, selected: bool = False, dim: bool = False) -> int:
+    def _line_attr(
+        self, text: str, *, selected: bool = False, dim: bool = False, role: str = "normal"
+    ) -> int:
         if selected:
             return self._highlight
         if dim:
             return self._muted
+        if role == "primary":
+            return self._accent | curses.A_BOLD
+        if role in {"heading", "action"}:
+            return curses.A_BOLD
         if text.startswith("✓"):
             return self._ok
         if text.startswith("?"):
@@ -309,6 +315,29 @@ class CursesSetupApp:
         if device.path:
             parts.append(str(device.path))
         return "   ".join(parts)
+
+    def _footer_action(self) -> str:
+        """Name the exact Enter action for the currently focused row."""
+
+        section = self.controller.section
+        cursor = self.controller.row_cursor
+        if section is SetupSection.DEVICE:
+            return "open"
+        if section is SetupSection.HARDWARE:
+            return "run" if cursor == 0 else "open"
+        if section is SetupSection.LAB:
+            return {0: "run", 1: "import"}.get(cursor, "next")
+        if section is SetupSection.DPI:
+            return "edit"
+        if section is SetupSection.POLLING:
+            rates = getattr(self.controller.choices, "polling_rates", ())
+            writable = getattr(self.controller.choices, "polling_writable", False)
+            return "set" if writable and cursor < len(rates) else "measure"
+        if section is SetupSection.BUTTONS:
+            return "edit"
+        if section is SetupSection.SERVICE:
+            return "set"
+        return "save" if cursor == 0 else "edit"
 
     def _draw(self) -> None:
         assert self.stdscr is not None
@@ -330,7 +359,7 @@ class CursesSetupApp:
                 stdscr,
                 max(0, height - 2),
                 2,
-                "q Cancel   ? Help",
+                "q Quit   ? Help",
                 max(0, width - 4),
                 self._highlight,
             )
@@ -377,15 +406,16 @@ class CursesSetupApp:
 
         if layout.mode is LayoutMode.FULL:
             self._put(stdscr, 2, 2, "NAVIGATION", sidebar - 3, self._muted)
-            for index, section in enumerate(SECTIONS):
-                label = f" {index + 1:02d}  {section.value} "
+            for section_index, section in enumerate(SECTIONS):
+                inner_width = max(1, sidebar - 6)
+                label = "[ " + section.value[:inner_width].ljust(inner_width) + " ]"
                 self._put(
                     stdscr,
-                    4 + index,
+                    4 + section_index,
                     1,
                     label,
                     sidebar - 2,
-                    self._highlight if section is self.controller.section else 0,
+                    self._highlight if section is self.controller.section else self._muted,
                 )
         else:
             breadcrumb = "  /  ".join(section.value for section in SECTIONS)
@@ -496,7 +526,9 @@ class CursesSetupApp:
                     x,
                     row.text,
                     content_width,
-                    self._line_attr(row.text, selected=selected, dim=row.dim),
+                    self._line_attr(
+                        row.text, selected=selected, dim=row.dim, role=row.role
+                    ),
                 )
                 y += 1
             if end < len(rows) and y < height - 4:
@@ -505,18 +537,27 @@ class CursesSetupApp:
         status = self.controller.status or self.controller.notice
         status_lines = wrap_text(status, max(1, width - 13))
         state = status_label(status)
-        state_attr = self._error if state == "ERROR" else self._warn if state == "CHECK" else self._accent
-        self._put(stdscr, layout.status_y, 1, f" {state:<7} ", 10, state_attr)
-        self._put(stdscr, layout.status_y, 11, status_lines[0], width - 12, self._panel)
+        state_attr = (
+            self._error if state == "ERROR" else self._warn if state == "CHECK"
+            else self._ok if state == "READY" else self._accent
+        )
+        badge = f" {state} "
+        text_x = len(badge) + 2
+        self._put(stdscr, layout.status_y, 1, badge, len(badge), state_attr)
+        self._put(stdscr, layout.status_y, text_x, status_lines[0], width - text_x - 1, self._muted)
         if len(status_lines) > 1:
             continuation = status_lines[1]
             if len(status_lines) > 2 and len(continuation) >= 1:
                 continuation = continuation[:-1] + "…"
-            self._put(stdscr, layout.status_y + 1, 11, continuation, width - 12, self._panel)
+            self._put(
+                stdscr, layout.status_y + 1, text_x, continuation,
+                width - text_x - 1, self._muted,
+            )
         footer = footer_hint(
             self.controller.section.value,
             backend_ready=self.controller.backend_ready,
-            compact=layout.mode is LayoutMode.COMPACT,
+            compact=layout.mode is LayoutMode.COMPACT or width < 110,
+            action=self._footer_action(),
         )
         if self.controller.section is not SetupSection.DEVICE:
             if len(self.controller.detail_rows()) > layout.content_height:
@@ -608,7 +649,7 @@ class CursesSetupApp:
                 "Captured packets are never replayed or transmitted.",
                 "Imported observations cannot enable writes or become PROVEN.",
             ],
-            yes="Enter Choose file",
+            yes="Enter Select file",
             no="b Cancel",
         ):
             self.controller.cancel_vendor_capture_import()
@@ -670,10 +711,10 @@ class CursesSetupApp:
         self._confirm(
             "Setup help",
             [
-                "↑ / ↓  navigate the current panel",
-                "j / k  navigate down / up",
-                "← / →  switch setup sections",
-                "h / l  move left / right",
+                "↑ / ↓  move through selectable items",
+                "j / k  move down / up",
+                "← / →  switch setup pages",
+                "h / l  previous / next page",
                 "g / G  jump to the first / last selectable item",
                 "Enter  select, edit, or continue",
                 "b / Esc  go back",

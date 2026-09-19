@@ -103,17 +103,24 @@ def wrap_text(text: str, width: int) -> tuple[str, ...]:
     )) or ("",)
 
 
-def footer_hint(section_name: str, *, backend_ready: bool, compact: bool) -> str:
+def footer_hint(
+    section_name: str, *, backend_ready: bool, compact: bool, action: str | None = None
+) -> str:
     """Show only commands relevant to the current screen and readiness state."""
 
     if not backend_ready and section_name == "Device":
-        base = "j/k move  Enter queue selection  ? help  q cancel"
+        default_action = "open"
     elif section_name == "Device":
-        base = "j/k move  Enter select  ? help  q cancel"
-    elif section_name.startswith("Review"):
-        base = "j/k move  Enter choose  h back  ? help  q cancel"
+        default_action = "open"
+    elif section_name == "DPI":
+        default_action = "edit"
+    elif section_name in {"Polling", "Service"}:
+        default_action = "set"
     else:
-        base = "j/k move  h/l section  Enter choose  ? help  q cancel"
+        default_action = "open"
+    action = action or default_action
+    back = "  b back" if section_name != "Device" else ""
+    base = f"j/k move  h/l page  g/G first/last  Enter {action}  ? help{back}  q quit"
     if not compact:
         return base.replace("j/k", "↑↓/j/k").replace("h/l", "←→/h/l")
     return base

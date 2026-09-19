@@ -1,5 +1,27 @@
 # AI handoff log
 
+## 2026-09-18 — Final TUI hierarchy and navigation polish
+
+- Continued `codex/discovery-90-corpus` from clean wake checkpoint `f52a9e2`.
+  Preserved the accepted curses layout and all controller/runtime behavior.
+- Removed visible numeric rail prefixes and gave each compact named item a
+  boxed-row treatment with stronger active and quieter inactive emphasis.
+- Added shared primary/heading/action/metadata row roles, compacted DPI and
+  polling capability summaries, aligned selectable values, and reduced the
+  READY/status treatment to a small semantic badge with muted explanation.
+- Footer and Help terminology now match actual controls: `h/l` changes pages,
+  `g/G` selects first/last, `b` goes back, `q` quits, and Enter names follow
+  the focused action (`run`, `import`, `measure`, `set`, `edit`, or `save`).
+- Safety: no Discovery, protocol, wake, service, persistence, write-authority,
+  backend, remapper, or hardware-control behavior changed. No hardware access,
+  install, push, merge, tag, or release occurred.
+- Validation: focused TUI/setup/Lab/importer coverage passed 142 tests. The
+  complete suite passed 983 tests with the existing GLib warning; compileall
+  and `git diff --check` passed. Two prior full runs each exposed a different
+  threaded runtime timing failure; both failed tests and their complete modules
+  passed immediately in isolation before the clean full run. Physical hardware
+  validation was not performed.
+
 ## 2026-09-18 — Near-zero-latency mouse wake handling
 
 - Request: attachment `6381a25d-bbbf-4cd9-aa7d-823d2f6426b6/pasted-text.txt`

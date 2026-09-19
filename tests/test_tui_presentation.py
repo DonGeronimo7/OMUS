@@ -48,9 +48,13 @@ def test_footer_is_contextual_and_has_vim_and_arrow_navigation():
     full = footer_hint("DPI", backend_ready=True, compact=False)
     assert "↑↓/j/k" in full
     assert "←→/h/l" in full
+    assert "page" in full
+    assert "g/G first/last" in full
+    assert "Enter edit" in full
     assert "help" in full
     review = footer_hint("Review / Save", backend_ready=True, compact=True)
-    assert "h back" in review
+    assert "h/l page" in review
+    assert "q quit" in review
     assert "section" not in review
 
 
@@ -141,6 +145,40 @@ class _IdleScreen:
         return next(self.keys)
 
 
+class _RecordingScreen:
+    def __init__(self, height=24, width=100):
+        self.height = height
+        self.width = width
+        self.cells = [[" " for _ in range(width)] for _ in range(height)]
+
+    def getmaxyx(self):
+        return self.height, self.width
+
+    def erase(self):
+        self.cells = [[" " for _ in range(self.width)] for _ in range(self.height)]
+
+    def addstr(self, y, x, text, _attr=0):
+        for offset, character in enumerate(text):
+            if 0 <= y < self.height and 0 <= x + offset < self.width:
+                self.cells[y][x + offset] = character
+
+    def addch(self, y, x, character):
+        self.addstr(y, x, str(character)[0])
+
+    def hline(self, y, x, character, count):
+        self.addstr(y, x, str(character)[0] * count)
+
+    def vline(self, y, x, character, count):
+        for offset in range(count):
+            self.addstr(y + offset, x, str(character)[0])
+
+    def noutrefresh(self):
+        pass
+
+    def text(self):
+        return "\n".join("".join(row).rstrip() for row in self.cells)
+
+
 def test_idle_timeouts_do_not_trigger_redraw(monkeypatch):
     controller = SimpleNamespace(
         devices=(object(),),
@@ -163,6 +201,40 @@ def test_idle_timeouts_do_not_trigger_redraw(monkeypatch):
     # One immediate usable frame and one state/status frame after worker start;
     # the two idle timeout wakes do not repaint.
     assert draws == ["draw", "draw"]
+
+
+def test_full_navigation_uses_compact_named_boxed_rows_without_numbers(monkeypatch):
+    controller = SimpleNamespace(
+        devices=(object(),),
+        selected=SimpleNamespace(name="Example Mouse"),
+        selected_index=0,
+        device_cursor=0,
+        section=SetupSection.DPI,
+        backend_ready=True,
+        row_cursor=0,
+        status="Known device ready",
+        notice="",
+        choices=SimpleNamespace(polling_rates=(), polling_writable=False),
+        detail_rows=lambda: [DisplayRow("3000 DPI     READ/WRITE", role="primary")],
+    )
+    screen = _RecordingScreen()
+    app = CursesSetupApp(controller)
+    app.stdscr = screen
+    for name, character in {
+        "ACS_VLINE": "│", "ACS_HLINE": "─", "ACS_ULCORNER": "┌",
+        "ACS_URCORNER": "┐", "ACS_LLCORNER": "└", "ACS_LRCORNER": "┘",
+    }.items():
+        monkeypatch.setattr("mouse_control.setup_tui_curses.curses." + name, character, raising=False)
+    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.doupdate", lambda: None)
+    app._draw()
+
+    rendered = screen.text()
+    assert "[ Device" in rendered
+    assert "[ Hardware Discovery" in rendered
+    assert " 01  Device" not in rendered
+    assert " 02  Hardware Discovery" not in rendered
+    assert "g/G first/last" in rendered
+    assert "h/l page" in rendered
 
 
 def test_dense_screen_page_scroll_does_not_change_selected_action():
