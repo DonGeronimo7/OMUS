@@ -53,15 +53,15 @@ def run_tui_setup_wizard() -> int:
 
     try:
         mice = cli.get_mouse_devices()
+        result = run_setup_tui(
+            mice,
+            existing_config,
+            choices_factory=cli._initial_choices,
+            backend_factory=cli.get_backend,
+        )
         if not mice:
-            print("No mouse devices found. Check input permissions.", file=sys.stderr)
+            status = 0
         else:
-            result = run_setup_tui(
-                mice,
-                existing_config,
-                choices_factory=cli._initial_choices,
-                backend_factory=cli.get_backend,
-            )
             selected = result.selected
             backend = result.backend
             choices = result.choices

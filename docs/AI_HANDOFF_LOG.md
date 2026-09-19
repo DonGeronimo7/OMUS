@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — Canonical TUI redesign and post-overhaul validation
+
+- Continued `codex/discovery-90-corpus` from clean `fd36184` without changing
+  the Discovery execution/proof architecture. Added one shared curses
+  presentation system with full/compact/minimum layouts, panels, semantic
+  statuses, contextual keys, focus-visible viewports, PageUp/PageDown evidence
+  scrolling, wrapped modal/status text, 256-color enhancement with monochrome
+  fallback, and batched screen updates.
+- Expanded the dashboard/review surface for exact identity, connection,
+  battery/power snapshots, mappings, limitations, LAMZU/Aurora proof wording,
+  and vendor-capture digest/authority summaries. The no-device condition now
+  remains inside the canonical full-screen TUI.
+- Removed the prior 20 Hz idle repaint behavior while preserving the one owned
+  post-frame initialization worker, deterministic join/cleanup, responsive
+  navigation, transactional save/cancel, and external service restoration.
+- Validation: focused TUI/lifecycle/Lab/importer tests passed 153; full suite
+  passed 976 with the existing GLib warning; compileall and diff checks passed.
+  Wheel/sdist, isolated installed-wheel smoke, and Fedora RPM builds passed;
+  RPM `%check` passed 976 tests plus packaged command smokes. Debian/AppImage
+  build tools were unavailable; structural launcher coverage passed.
+- Performance: live no-device PTY startup reached an interactive Help response
+  in 228.6 ms median / 232.2 ms p95 across 12 runs, below the 500 ms target.
+  Settled three-second idle sampling produced zero redraw bytes and 0 ms sampled
+  CPU. Deterministic known-device and Rediscover paths remained sub-millisecond.
+- Physical validation: `PHYSICAL ACCEPTANCE PENDING`. No novel write, install,
+  push, merge, tag, release, or hardware-support promotion occurred.
+
 ## 2026-09-18 — Discovery Lab v1 Vendor Capture Importer
 
 - Continued `codex/discovery-90-corpus` from clean Aurora checkpoint `ebe9039`.

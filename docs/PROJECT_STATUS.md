@@ -1,5 +1,35 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Canonical TUI presentation and stabilization milestone
+
+- The existing curses setup application now uses a shared presentation model
+  for full/compact/minimum layouts, focus-preserving viewports, wrapped text,
+  semantic status labels, contextual key guides, and long-screen scrolling.
+  Normal terminals use a bordered dashboard/navigation rail; narrow terminals
+  retain the same controller and actions through a compact breadcrumb layout.
+- Device, capability, battery/power, button-mapping, Discovery Lab, vendor
+  capture, review, service, and no-device states are presented through the same
+  canonical TUI. Imported evidence and LAMZU/Aurora knowledge retain explicit
+  recognized/vendor/unverified/read-only boundaries; no write authority was
+  changed.
+- Idle timeout wakes no longer repaint the screen. Curses updates are batched,
+  the existing single initialization worker remains authoritative, and hardware
+  reads such as the battery snapshot occur during worker-owned initialization,
+  never in the redraw path.
+- All installed/source/desktop/AppImage dispatch routes remain structurally
+  converged on `mouse_control.app` and the canonical setup TUI. The no-device
+  path now opens a safe empty state instead of falling back to line output.
+- Automated validation at this checkpoint: the focused TUI/lifecycle/Lab/
+  importer suite passed 153 tests; the complete suite passed 976 tests with the
+  existing GLib warning; compileall and whitespace checks passed. Wheel, sdist,
+  isolated-wheel, and Fedora RPM builds passed; RPM `%check` passed all 976
+  tests and packaged command smoke checks. Debian/AppImage builders were not
+  locally available, so their launcher structure was checked by tests.
+- A live PTY probe in the available no-device environment reached its first
+  usable Help response in 228.6 ms median / 232.2 ms p95 across 12 runs and
+  emitted zero terminal bytes while consuming 0 ms sampled CPU over a settled
+  three-second idle interval. Physical mouse acceptance remains pending.
+
 ## 2026-09-18 — Discovery Lab v1 Vendor Capture Importer
 
 - Discovery Lab now has a generic, offline vendor-capture ingestion layer with

@@ -1,0 +1,180 @@
+from types import SimpleNamespace
+
+from mouse_control.setup_tui import ActionKind, ControllerAction, DisplayRow, SetupSection
+from mouse_control.setup_tui import SetupController
+from mouse_control.setup_flow import SetupChoices
+from mouse_control.hardware.capabilities import BatteryState
+from mouse_control.setup_tui_curses import CursesSetupApp
+from mouse_control.tui_presentation import (
+    LayoutMode,
+    footer_hint,
+    frame_layout,
+    status_label,
+    visible_window,
+    wrap_text,
+)
+
+
+def test_layout_uses_rail_compact_mode_and_clean_minimum_message():
+    assert frame_layout(24, 100).mode is LayoutMode.FULL
+    compact = frame_layout(16, 60)
+    assert compact.mode is LayoutMode.COMPACT
+    assert compact.sidebar_width == 0
+    assert compact.content_width > 0
+    assert frame_layout(11, 80).mode is LayoutMode.TOO_SMALL
+    assert frame_layout(20, 47).mode is LayoutMode.TOO_SMALL
+
+
+def test_viewport_keeps_focus_visible_for_long_and_short_lists():
+    assert visible_window(3, 2, 8) == (0, 3)
+    start, end = visible_window(100, 73, 9)
+    assert start <= 73 < end
+    assert end - start == 9
+    assert visible_window(100, 99, 9) == (91, 100)
+
+
+def test_status_wrap_and_labels_do_not_depend_on_color():
+    lines = wrap_text("Imported evidence does not grant hardware write authority.", 20)
+    assert len(lines) > 1
+    assert "".join(lines).replace(" ", "") == (
+        "Imported evidence does not grant hardware write authority.".replace(" ", "")
+    )
+    assert status_label("Hardware initialization failed: unavailable") == "ERROR"
+    assert status_label("Known device ready") == "READY"
+    assert status_label("Physical qualification pending") == "CHECK"
+
+
+def test_footer_is_contextual_and_has_vim_and_arrow_navigation():
+    full = footer_hint("DPI", backend_ready=True, compact=False)
+    assert "↑↓/j/k" in full
+    assert "←→/h/l" in full
+    assert "help" in full
+    review = footer_hint("Review / Save", backend_ready=True, compact=True)
+    assert "h back" in review
+    assert "section" not in review
+
+
+def test_no_device_controller_is_a_safe_navigable_empty_state():
+    controller = SetupController(
+        [], {}, choices_factory=lambda _existing: SetupChoices(),
+        initialize_backend=False,
+    )
+    assert controller.selected is None
+    assert controller.backend_ready is False
+    assert controller.handle_key("DOWN").kind is ActionKind.NONE
+    assert controller.handle_key("ENTER").kind is ActionKind.NONE
+    assert "No mouse" in controller.status
+    assert controller.handle_key("HELP").kind is ActionKind.HELP
+    assert controller.handle_key("QUIT").kind is ActionKind.CANCEL
+
+
+def test_dashboard_snapshots_battery_without_querying_during_redraw():
+    device = SimpleNamespace(
+        name="Wireless Mouse", vendor=0x1234, product=0x5678,
+        phys="usb-receiver", path="/dev/input/event9",
+    )
+
+    class Backend:
+        protocol_adapter_name = "Test"
+        has_proven_learned_adapter = False
+
+        def supports_dpi(self, _device): return False
+        def supports_polling_rate(self, _device): return False
+        def supports_polling_rate_writes(self, _device): return False
+        def supports_dpi_events(self, _device): return False
+        def supports_battery(self, _device): return True
+        def get_battery_state(self, _device): return BatteryState(73, status="charging")
+        def close(self): pass
+
+    controller = SetupController(
+        [device], {}, choices_factory=lambda _existing: SetupChoices(),
+        backend_factory=lambda _device: Backend(),
+    )
+    assert controller.battery_state.percentage == 73
+    assert "Battery / power: 73%, charging" in "\n".join(controller.hardware_lines())
+
+
+def test_button_and_review_rows_are_dense_complete_summaries():
+    device = SimpleNamespace(
+        name="Scan Mouse", vendor=0x1234, product=0x5678,
+        phys="usb-scan", path="/dev/input/event2",
+    )
+
+    class Backend:
+        protocol_adapter_name = None
+        has_proven_learned_adapter = False
+        def supports_dpi(self, _device): return False
+        def supports_polling_rate(self, _device): return False
+        def supports_polling_rate_writes(self, _device): return False
+        def supports_dpi_events(self, _device): return False
+        def supports_battery(self, _device): return False
+        def close(self): pass
+
+    controller = SetupController(
+        [device], {},
+        choices_factory=lambda _existing: SetupChoices(
+            mappings={"BTN_SIDE": "chord:KEY_LEFTCTRL+KEY_C"}
+        ),
+        backend_factory=lambda _device: Backend(),
+    )
+    controller.section_index = 5
+    assert any("BTN_SIDE" in row.text and "KEY_LEFTCTRL" in row.text
+               for row in controller.detail_rows())
+    controller.section_index = 7
+    review = "\n".join(row.text for row in controller.detail_rows())
+    assert "1234:5678" in review
+    assert "usb-scan" in review
+    assert "Capability limitation" in review
+
+
+class _IdleScreen:
+    def __init__(self):
+        self.keys = iter((-1, -1, ord("q")))
+
+    def keypad(self, _enabled):
+        pass
+
+    def timeout(self, _milliseconds):
+        pass
+
+    def getch(self):
+        return next(self.keys)
+
+
+def test_idle_timeouts_do_not_trigger_redraw(monkeypatch):
+    controller = SimpleNamespace(
+        devices=(object(),),
+        selected_index=0,
+        section=SetupSection.DEVICE,
+        backend_ready=True,
+        handle_key=lambda _key: ControllerAction(ActionKind.CANCEL),
+    )
+    app = CursesSetupApp(controller)
+    draws = []
+    monkeypatch.setattr(app, "_draw", lambda: draws.append("draw"))
+    monkeypatch.setattr(app, "_start_initialization", lambda _index: None)
+    monkeypatch.setattr(app, "_poll_initialization", lambda: False)
+    monkeypatch.setattr(app, "_finish_initialization", lambda: None)
+    monkeypatch.setattr(app, "_init_colors", lambda: None)
+    monkeypatch.setattr(app, "_confirm", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.curs_set", lambda _value: None)
+
+    assert app.run(_IdleScreen()) is False
+    # One immediate usable frame and one state/status frame after worker start;
+    # the two idle timeout wakes do not repaint.
+    assert draws == ["draw", "draw"]
+
+
+def test_dense_screen_page_scroll_does_not_change_selected_action():
+    controller = SimpleNamespace(
+        section=SetupSection.LAB,
+        row_cursor=1,
+        detail_rows=lambda: [DisplayRow(f"line {index}") for index in range(40)],
+    )
+    app = CursesSetupApp(controller)
+    app.stdscr = SimpleNamespace(getmaxyx=lambda: (18, 76))
+    app._scroll_content(1)
+    assert app._content_offsets[SetupSection.LAB] > 0
+    assert controller.row_cursor == 1
+    app._scroll_content(-1)
+    assert app._content_offsets[SetupSection.LAB] == 0

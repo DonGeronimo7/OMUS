@@ -172,8 +172,6 @@ class SetupController:
         initialize_backend: bool = True,
         selected_index: int | None = None,
     ) -> None:
-        if not devices:
-            raise ValueError("setup requires at least one mouse")
         self.devices = tuple(devices)
         self.existing_config = existing_config
         self._choices_factory = choices_factory
@@ -195,9 +193,22 @@ class SetupController:
         self.lab_experiment: Any | None = None
         self.vendor_capture_import: Any | None = None
         self.polling_measurement: Any | None = None
+        self.battery_state: Any | None = None
+        self.battery_error: str | None = None
         self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
+
+        self.choices = self._choices_factory(self.existing_config)
+        if not self.devices:
+            self.selected_index = 0
+            self.device_cursor = 0
+            self.selected = None
+            self.backend = None
+            self.status = (
+                "No mouse detected. Check input permissions or reconnect a device, then reopen setup."
+            )
+            return
 
         self.selected_index = (
             self._configured_device_index() if selected_index is None else selected_index
@@ -207,7 +218,6 @@ class SetupController:
         self.device_cursor = self.selected_index
         self.selected = self.devices[self.selected_index]
         self.backend: Any = None
-        self.choices = self._choices_factory(self.existing_config)
         if initialize_backend:
             self._bind_device(self.selected_index, restore_old=False, reset_choices=True)
         else:
@@ -273,6 +283,19 @@ class SetupController:
             discover_choices(self.backend, self.selected, self.choices)
         lines = [line.strip() for line in output.getvalue().splitlines() if line.strip()]
         self.notice = lines[-1] if lines else ""
+        self._refresh_battery_snapshot()
+
+    def _refresh_battery_snapshot(self) -> None:
+        """Read battery once during initialization, never in the redraw path."""
+
+        self.battery_state = None
+        self.battery_error = None
+        try:
+            if not self.backend.supports_battery(self.selected):
+                return
+            self.battery_state = self.backend.get_battery_state(self.selected)
+        except (HardwareError, AttributeError, OSError, TypeError, ValueError) as exc:
+            self.battery_error = str(exc)
 
     def _configured_identity_matches(self, device: Any) -> bool:
         configured = self.existing_config.get("device", {})
@@ -546,7 +569,13 @@ class SetupController:
 
     def hardware_lines(self) -> list[str]:
         """Render factual, independent capability state without collapsing failures."""
-        lines: list[str] = []
+        identity = "unknown"
+        if self.selected.vendor is not None and self.selected.product is not None:
+            identity = f"{self.selected.vendor:04x}:{self.selected.product:04x}"
+        lines: list[str] = [
+            f"• Device: {self.selected.name}  [{identity}]",
+            f"• Connection: {self.selected.phys or self.selected.path or 'unknown'}",
+        ]
         result = self.discovery_result
         if result is not None:
             device = result.device
@@ -619,6 +648,20 @@ class SetupController:
 
         if self._supports_dpi_events():
             lines.append("✓ Physical DPI events / stage notifications available")
+        if self.battery_state is not None:
+            battery = self.battery_state
+            parts = []
+            if getattr(battery, "percentage", None) is not None:
+                parts.append(f"{battery.percentage}%")
+            if getattr(battery, "voltage_mv", None) is not None:
+                parts.append(f"{battery.voltage_mv} mV")
+            if getattr(battery, "status", None):
+                parts.append(str(battery.status).replace("_", " "))
+            lines.append("✓ Battery / power: " + (", ".join(parts) or "state unknown"))
+        elif self.battery_error:
+            lines.append("? Battery / power: temporarily unavailable")
+        else:
+            lines.append("— Battery / power: unsupported or not reported")
         if self.guided_outcome and self.guided_outcome.dpi_action_identified:
             lines.append("✓ DPI button behavior identified")
             if not self.choices.dpi_writable:
@@ -705,6 +748,14 @@ class SetupController:
 
     def handle_key(self, key: str) -> ControllerAction:
         key = key.upper()
+        if self.section is SetupSection.DEVICE and not self.devices:
+            if key == "HELP":
+                return ControllerAction(ActionKind.HELP)
+            if key == "QUIT":
+                return ControllerAction(ActionKind.CANCEL)
+            if key == "ENTER":
+                self.status = "No mouse is available to select; reconnect one and reopen setup."
+            return ControllerAction()
         if key == "FIRST":
             if self.section is SetupSection.DEVICE:
                 self.device_cursor = 0
@@ -773,6 +824,9 @@ class SetupController:
 
     def activate(self) -> ControllerAction:
         if self.section is SetupSection.DEVICE:
+            if not self.devices:
+                self.status = "No mouse is available to select; reconnect one and reopen setup."
+                return ControllerAction()
             if self.device_cursor != self.selected_index:
                 self._bind_device(self.device_cursor)
             self._go(SetupSection.HARDWARE)
@@ -1030,10 +1084,12 @@ class SetupController:
             ), None)
             if lamzu is not None:
                 rows.extend((
-                    DisplayRow("Known protocol family candidate: LAMZU Aurora"),
-                    DisplayRow("Vendor protocol knowledge: available"),
-                    DisplayRow("Exact hardware proof: incomplete"),
-                    DisplayRow("Writes: disabled pending verification"),
+                    DisplayRow("Known protocol family candidate: LAMZU Aurora  [RECOGNIZED]"),
+                    DisplayRow("Vendor knowledge: available  [VENDOR EVIDENCE]"),
+                    DisplayRow("Exact hardware proof: incomplete; physical qualification [UNVERIFIED]"),
+                    DisplayRow(
+                        "Writes: disabled pending verification; write authority [READ-ONLY]"
+                    ),
                 ))
             imported = self.vendor_capture_import
             if imported is not None:
@@ -1044,6 +1100,7 @@ class SetupController:
                         f"Format: {manifest.parser_selected}; "
                         f"accepted {manifest.accepted_records}/{manifest.total_records} records"
                     ),
+                    DisplayRow(f"Source digest: {manifest.source_digest[:12]}…"),
                     DisplayRow(
                         "Families: " + (
                             ", ".join(manifest.protocol_families_recognized) or "unrecognized"
@@ -1056,7 +1113,9 @@ class SetupController:
                     DisplayRow(
                         f"Review state: {manifest.review_status.value.replace('_', ' ')}"
                     ),
-                    DisplayRow("Imported evidence does not enable writes or prove capabilities."),
+                    DisplayRow(
+                        "Imported evidence does not enable writes or grant hardware write authority."
+                    ),
                 ))
             if plan.selected_action is not None:
                 rows.extend([
@@ -1309,12 +1368,23 @@ class SetupController:
             return rows
 
         if self.section is SetupSection.BUTTONS:
-            return [
+            rows = [
                 DisplayRow("Button mappings"),
                 DisplayRow(f"{len(self.choices.mappings)} mapping(s) configured."),
                 DisplayRow("Configure / edit mouse buttons", 0),
-                DisplayRow("Existing mappings are preserved unless you change a button.", dim=True),
             ]
+            for button, action in sorted(self.choices.mappings.items()):
+                rows.append(DisplayRow(f"{button:<18} → {action}"))
+            rows.extend((
+                DisplayRow(
+                    "Keyboard capture is exclusive; shortcuts are suppressed while recording.",
+                    dim=True,
+                ),
+                DisplayRow(
+                    "Existing mappings are preserved unless you change a button.", dim=True
+                ),
+            ))
+            return rows
 
         if self.section is SetupSection.SERVICE:
             return [
@@ -1327,6 +1397,13 @@ class SetupController:
             DisplayRow("Final review"),
             DisplayRow(f"Mouse:       {self.selected.name}"),
         ]
+        if self.selected.vendor is not None and self.selected.product is not None:
+            rows.append(DisplayRow(
+                f"Identity:    {self.selected.vendor:04x}:{self.selected.product:04x}"
+            ))
+        rows.append(DisplayRow(
+            f"Connection:  {self.selected.phys or self.selected.path or 'unknown'}"
+        ))
         if self.observed_hardware.calibrated_dpi_cycle:
             rows.append(DisplayRow(
                 "Measured physical DPI cycle: ~"
@@ -1373,6 +1450,11 @@ class SetupController:
             ),
             DisplayRow(f"Buttons:     {len(self.choices.mappings)} mappings"),
             DisplayRow(f"Service:     {'enabled' if self.choices.enable_service else 'disabled'}"),
+            DisplayRow(
+                "Capability limitation: hardware writes require exact-device PROVEN evidence."
+                if not (self.choices.dpi_writable and self.choices.polling_writable)
+                else "Capability limitation: none for reviewed DPI and polling controls."
+            ),
             DisplayRow(""),
             *[DisplayRow(line) for line in self.hardware_lines()],
             DisplayRow(""),

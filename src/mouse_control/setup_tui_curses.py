@@ -33,6 +33,14 @@ from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
 from .research_probe import ResearchProbeError, run_reversible_research_probes
 from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
+from .tui_presentation import (
+    LayoutMode,
+    footer_hint,
+    frame_layout,
+    status_label,
+    visible_window,
+    wrap_text,
+)
 from .vendor_capture import VendorCaptureError, VendorCaptureStore
 from .wizard import ButtonCaptureError, get_button_name
 
@@ -163,6 +171,8 @@ class CursesSetupApp:
         self._ok = curses.A_BOLD
         self._accent = curses.A_BOLD
         self._warn = 0
+        self._error = curses.A_BOLD
+        self._panel = 0
         self._muted = curses.A_DIM
         self._initialization: threading.Thread | None = None
         self._initialization_results: queue.SimpleQueue[
@@ -170,6 +180,7 @@ class CursesSetupApp:
         ] = queue.SimpleQueue()
         self._initialization_target = getattr(controller, "selected_index", 0)
         self._pending_device_activation = False
+        self._content_offsets: dict[SetupSection, int] = {}
 
     def _start_initialization(self, index: int) -> None:
         """Initialize one backend after the first frame, with one owned worker."""
@@ -195,11 +206,13 @@ class CursesSetupApp:
         )
         self._initialization.start()
 
-    def _poll_initialization(self) -> None:
+    def _poll_initialization(self) -> bool:
+        """Adopt one finished worker result and report whether presentation changed."""
+
         try:
             ready, error = self._initialization_results.get_nowait()
         except queue.Empty:
-            return
+            return False
         worker = self._initialization
         if worker is not None:
             worker.join()
@@ -207,7 +220,7 @@ class CursesSetupApp:
         if error is not None:
             self.controller.status = f"Hardware initialization failed: {error}"
             self._pending_device_activation = False
-            return
+            return True
         assert ready is not None
         requested = self.controller.device_cursor
         if ready.selected_index != requested:
@@ -216,13 +229,14 @@ class CursesSetupApp:
             except Exception:
                 pass
             self._start_initialization(requested)
-            return
+            return True
         self.controller = ready
         if self._pending_device_activation:
             self._pending_device_activation = False
             self.controller._go(SetupSection.HARDWARE)
             if not self.controller.discovery_complete:
                 self._run_automatic()
+        return True
 
     def _finish_initialization(self) -> None:
         """Join and close an unadopted backend during deterministic shutdown."""
@@ -261,10 +275,15 @@ class CursesSetupApp:
             curses.init_pair(2, curses.COLOR_GREEN, -1)
             curses.init_pair(3, curses.COLOR_CYAN, -1)
             curses.init_pair(4, curses.COLOR_YELLOW, -1)
+            curses.init_pair(5, curses.COLOR_RED, -1)
+            if getattr(curses, "COLORS", 0) >= 256:
+                curses.init_pair(6, 244, -1)
             self._highlight = curses.color_pair(1) | curses.A_BOLD
             self._ok = curses.color_pair(2) | curses.A_BOLD
             self._accent = curses.color_pair(3) | curses.A_BOLD
             self._warn = curses.color_pair(4)
+            self._error = curses.color_pair(5) | curses.A_BOLD
+            self._panel = curses.color_pair(6) if getattr(curses, "COLORS", 0) >= 256 else 0
         except curses.error:
             # Monochrome/reverse-video defaults remain fully usable.
             pass
@@ -278,6 +297,8 @@ class CursesSetupApp:
             return self._ok
         if text.startswith("?"):
             return self._warn
+        if text.startswith("!"):
+            return self._error
         return 0
 
     @staticmethod
@@ -295,13 +316,14 @@ class CursesSetupApp:
         height, width = stdscr.getmaxyx()
         stdscr.erase()
 
-        if height < 20 or width < 80:
+        layout = frame_layout(height, width)
+        if layout.mode is LayoutMode.TOO_SMALL:
             self._put(stdscr, 1, 2, f"Mouse Control — Setup v{__version__}", max(0, width - 4), curses.A_BOLD)
             self._put(
                 stdscr,
                 3,
                 2,
-                "Terminal is too small. Resize to at least 80×20.",
+                "Terminal is too small for safe setup. Resize to at least 48×12.",
                 max(0, width - 4),
             )
             self._put(
@@ -312,39 +334,72 @@ class CursesSetupApp:
                 max(0, width - 4),
                 self._highlight,
             )
-            stdscr.refresh()
+            stdscr.noutrefresh()
+            curses.doupdate()
             return
 
-        sidebar = max(22, min(28, width // 4))
+        sidebar = layout.sidebar_width
         self._put(
             stdscr,
             0,
             2,
-            f" Mouse Control — Setup v{__version__} ",
+            f" Mouse Control  v{__version__} ",
             width - 4,
             curses.A_BOLD,
         )
+        device_name = getattr(self.controller.selected, "name", "No device")
+        readiness = (
+            "NO DEVICE" if not self.controller.devices
+            else "READY" if self.controller.backend_ready
+            else "INITIALIZING"
+        )
+        meta = f"{device_name}  ·  {readiness}"
+        self._put(stdscr, 0, max(2, width - len(meta) - 2), meta, width - 2, self._muted)
         try:
-            stdscr.vline(1, sidebar, curses.ACS_VLINE, height - 4)
+            if layout.mode is LayoutMode.FULL:
+                stdscr.vline(1, sidebar, curses.ACS_VLINE, height - 4)
+                panel_left = sidebar + 1
+                panel_right = width - 1
+                panel_bottom = height - 4
+                stdscr.hline(1, panel_left, curses.ACS_HLINE, panel_right - panel_left)
+                stdscr.hline(
+                    panel_bottom, panel_left, curses.ACS_HLINE, panel_right - panel_left
+                )
+                stdscr.vline(1, panel_left, curses.ACS_VLINE, panel_bottom)
+                stdscr.vline(1, panel_right, curses.ACS_VLINE, panel_bottom)
+                stdscr.addch(1, panel_left, curses.ACS_ULCORNER)
+                stdscr.addch(1, panel_right, curses.ACS_URCORNER)
+                stdscr.addch(panel_bottom, panel_left, curses.ACS_LLCORNER)
+                stdscr.addch(panel_bottom, panel_right, curses.ACS_LRCORNER)
             stdscr.hline(height - 3, 0, curses.ACS_HLINE, width)
         except curses.error:
             pass
 
-        for index, section in enumerate(SECTIONS):
-            label = f" {index + 1}. {section.value} "
-            self._put(
-                stdscr,
-                2 + index,
-                1,
-                label,
-                sidebar - 2,
-                self._highlight if section is self.controller.section else 0,
-            )
+        if layout.mode is LayoutMode.FULL:
+            self._put(stdscr, 2, 2, "NAVIGATION", sidebar - 3, self._muted)
+            for index, section in enumerate(SECTIONS):
+                label = f" {index + 1:02d}  {section.value} "
+                self._put(
+                    stdscr,
+                    4 + index,
+                    1,
+                    label,
+                    sidebar - 2,
+                    self._highlight if section is self.controller.section else 0,
+                )
+        else:
+            breadcrumb = "  /  ".join(section.value for section in SECTIONS)
+            marker = f"[{self.controller.section.value}]"
+            self._put(stdscr, 1, 2, marker, width - 4, self._accent)
+            self._put(stdscr, 2, 2, breadcrumb, width - 4, self._muted)
 
-        x = sidebar + 2
-        content_width = width - x - 2
-        self._put(stdscr, 2, x, self.controller.section.value, content_width, self._accent)
-        y = 4
+        x = layout.content_x
+        content_width = layout.content_width
+        title_y = 2 if layout.mode is LayoutMode.FULL else layout.content_y
+        self._put(stdscr, title_y, x, self.controller.section.value.upper(), content_width, self._accent)
+        y = layout.content_y
+        if layout.mode is LayoutMode.COMPACT:
+            y += 2
 
         if self.controller.section is SetupSection.DEVICE:
             self._put(stdscr, y, x, "Select a device", content_width, curses.A_BOLD)
@@ -358,9 +413,28 @@ class CursesSetupApp:
                 self._muted,
             )
             y += 2
-            for index, device in enumerate(self.controller.devices):
-                if y >= height - 5:
-                    break
+            if not self.controller.devices:
+                self._put(stdscr, y, x, "No mouse devices found", content_width, self._warn)
+                y += 1
+                self._put(
+                    stdscr, y, x,
+                    "Check /dev/input permissions or reconnect the mouse.",
+                    content_width, self._muted,
+                )
+                y += 1
+                self._put(
+                    stdscr, y, x,
+                    "No configuration or service state has been changed.",
+                    content_width, self._muted,
+                )
+            capacity = max(1, (height - 5 - y) // 3)
+            start, end = visible_window(
+                len(self.controller.devices), self.controller.device_cursor, capacity
+            )
+            if start:
+                self._put(stdscr, y - 1, x, f"↑ {start} device(s) above", content_width, self._muted)
+            for index in range(start, end):
+                device = self.controller.devices[index]
                 selected = index == self.controller.device_cursor
                 bound = index == self.controller.selected_index
                 prefix = "●" if bound else "○"
@@ -378,8 +452,38 @@ class CursesSetupApp:
                 if identity:
                     self._put(stdscr, y, x, f"    {identity}", content_width, self._muted)
                 y += 2
+            if end < len(self.controller.devices) and y < height - 4:
+                self._put(
+                    stdscr, y, x, f"↓ {len(self.controller.devices) - end} device(s) below",
+                    content_width, self._muted,
+                )
         else:
-            for row in self.controller.detail_rows():
+            rows = self.controller.detail_rows()
+            selected_position = next(
+                (index for index, row in enumerate(rows)
+                 if row.cursor_index == self.controller.row_cursor),
+                min(self.controller.row_cursor, max(0, len(rows) - 1)),
+            )
+            capacity = max(1, height - 4 - y)
+            maximum_start = max(0, len(rows) - capacity)
+            start = min(self._content_offsets.get(self.controller.section, 0), maximum_start)
+            end = min(len(rows), start + capacity)
+            if not (start <= selected_position < end) and rows and y < height - 4:
+                selected_row = rows[selected_position]
+                self._put(
+                    stdscr, y, x, "↳ Selected: " + selected_row.text,
+                    content_width, self._highlight,
+                )
+                y += 1
+                capacity = max(1, capacity - 1)
+                maximum_start = max(0, len(rows) - capacity)
+                start = min(start, maximum_start)
+                end = min(len(rows), start + capacity)
+            if start and y < height - 4:
+                self._put(stdscr, y, x, f"↑ {start} more line(s)", content_width, self._muted)
+                y += 1
+                end = min(len(rows), start + max(0, capacity - 1))
+            for row in rows[start:end]:
                 if y >= height - 4:
                     break
                 selected = (
@@ -395,12 +499,31 @@ class CursesSetupApp:
                     self._line_attr(row.text, selected=selected, dim=row.dim),
                 )
                 y += 1
+            if end < len(rows) and y < height - 4:
+                self._put(stdscr, y, x, f"↓ {len(rows) - end} more line(s)", content_width, self._muted)
 
         status = self.controller.status or self.controller.notice
-        self._put(stdscr, height - 2, 1, f" {status} ", width - 2, self._accent)
-        footer = " Enter Select  ↑↓/jk Move  ←→/hl Sections  g/G Ends  q Quit  ? Help "
-        self._put(stdscr, height - 1, 0, footer, width, self._highlight)
-        stdscr.refresh()
+        status_lines = wrap_text(status, max(1, width - 13))
+        state = status_label(status)
+        state_attr = self._error if state == "ERROR" else self._warn if state == "CHECK" else self._accent
+        self._put(stdscr, layout.status_y, 1, f" {state:<7} ", 10, state_attr)
+        self._put(stdscr, layout.status_y, 11, status_lines[0], width - 12, self._panel)
+        if len(status_lines) > 1:
+            continuation = status_lines[1]
+            if len(status_lines) > 2 and len(continuation) >= 1:
+                continuation = continuation[:-1] + "…"
+            self._put(stdscr, layout.status_y + 1, 11, continuation, width - 12, self._panel)
+        footer = footer_hint(
+            self.controller.section.value,
+            backend_ready=self.controller.backend_ready,
+            compact=layout.mode is LayoutMode.COMPACT,
+        )
+        if self.controller.section is not SetupSection.DEVICE:
+            if len(self.controller.detail_rows()) > layout.content_height:
+                footer += "  PgUp/PgDn scroll"
+        self._put(stdscr, layout.footer_y, 0, " " + footer + " ", width, self._highlight)
+        stdscr.noutrefresh()
+        curses.doupdate()
 
     def _modal(self, title: str, lines: list[str], *, prompt: str = "Enter Continue   b Back") -> None:
         assert self.stdscr is not None
@@ -408,7 +531,12 @@ class CursesSetupApp:
         height, width = stdscr.getmaxyx()
         desired_w = max([len(title) + 6, *(len(line) + 6 for line in lines), len(prompt) + 6])
         box_w = min(max(4, width - 4), max(20, desired_w))
-        box_h = min(max(4, height - 2), max(5, len(lines) + 6))
+        wrapped_lines = [
+            wrapped
+            for line in lines
+            for wrapped in wrap_text(line, max(1, box_w - 4))
+        ]
+        box_h = min(max(4, height - 2), max(5, len(wrapped_lines) + 6))
         if box_w < 4 or box_h < 4:
             return
         y0 = max(0, (height - box_h) // 2)
@@ -423,10 +551,11 @@ class CursesSetupApp:
         except curses.error:
             pass
         self._put(win, 1, 2, title, box_w - 4, curses.A_BOLD)
-        for index, line in enumerate(lines[: box_h - 5]):
+        for index, line in enumerate(wrapped_lines[: box_h - 5]):
             self._put(win, 3 + index, 2, line, box_w - 4)
         self._put(win, box_h - 2, 2, prompt, box_w - 4, self._highlight)
-        win.refresh()
+        win.noutrefresh()
+        curses.doupdate()
 
     def _confirm(self, title: str, lines: list[str], *, yes="Enter Confirm", no="b Back") -> bool:
         while True:
@@ -1204,7 +1333,8 @@ class CursesSetupApp:
                 "Resize the terminal to at least 56×16 to continue.",
                 max(0, width - 4),
             )
-            stdscr.refresh()
+            stdscr.noutrefresh()
+            curses.doupdate()
             return
 
         box_w = min(width - 6, 72)
@@ -1261,7 +1391,8 @@ class CursesSetupApp:
             box_w - 4,
             self._muted,
         )
-        win.refresh()
+        win.noutrefresh()
+        curses.doupdate()
 
     def _dpi_editor(self, index: int) -> None:
         session = DpiEditSession(self.controller, index)
@@ -1350,6 +1481,21 @@ class CursesSetupApp:
         }
         return mapping.get(key)
 
+    def _scroll_content(self, direction: int) -> None:
+        """Scroll dense evidence while leaving the selected action unchanged."""
+
+        if self.controller.section is SetupSection.DEVICE or self.stdscr is None:
+            return
+        rows = self.controller.detail_rows()
+        height, width = self.stdscr.getmaxyx()
+        layout = frame_layout(height, width)
+        page = max(1, layout.content_height - 2)
+        current = self._content_offsets.get(self.controller.section, 0)
+        target = current + direction * page
+        self._content_offsets[self.controller.section] = min(
+            max(0, target), max(0, len(rows) - 1)
+        )
+
     def run(self, stdscr) -> bool:
         self.stdscr = stdscr
         stdscr.keypad(True)
@@ -1363,20 +1509,30 @@ class CursesSetupApp:
         # sessions or querying live capabilities. Initialization is singular,
         # owned by this app, and joined on every exit path.
         self._draw()
-        self._start_initialization(self.controller.selected_index)
-        stdscr.timeout(50)
+        if self.controller.devices:
+            self._start_initialization(self.controller.selected_index)
+        stdscr.timeout(100)
         try:
+            dirty = True
             while True:
-                self._poll_initialization()
-                self._draw()
+                dirty = self._poll_initialization() or dirty
+                if dirty:
+                    self._draw()
+                    dirty = False
                 key = stdscr.getch()
                 if key == -1:
                     continue
+                dirty = True
                 if (
                     not self.controller.backend_ready
                     and key in (10, 13, curses.KEY_ENTER)
                     and self.controller.section is SetupSection.DEVICE
                 ):
+                    if not self.controller.devices:
+                        self.controller.status = (
+                            "No mouse is available to select; reconnect one and reopen setup."
+                        )
+                        continue
                     self._pending_device_activation = True
                     if self._initialization is None:
                         self._start_initialization(self.controller.device_cursor)
@@ -1388,6 +1544,9 @@ class CursesSetupApp:
                         self.controller.status = "Hardware initialization is still in progress."
                     continue
                 if key == curses.KEY_RESIZE:
+                    continue
+                if key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
+                    self._scroll_content(-1 if key == curses.KEY_PPAGE else 1)
                     continue
                 symbolic = self._symbolic_key(key)
                 if symbolic is None:
