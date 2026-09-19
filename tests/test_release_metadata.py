@@ -127,7 +127,9 @@ def test_source_archive_includes_repository_security_scripts():
     manifest = _text("MANIFEST.in")
     assert "recursive-include scripts *.py *.sh" in manifest
     assert "recursive-include .github *.yml *.yaml" in manifest
-    assert "recursive-include requirements *.txt" in manifest
+    assert "recursive-include requirements *.in *.txt" in manifest
+    assert "global-exclude *.py[cod]" in manifest
+    assert "global-exclude __pycache__" in manifest
 
 
 def test_release_finalizes_reproducible_cyclonedx_for_attestation():
@@ -136,6 +138,23 @@ def test_release_finalizes_reproducible_cyclonedx_for_attestation():
     assert workflow.index("cyclonedx-py environment") < workflow.index(
         "scripts/finalize_cyclonedx_sbom.py"
     ) < workflow.index("Finalize and verify release checksums")
+
+
+def test_release_exports_and_verifies_genuine_slsa_bundle_without_checksum_cycle():
+    workflow = _text(".github/workflows/release-artifacts.yml")
+    export = workflow.index("Export and verify SLSA provenance release asset")
+    attest = workflow.index("Attest final release artifact provenance")
+    publish = workflow.index("Publish GitHub release")
+
+    assert attest < export < publish
+    assert "gh attestation download" in workflow
+    assert "--predicate-type https://slsa.dev/provenance/v1" in workflow
+    assert "gh attestation verify" in workflow
+    assert "--signer-workflow" in workflow
+    assert "--source-digest \"$GITHUB_SHA\"" in workflow
+    assert "--source-ref \"$GITHUB_REF\"" in workflow
+    assert "mouse-control-v${version}.intoto.jsonl" in workflow
+    assert "! grep -F \"$(basename \"$provenance\")\" release-assets/SHA256SUMS" in workflow
 
 
 def test_ci_and_release_workflow_are_version_independent():

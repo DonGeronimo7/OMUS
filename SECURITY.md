@@ -2,21 +2,38 @@
 
 ## Reporting a vulnerability
 
-Use GitHub's private vulnerability reporting for this repository when it is
-available. Otherwise, open a minimal public issue asking the maintainer for a
-private contact channel; do not include exploit details, device serials,
-credentials, private traces, or other secrets in a public issue.
+Report suspected vulnerabilities privately through the repository's
+[GitHub Security Advisory form](https://github.com/DonGeronimo7/mouse-control/security/advisories/new).
+Include the affected version, installation method, impact, reproduction steps,
+and any minimal logs or proof of concept that are safe to share. If the private
+form is unavailable, open a minimal public issue asking the maintainer to
+establish a private channel. Never put exploit details, device serials,
+credentials, private traces, or other secrets in a public issue, discussion,
+or pull request.
 
 Security issues include unauthorized hardware writes, input capture outside an
 explicit user workflow, privilege or device-permission expansion, updater or
 release-integrity bypass, unsafe file replacement, sensitive-data disclosure,
 and malformed-device/configuration input that crosses one of those boundaries.
 
+The maintainer aims to acknowledge a private report within seven days and to
+provide an initial assessment or request for more information within 14 days.
+Complex hardware or distribution-specific reports may take longer to reproduce;
+the advisory thread will be used for status updates. Please allow time for a
+coordinated fix and release before public disclosure. The reporter and
+maintainer should agree on a disclosure date based on severity, exploitability,
+and downstream update availability. If active exploitation creates an urgent
+public-safety need, say so in the private report.
+
 ## Supported versions
 
 Security fixes are provided for the latest release. Older releases should be
 upgraded before a report is treated as resolved. Distribution maintainers may
-backport fixes under their own support policies.
+backport fixes under their own support policies. Confirmed issues are fixed on
+the private advisory branch where practical, covered by a regression test that
+does not expose harmful detail, and released through the normal signed-tag and
+artifact-attestation process. Users should install the newest security release
+promptly; this project does not promise fixes for unsupported older versions.
 
 ## Update integrity
 
@@ -33,7 +50,11 @@ inputs fail closed before package installation or executable replacement.
 AppImage updates are staged in the installation directory, verified before
 execution, checked against the original non-symlink target identity, and
 atomically replaced. This model relies on GitHub HTTPS/release-account
-integrity; release checksums are not independently signed in v0.9.6.
+integrity. Releases beginning with v0.9.8 have GitHub/Sigstore build provenance
+and SBOM attestations for the exact published artifact digests. Downloaded
+artifacts can be verified as described in
+[the release supply-chain guide](https://github.com/DonGeronimo7/mouse-control/blob/main/docs/SECURITY_SUPPLY_CHAIN.md#consumer-verification).
+Older releases without original provenance remain intentionally unattested.
 
 Release CI pins third-party actions and the AppImage runtime/tool inputs to
 immutable commits or SHA-256 digests. Publication generates `SHA256SUMS` from
