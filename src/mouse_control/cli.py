@@ -520,6 +520,8 @@ def run_from_config(path: Path | None = None) -> int:
     monitor = None
     dpi_cycler = None
     shutdown_event = threading.Event()
+    from .runtime_wake import LinuxDeviceEventMonitor, RuntimeWakeCoordinator
+    wake_coordinator = RuntimeWakeCoordinator()
     enabled = config.get("notifications", {}).get("dpi_changes", True)
     if isinstance(enabled, bool):
         notifications_enabled = enabled
@@ -543,7 +545,10 @@ def run_from_config(path: Path | None = None) -> int:
                              dpi_stages=tuple(dpi_stages),
                              polling_rate_hz=polling_rate_hz),
         device_resolver=_resolve_runtime_device,
-        discovery_pending=discovery_pending)
+        discovery_pending=discovery_pending,
+        wake_coordinator=wake_coordinator)
+    device_event_monitor = LinuxDeviceEventMonitor(
+        hardware_device, wake_coordinator.device_event)
     if mouse is not None:
         identity = (f"{mouse.vendor:04x}:{mouse.product:04x}"
                     if mouse.vendor is not None and mouse.product is not None
@@ -569,7 +574,9 @@ def run_from_config(path: Path | None = None) -> int:
                           if (g305_hidpp or learned_cycle_trigger) else {})
         monitor = DpiMonitorSupervisor(hardware, hardware_device,
                                        lambda _device: hardware,
-                                       dpi_stages, active_dpi, shutdown_event, **monitor_kwargs)
+                                       dpi_stages, active_dpi, shutdown_event,
+                                       wake_coordinator=wake_coordinator,
+                                       **monitor_kwargs)
         if dpi_cycler is not None:
             dpi_cycler.notifier = monitor
         log.info("DPI notification monitor: %s", type(monitor).__name__)
@@ -577,21 +584,34 @@ def run_from_config(path: Path | None = None) -> int:
         log.info("DPI notification monitor: disabled")
 
     battery_monitor = BatteryMonitorSupervisor(
-        hardware, hardware_device, lambda _selected: hardware, shutdown_event)
+        hardware, hardware_device, lambda _selected: hardware, shutdown_event,
+        wake_coordinator=wake_coordinator)
 
-    if monitor is not None:
-        log.info("Starting DPI notification monitor")
-        monitor.start()
-    battery_monitor.start()
     try:
+        device_event_monitor.start()
+        if monitor is not None:
+            log.info("Starting DPI notification monitor")
+            monitor.start()
+        battery_monitor.start()
         MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
                       target_device=mouse or configured_mouse,
-                      event_observer=hardware, macros=macros).run()
+                      event_observer=hardware, macros=macros,
+                      wake_coordinator=wake_coordinator).run()
     finally:
+        wake_coordinator.stop()
+        device_event_monitor.stop()
         if monitor is not None:
             monitor.stop()
         battery_monitor.stop()
         hardware.close()
+        wake_summary = wake_coordinator.recorder.summary()
+        trial_count = len(wake_coordinator.recorder.samples)
+        for stage, values in wake_summary.items():
+            log.info(
+                "Wake latency summary %s (%d trials): min %.3f ms, "
+                "median %.3f ms, p95 %.3f ms, max %.3f ms",
+                stage, trial_count, values["minimum_ms"], values["median_ms"],
+                values["p95_ms"], values["maximum_ms"])
     return 0
 
 

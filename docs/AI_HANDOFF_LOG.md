@@ -1,5 +1,29 @@
 # AI handoff log
 
+## 2026-09-18 — Near-zero-latency mouse wake handling
+
+- Request: attachment `6381a25d-bbbf-4cd9-aa7d-823d2f6426b6/pasted-text.txt`
+  on `codex/discovery-90-corpus`, starting at `9637a9a`.
+- Preserved the fastest case: enumerated evdev/hidraw sessions remain open and
+  their kernel-blocking readers handle the first valid report directly. Wake
+  activity does not invoke Automatic Discovery, descriptor/corpus work, proof
+  reevaluation, configuration reload, or backend reconstruction.
+- Added one shared wake coordinator plus a receive-only Linux AF_NETLINK device
+  listener. Exact selected VID:PID add/change evidence interrupts evdev, DPI,
+  battery, and hardware retry waits immediately; the existing stable identity,
+  adapter-affinity, interface/evidence, and generation checks still authorize
+  any actual rebind. Concurrent consumers cannot duplicate initialization.
+- Added monotonic T0/T1/T2/T3 samples and repeated min/median/p95/max summaries.
+  The remapper marks T3 only after the first non-SYN event has followed the
+  normal mapping/passthrough and uinput synchronization path.
+- Safety: the listener has no connect/send operation and grants no hardware or
+  write authority. Generic discovery remains read-only. Hardware writes,
+  installation, push, merge, tag, and release were not performed.
+- Validation: focused lifecycle/discovery/remapping/notification/security
+  coverage passed 123 tests; the complete suite passed 982 tests with the
+  existing GLib warning; compileall and `git diff --check` passed. Physical
+  sleep/wake latency remains `UNVERIFIED — NEEDS PHYSICAL TEST`.
+
 ## 2026-09-18 — Canonical TUI redesign and post-overhaul validation
 
 - Continued `codex/discovery-90-corpus` from clean `fd36184` without changing

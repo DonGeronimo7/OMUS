@@ -1,5 +1,30 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — Event-driven wireless wake stabilization
+
+- The resident runtime now shares a Linux event-driven wake coordinator across
+  evdev remapping, the hardware supervisor, DPI events, and battery refresh.
+  Exact VID:PID kernel/udev add/change evidence cancels reconnect backoff;
+  mismatched identities only remain ordinary unrelated system events.
+- A receiver that remains enumerated retains its existing readers, backend,
+  protocol, capabilities, proof, desired state, and routing. Its first valid
+  evdev or HID report follows the existing kernel-blocking reader path without
+  discovery or backend reconstruction. A true node return still passes through
+  the established stable-identity resolver, adapter-affinity checks, generation
+  guard, and current interface/evidence validation before replacement.
+- Wake instrumentation records monotonic T0 (first matching Linux event/input),
+  T1 (recognized), T2 (backend usable), and T3 (runtime event handled), logs
+  each completed sample, and reports bounded repeated-trial minimum, median,
+  p95, and maximum statistics at runtime shutdown.
+- Deterministic tests cover retained-session wake, exact/mismatched device
+  events, cancellation of a simulated 60-second reconnect delay, ordered
+  latency statistics, event-driven shutdown, and no backend factory call on an
+  ordinary known-device wake. The wider reconnect/discovery/remapping/
+  notification/security set passed 123 tests; the complete suite passed 982
+  tests with the existing GLib warning. Compileall and whitespace checks
+  passed. Physical latency and first-click/motion acceptance on an actually
+  sleeping wireless mouse remain pending.
+
 ## 2026-09-18 — Canonical TUI presentation and stabilization milestone
 
 - The existing curses setup application now uses a shared presentation model

@@ -319,8 +319,9 @@ def test_runtime_survives_unavailable_backend_at_startup_and_notifies_after_bind
         shutdown.wait(10),
     )
 
-    def supervisor(*args):
-        return DpiMonitorSupervisor(*args, notifier=notifier, retry_interval=0.01)
+    def supervisor(*args, **kwargs):
+        return DpiMonitorSupervisor(
+            *args, **kwargs, notifier=notifier, retry_interval=0.01)
 
     with patch.object(cli, 'load_config', return_value=config), \
          patch.object(cli, 'get_mouse_devices', return_value=[MOUSE]), \

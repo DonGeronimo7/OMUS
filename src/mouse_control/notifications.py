@@ -157,11 +157,12 @@ class DpiEventMonitor:
 
 class DpiMonitorSupervisor:
     """Freshly discover a backend after every unavailable or failed watcher."""
-    def __init__(self, backend, device, backend_factory, stages, active_dpi, shutdown_event, notifier=None, retry_interval=1., dpi_cycler=None, notifications_enabled=True):
+    def __init__(self, backend, device, backend_factory, stages, active_dpi, shutdown_event, notifier=None, retry_interval=1., dpi_cycler=None, notifications_enabled=True, wake_coordinator=None):
         self.backend, self.device, self.backend_factory, self.stages = backend, device, backend_factory, stages; self.shutdown_event = shutdown_event; self.notifier = notifier or FreedesktopNotifier(); self.retry_interval = retry_interval
         self._last_notified_dpi = None; self._state_lock = threading.Lock(); self._thread = None; self._watcher_bound = False; self._state = MonitorState.UNBOUND
         self.dpi_cycler = dpi_cycler
         self.notifications_enabled = notifications_enabled
+        self.wake_coordinator = wake_coordinator
     def notify_dpi(self, dpi):
         if not self.notifications_enabled: return False
         with self._state_lock:
@@ -191,6 +192,8 @@ class DpiMonitorSupervisor:
     def _run(self):
         backend, unavailable = self.backend, False
         while not self.shutdown_event.is_set():
+            wake_generation = (self.wake_coordinator.generation
+                               if self.wake_coordinator is not None else None)
             generation = getattr(backend, "generation", None)
             unsupported = False
             force_rebind = False
@@ -209,14 +212,31 @@ class DpiMonitorSupervisor:
                         with self._state_lock: self._state = MonitorState.DISCONNECTED
                         if not unavailable: LOG.warning("DPI monitor stopped; retrying")
                         unavailable = True
+                        if self.wake_coordinator is not None: self.wake_coordinator.reconnecting()
             except Exception as exc:
                 if not unavailable: LOG.warning("DPI monitoring unavailable; retrying: %s", exc)
                 unavailable = True
+                if self.wake_coordinator is not None: self.wake_coordinator.reconnecting()
+            if self.shutdown_event.is_set():
+                break
             if unsupported:
-                if self.shutdown_event.wait(max(30., self.retry_interval)):
+                if self.wake_coordinator is None:
+                    stopped = self.shutdown_event.wait(max(30., self.retry_interval))
+                else:
+                    self.wake_coordinator.unavailable()
+                    self.wake_coordinator.wait(
+                        wake_generation, max(30., self.retry_interval), self.shutdown_event)
+                    stopped = self.shutdown_event.is_set()
+                if stopped:
                     break
                 continue
-            if self.shutdown_event.is_set() or self.shutdown_event.wait(self.retry_interval): break
+            if self.wake_coordinator is None:
+                stopped = self.shutdown_event.wait(self.retry_interval)
+            else:
+                self.wake_coordinator.wait(
+                    wake_generation, self.retry_interval, self.shutdown_event)
+                stopped = self.shutdown_event.is_set()
+            if self.shutdown_event.is_set() or stopped: break
             try:
                 rebind = getattr(type(backend), "rebind", None)
                 if callable(rebind):
@@ -229,6 +249,7 @@ class DpiMonitorSupervisor:
     def stop(self):
         with self._state_lock: self._state = MonitorState.STOPPING
         self.shutdown_event.set()
+        if self.wake_coordinator is not None: self.wake_coordinator.stop()
         if self._thread: self._thread.join(timeout=max(1., self.retry_interval+.5))
         if close := getattr(self.notifier, "close", None): close()
 

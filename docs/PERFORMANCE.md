@@ -154,3 +154,21 @@ adapter. The two existing UI surfaces have distinct purposes (interactive setup
 and the small status/battery surface), so merging them would increase coupling
 without eliminating measured work. No broad async rewrite or speculative module
 split was justified by the profiles.
+
+## Wireless wake instrumentation — 2026-09-18
+
+The runtime now measures only Mouse Control's contribution after Linux-visible
+wake evidence:
+
+- T0: first matching kernel/udev return event, evdev input, or HID input report;
+- T1: the selected known device is recognized active;
+- T2: its retained or safely rebound backend is usable;
+- T3: the runtime event path has completed normal handling.
+
+Each completed sample is logged. Runtime shutdown reports the repeated-trial
+minimum, median, nearest-rank p95, and maximum for T0→T1, T0→T2, and T0→T3.
+The recorder is bounded to 128 samples. Deterministic fixtures verify its
+statistics and immediate cancellation of a simulated 60-second retry wait, but
+those fixtures are not physical latency evidence. The `<50 ms` median target
+for a receiver that remains enumerated still requires repeated observation on
+an actually sleeping wireless mouse.

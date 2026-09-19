@@ -31,7 +31,7 @@ def test_production_python_uses_no_shell_eval_exec_or_pickle():
     assert violations == []
 
 
-def test_network_client_is_confined_to_explicit_updater():
+def test_network_client_is_confined_to_explicit_updater_and_netlink_cannot_send():
     network_modules = {"urllib", "requests", "socket", "http", "httpx", "aiohttp"}
     consumers = set()
     for path in SRC.rglob("*.py"):
@@ -46,7 +46,17 @@ def test_network_client_is_confined_to_explicit_updater():
                         consumers.add(path.name)
             if module and module.split(".", 1)[0] in network_modules:
                 consumers.add(path.name)
-    assert consumers == {"updater.py"}
+    assert consumers == {"runtime_wake.py", "updater.py"}
+
+    wake_path = SRC / "runtime_wake.py"
+    wake_tree = ast.parse(wake_path.read_text(encoding="utf-8"), filename=str(wake_path))
+    socket_calls = {
+        node.func.attr
+        for node in ast.walk(wake_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+    assert "AF_NETLINK" in wake_path.read_text(encoding="utf-8")
+    assert socket_calls.isdisjoint({"connect", "connect_ex", "send", "sendall", "sendto"})
 
 
 def test_workflow_actions_are_full_sha_pinned_and_token_scope_is_narrow():
