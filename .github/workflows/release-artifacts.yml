@@ -248,3 +248,19 @@ jobs:
             --title "Mouse Control $GITHUB_REF_NAME" \
             --notes-file release-body.md \
             --verify-tag
+
+  dispatch-virustotal:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch VirusTotal verification for the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run virustotal-release.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$GITHUB_REF_NAME" \
+            --field tag="$GITHUB_REF_NAME"

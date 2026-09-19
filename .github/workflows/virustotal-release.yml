@@ -1,0 +1,86 @@
+name: VirusTotal release scan
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to scan
+        required: true
+        type: string
+
+permissions: read-all
+
+jobs:
+  scan:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Download and verify primary release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          release_field() { PYTHONPATH=src python3 -m mouse_control.release_version "$version" "$1"; }
+          base_version=$(release_field rpm-version)
+          package_release=$(release_field rpm-release)
+          python_version=$(release_field python-version)
+          test "$RELEASE_TAG" = "v${version}"
+          mkdir scan-assets
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir scan-assets \
+            --pattern "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
+            --pattern "mouse-control_${version}_all.deb" \
+            --pattern "Mouse-Control-${version}-x86_64.AppImage" \
+            --pattern "mouse_control-${python_version}-py3-none-any.whl" \
+            --pattern "mouse_control-${python_version}.tar.gz" \
+            --pattern SHA256SUMS
+          (cd scan-assets && sha256sum --check --strict SHA256SUMS)
+          find scan-assets -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort > /tmp/scan-files
+          printf '%s\n' \
+            "Mouse-Control-${version}-x86_64.AppImage" \
+            "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
+            "mouse-control_${version}_all.deb" \
+            "mouse_control-${python_version}-py3-none-any.whl" \
+            "mouse_control-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-scan-files
+          diff -u /tmp/expected-scan-files /tmp/scan-files
+      - name: Submit primary artifacts to VirusTotal
+        id: virustotal
+        uses: cssnr/virustotal-action@5edfa4c982eb0caec6d568ea27cf715269f5c23b # v2.0.0
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          file_globs: |
+            scan-assets/*
+            !scan-assets/SHA256SUMS
+          rate_limit: 4
+          sha256: true
+          update_release: false
+          summary: true
+      - name: Wait for and record VirusTotal analyses
+        id: verify
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          VT_RESULTS_JSON: ${{ steps.virustotal.outputs.json }}
+        run: python3 scripts/verify_virustotal_results.py --output virustotal-results.md
+      - name: Add VirusTotal results to release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > /tmp/release-body.md
+          python3 scripts/update_virustotal_release_notes.py \
+            /tmp/release-body.md virustotal-results.md /tmp/updated-release-body.md
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --notes-file /tmp/updated-release-body.md
+      - name: Enforce scan result
+        env:
+          HAS_DETECTIONS: ${{ steps.verify.outputs.has-detections }}
+        run: test "$HAS_DETECTIONS" = false

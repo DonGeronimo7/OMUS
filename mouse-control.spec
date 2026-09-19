@@ -1,9 +1,9 @@
 Name:           mouse-control
-Version:        0.9.8
+Version:        0.9.9
 Release:        1%{?dist}
 Summary:        Linux mouse remapping with Automatic Discovery
 License:        GPL-3.0-or-later
-%global python_version 0.9.8
+%global python_version 0.9.9
 Source0:        mouse_control-%{python_version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
@@ -83,6 +83,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/applications/mouse-control.desktop
 %{_datadir}/icons/hicolor/*/apps/mouse-control.png
 %changelog
+* Sat Sep 19 2026 Marc-Anthony Geronimo - 0.9.9-1
+- Complete the canonical TUI, updater, service controls, and CLI capability parity.
+- Add safe per-device, multi-zone lighting models with write authority unchanged.
+- Add hardened VirusTotal scanning for the five primary release artifacts.
+
 * Fri Sep 18 2026 Marc-Anthony Geronimo - 0.9.8-1
 - Harden release security, provenance, dependency auditing, and workflow policy.
 - Prevent shutdown wake/rebind races and repeated DPI or polling reconciliation.

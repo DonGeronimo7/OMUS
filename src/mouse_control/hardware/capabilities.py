@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,67 @@ class BatteryCapabilities:
     events: bool = False
 
 
+class LightingMode(str, Enum):
+    OFF = "off"
+    STATIC = "static"
+    BREATHING = "breathing"
+    SPECTRUM = "spectrum"
+
+
+class LightingPersistence(str, Enum):
+    ONBOARD = "onboard"
+    AUTOMATIC_SAVE = "automatic_save"
+    MANUAL_SAVE = "manual_save"
+    VOLATILE = "volatile"
+    HOST_STREAMED = "host_streamed"
+    UNKNOWN = "unknown"
+
+
+class LightingWriteScope(str, Enum):
+    LIGHTING_ONLY = "lighting_only"
+    SHARED_DEVICE_CONFIG = "shared_device_config"
+
+
+@dataclass(frozen=True)
+class LightingZoneCapabilities:
+    zone_id: str
+    name: str
+    modes: tuple[LightingMode, ...] = ()
+    rgb24: bool = False
+    brightness_range: tuple[int, int] | None = None
+    speed_range: tuple[int, int] | None = None
+    persistence: tuple[LightingPersistence, ...] = (LightingPersistence.UNKNOWN,)
+    write_scope: LightingWriteScope = LightingWriteScope.LIGHTING_ONLY
+    readable: bool = False
+    writable: bool = False
+
+
+@dataclass(frozen=True)
+class LightingCapabilities:
+    zones: tuple[LightingZoneCapabilities, ...] = ()
+
+    @property
+    def available(self) -> bool:
+        return bool(self.zones)
+
+
+@dataclass(frozen=True)
+class LightingState:
+    zone_id: str
+    mode: LightingMode
+    color: str | None = None
+    brightness: int | None = None
+    speed: int | None = None
+    persistence: LightingPersistence = LightingPersistence.UNKNOWN
+    confirmed: bool = False
+
+
 @dataclass(frozen=True)
 class HardwareCapabilities:
     dpi: DpiCapabilities = DpiCapabilities()
     report_rate: ReportRateCapabilities = ReportRateCapabilities()
     battery: BatteryCapabilities = BatteryCapabilities()
+    lighting: LightingCapabilities = LightingCapabilities()
 
 
 @dataclass(frozen=True)

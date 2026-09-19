@@ -29,9 +29,11 @@ ALLOWED_JOB_WRITES: dict[tuple[str, str], set[str]] = {
         "contents",
         "id-token",
     },
+    ("release-artifacts.yml", "dispatch-virustotal"): {"actions"},
     ("release-trigger.yml", "create-tag"): {"contents"},
     ("release-trigger.yml", "dispatch"): {"actions"},
     ("scorecard.yml", "analysis"): {"id-token", "security-events"},
+    ("virustotal-release.yml", "scan"): {"contents"},
 }
 
 REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
@@ -64,9 +66,18 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2",
         "subject-checksums: release-assets/SHA256SUMS",
         "sbom-path: ${{ steps.sbom.outputs.path }}",
+        "gh workflow run virustotal-release.yml",
         "gh attestation download",
         "gh attestation verify",
         "mouse-control-v${version}.intoto.jsonl",
+    ),
+    "virustotal-release.yml": (
+        "cssnr/virustotal-action@5edfa4c982eb0caec6d568ea27cf715269f5c23b # v2.0.0",
+        "vt_api_key: ${{ secrets.VT_API_KEY }}",
+        "rate_limit: 4",
+        "sha256: true",
+        "update_release: false",
+        "scripts/verify_virustotal_results.py",
     ),
 }
 

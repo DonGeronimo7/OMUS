@@ -42,6 +42,7 @@ def test_status_wrap_and_labels_do_not_depend_on_color():
     )
     assert status_label("Hardware initialization failed: unavailable") == "ERROR"
     assert status_label("Known device ready") == "READY"
+    assert status_label("Mouse Control is up to date") == "READY"
     assert status_label("Physical qualification pending") == "CHECK"
 
 
@@ -125,7 +126,7 @@ def test_button_and_review_rows_are_dense_complete_summaries():
     controller.section_index = 5
     assert any("BTN_SIDE" in row.text and "KEY_LEFTCTRL" in row.text
                for row in controller.detail_rows())
-    controller.section_index = 7
+    controller.section_index = SECTIONS.index(SetupSection.REVIEW)
     review = "\n".join(row.text for row in controller.detail_rows())
     assert "1234:5678" in review
     assert "usb-scan" in review

@@ -1,5 +1,72 @@
 # Mouse Control Project Status
 
+## 2026-09-19 — v0.9.9 release candidate
+
+- Canonical release metadata now targets v0.9.9 and documents the accepted TUI,
+  updater, service, CLI-parity, and safe multi-zone lighting work.
+- A dedicated release-published workflow scans exactly the RPM, DEB, AppImage,
+  wheel, and source archive through `cssnr/virustotal-action` v2.0.0 pinned to
+  immutable commit `5edfa4c982eb0caec6d568ea27cf715269f5c23b` at four uploads per
+  minute. It excludes checksums, SBOM, and provenance material.
+- Repository-owned follow-up verification waits for each analysis, preserves
+  filename, SHA-256, detection counts, and direct links in release notes, and
+  fails on any malicious or suspicious result. The README badge reports only
+  workflow status; VirusTotal remains a point-in-time signal, not certification.
+- The release retains the existing exact-hardware proof gates. New sourced
+  lighting families remain write-disabled and are not physically validated.
+
+## 2026-09-19 — Parallel pre-v1 TUI updater reconciliation
+
+- Reconciled the dedicated updater work at `d3bb3bb` into the broader canonical
+  TUI at `bd22e15` without merging or cherry-picking either implementation.
+  The unified controller, Updates screen, navigation, Lighting, Tools / Advanced,
+  About, Service controls, and capability-parity inventory remain authoritative.
+- The updater now owns the structured installed/latest/installation-policy
+  result used by the TUI. Source checkouts, unknown/package-source installs, and
+  incompatible AppImages are represented honestly and cannot expose an update
+  action. RPM, DEB, AppImage, and pip continue through their existing updater
+  paths; checksums, trusted origins, package ownership, approval, and service
+  restoration remain in `updater.py`.
+- Entering, redrawing, backing out of, or cancelling the Updates screen performs
+  no network or updater operation. A check occurs only from its explicit action,
+  and updater UI status remains independent of configuration choices and Review /
+  Save. The update action uses the existing updater with interactive approval
+  semantics and temporarily leaves curses so package-manager interaction remains
+  usable.
+- Focused validation passed 218 updater/TUI/navigation tests, 64 lighting tests,
+  143 service/lifecycle tests, and 74 packaging/entry-point tests. The complete
+  suite and Fedora RPM `%check` each passed 1131 tests with the existing GLib
+  warning. Compileall, whitespace, workflow policy, wheel/sdist, RPM, and
+  packaged-command smoke checks passed. No host installation, push, merge, tag,
+  release, or physical hardware validation occurred.
+
+## 2026-09-18 — Post-v0.9.8 canonical TUI and lighting foundation
+
+- The canonical TUI now includes dedicated Lighting, Updates, Tools / Advanced,
+  About, and complete service-control surfaces. A checked-in product capability
+  inventory maps every public `mouse-control` command and installed research
+  entry point to its TUI route and shared implementation; regression coverage
+  prevents new top-level CLI commands from silently becoming TUI-only gaps.
+- Lighting is an optional protocol-neutral capability with multiple zones,
+  native Off/Static/Breathing/Spectrum modes, RGB24 `#RRGGBB`, brightness,
+  speed, per-mode persistence vocabulary, readback, and lighting-only versus
+  shared-device-config write scope. Existing configurations load unchanged.
+- Shared-device-config lighting is refused unless an exact backend explicitly
+  proves trustworthy baseline-preserving RMW. Volatile state is reconciled once
+  per live backend and after a genuine rebind; lighting failures remain isolated
+  from DPI, polling, remapping, buttons, battery, and service health.
+- OpenRGB-derived lighting facts are retained as source-backed, exact-fingerprint
+  knowledge with runtime writes disabled. The post-v0.9.8 audit records the
+  status and remaining hardware gate for every requested research family; no
+  new HID write path or support claim was created.
+- Automated validation passed 1122 tests with the existing GLib warning,
+  compileall, and whitespace checks. Wheel/sdist and installed-wheel smoke
+  validation passed; the final Fedora RPM and `%check` passed all 1122 tests
+  plus packaged command smoke checks.
+  Debian and AppImage build tools were unavailable locally; their launcher and
+  packaging structure remain covered by the full suite. Physical lighting and
+  device acceptance remain pending.
+
 ## 2026-09-19 — OpenSSF Scorecard maximum hardening
 
 - All Python workflow environments now use separate reviewed inputs and exact,

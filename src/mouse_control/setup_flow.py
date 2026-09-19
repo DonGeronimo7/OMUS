@@ -10,7 +10,12 @@ from dataclasses import dataclass, field
 
 from .config import DEFAULT_DPI, DEFAULT_DPI_STAGES
 from .hardware import HardwareError
-from .hardware.capabilities import DpiRange, HardwareCapabilities
+from .hardware.capabilities import (
+    DpiRange,
+    HardwareCapabilities,
+    LightingState,
+    LightingZoneCapabilities,
+)
 
 
 @dataclass
@@ -21,6 +26,7 @@ class SetupChoices:
     mappings: dict[str, str] = field(default_factory=dict)
     macros: dict[str, list[dict[str, object]]] = field(default_factory=dict)
     enable_service: bool = True
+    lighting: dict[str, LightingState] = field(default_factory=dict)
 
     # Device-specific discovery state. reset_device_state() MUST be called when
     # the selected physical mouse changes.
@@ -35,6 +41,8 @@ class SetupChoices:
     polling_readable: bool = False
     polling_writable: bool = False
     current_polling_rate: int | None = None
+    lighting_zones: list[LightingZoneCapabilities] = field(default_factory=list)
+    lighting_changed: bool = False
     measured_polling_rate: int | None = None
     measured_polling_confidence: str | None = None
 
@@ -56,6 +64,7 @@ class SetupChoices:
         self.polling_readable = False
         self.polling_writable = False
         self.current_polling_rate = None
+        self.lighting_zones.clear()
         self.measured_polling_rate = None
         self.measured_polling_confidence = None
         self.verified_dpi_values.clear()
@@ -186,6 +195,15 @@ def discover_choices(backend, device, choices):
     except (HardwareError, OSError, TypeError, ValueError) as exc:
         print(f"Polling capability query incomplete: {exc}")
         choices.polling_writable = False
+
+    # Lighting is independent from core mouse capabilities. A lighting query
+    # failure must not erase DPI, polling, remapping, or device support.
+    try:
+        lighting_caps = capabilities.lighting if capabilities is not None else None
+        choices.lighting_zones = list(lighting_caps.zones if lighting_caps else ())
+    except (HardwareError, OSError, TypeError, ValueError, AttributeError) as exc:
+        print(f"Lighting capability query incomplete: {exc}")
+        choices.lighting_zones = []
 
 
 def restore_dpi(backend, device, value):

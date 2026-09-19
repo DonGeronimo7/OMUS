@@ -13,13 +13,17 @@ from enum import Enum, auto
 import io
 from typing import Any, Callable
 
+from . import __version__
 from .calibrated_profiles import find_calibrated_profile
 from .guided_discovery import GuidedDiscoveryOutcome, load_known_device_state
 from .hardware import HardwareError, get_backend
+from .hardware.capabilities import LightingState
+from .lighting import validate_lighting_state
 from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 from .performance import timed
 from .lab_orchestrator import initial_lab_hypotheses, plan_next_experiment
+from .updater import Installation, UpdateStatus, detect_installation, running_executable
 
 
 def _format_timing_ns(value: int | None) -> str:
@@ -39,7 +43,11 @@ class SetupSection(Enum):
     DPI = "DPI"
     POLLING = "Polling"
     BUTTONS = "Buttons"
+    LIGHTING = "Lighting"
     SERVICE = "Service"
+    UPDATE = "Updates"
+    TOOLS = "Tools / Advanced"
+    ABOUT = "About"
     REVIEW = "Review / Save"
 
 
@@ -59,6 +67,11 @@ class ActionKind(Enum):
     MEASURE_POLLING = auto()
     EDIT_DPI = auto()
     CAPTURE_BUTTONS = auto()
+    EDIT_LIGHTING = auto()
+    CHECK_UPDATE = auto()
+    START_UPDATE = auto()
+    OPEN_PRODUCT_TOOL = auto()
+    SERVICE_ACTION = auto()
     SAVE = auto()
 
 
@@ -126,6 +139,7 @@ class NavigationState:
             SetupSection.DPI,
             SetupSection.POLLING,
             SetupSection.BUTTONS,
+            SetupSection.LIGHTING,
         } and direction > 0:
             target = SetupSection.REVIEW
             self.return_to = None
@@ -136,6 +150,7 @@ class NavigationState:
             SetupSection.DPI,
             SetupSection.POLLING,
             SetupSection.BUTTONS,
+            SetupSection.LIGHTING,
         }:
             self.current = SetupSection.REVIEW
             self.return_to = None
@@ -173,6 +188,7 @@ class SetupController:
         known_device_loader: Callable[[Any], Any | None] = load_known_device_state,
         initialize_backend: bool = True,
         selected_index: int | None = None,
+        update_installation: Installation | None = None,
     ) -> None:
         self.devices = tuple(devices)
         self.existing_config = existing_config
@@ -197,6 +213,11 @@ class SetupController:
         self.polling_measurement: Any | None = None
         self.battery_state: Any | None = None
         self.battery_error: str | None = None
+        self.update_installation = update_installation or Installation(
+            "unknown", running_executable()
+        )
+        self.update_status: UpdateStatus | None = None
+        self.update_error: str | None = None
         self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
@@ -243,6 +264,7 @@ class SetupController:
             backend_factory=self._backend_factory,
             known_device_loader=self._known_device_loader,
             selected_index=selected_index,
+            update_installation=self.update_installation,
         )
 
     @property
@@ -734,10 +756,18 @@ class SetupController:
             ) else 1
         if self.section is SetupSection.BUTTONS:
             return 1
+        if self.section is SetupSection.LIGHTING:
+            return max(1, len(self.choices.lighting_zones))
         if self.section is SetupSection.SERVICE:
-            return 2
+            return 6
+        if self.section is SetupSection.UPDATE:
+            return 2 if self.update_action_available else 1
+        if self.section is SetupSection.TOOLS:
+            return 8
+        if self.section is SetupSection.ABOUT:
+            return 1
         if self.section is SetupSection.REVIEW:
-            return 4
+            return 5
         return 1
 
     def _clamp_cursor(self) -> None:
@@ -788,10 +818,12 @@ class SetupController:
             return ControllerAction()
         if key == "LEFT":
             if self.nav.return_to is SetupSection.REVIEW and self.section in {
-                SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS
+                SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS,
+                SetupSection.LIGHTING,
             }:
                 self.nav.back()
-            elif self.section in {SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS}:
+            elif self.section in {SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS,
+                                  SetupSection.LIGHTING}:
                 self._go(self._previous_configuration_section(), remember=False)
             else:
                 self.nav.sequential(-1)
@@ -800,7 +832,8 @@ class SetupController:
             return ControllerAction()
         if key == "RIGHT":
             if self.nav.return_to is SetupSection.REVIEW and self.section in {
-                SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS
+                SetupSection.DPI, SetupSection.POLLING, SetupSection.BUTTONS,
+                SetupSection.LIGHTING,
             }:
                 self.nav.current = SetupSection.REVIEW
                 self.nav.return_to = None
@@ -887,13 +920,35 @@ class SetupController:
         if self.section is SetupSection.BUTTONS:
             return ControllerAction(ActionKind.CAPTURE_BUTTONS)
 
+        if self.section is SetupSection.LIGHTING:
+            if not self.choices.lighting_zones:
+                self.status = "Lighting is unsupported or unknown for this mouse; core support is unaffected."
+                return ControllerAction()
+            return ControllerAction(ActionKind.EDIT_LIGHTING, self.row_cursor)
+
         if self.section is SetupSection.SERVICE:
-            self.choices.enable_service = self.row_cursor == 0
-            self.status = (
-                "Background service will be enabled."
-                if self.choices.enable_service
-                else "Background service will remain disabled."
-            )
+            if self.row_cursor < 2:
+                self.choices.enable_service = self.row_cursor == 0
+                self.status = (
+                    "Background service will be enabled."
+                    if self.choices.enable_service
+                    else "Background service will remain disabled."
+                )
+                return ControllerAction()
+            return ControllerAction(ActionKind.SERVICE_ACTION,
+                                    ("status", "start", "stop", "restart")[self.row_cursor - 2])
+
+        if self.section is SetupSection.UPDATE:
+            if self.row_cursor == 0:
+                return ControllerAction(ActionKind.CHECK_UPDATE)
+            if self.update_action_available:
+                return ControllerAction(ActionKind.START_UPDATE)
+            return ControllerAction()
+
+        if self.section is SetupSection.TOOLS:
+            return ControllerAction(ActionKind.OPEN_PRODUCT_TOOL, self.row_cursor)
+
+        if self.section is SetupSection.ABOUT:
             return ControllerAction()
 
         if self.section is SetupSection.REVIEW:
@@ -903,11 +958,66 @@ class SetupController:
                 1: SetupSection.DPI,
                 2: SetupSection.POLLING,
                 3: SetupSection.BUTTONS,
+                4: SetupSection.LIGHTING,
             }[self.row_cursor]
             self.nav.edit_from_review(target)
             self.row_cursor = 0
             return ControllerAction()
         return ControllerAction()
+
+    @property
+    def update_action_available(self) -> bool:
+        state = self.update_status
+        return bool(
+            state
+            and not self.update_error
+            and state.update_available
+            and state.update_supported
+        )
+
+    def apply_update_status(self, state: UpdateStatus) -> None:
+        """Store one updater-owned check result without touching setup choices."""
+
+        self.update_status = state
+        self.update_error = None
+        self.update_installation = state.installation
+        if not state.update_available:
+            self.status = f"Mouse Control {state.installed_version} is up to date."
+        elif state.update_supported:
+            self.status = (
+                f"Update available: {state.installed_version} → {state.available_version}."
+            )
+        else:
+            self.status = state.unavailable_reason
+        self._clamp_cursor()
+
+    def apply_update_error(self, message: str) -> None:
+        """Record a failed check without mutating configuration or prior evidence."""
+
+        self.update_error = message
+        self.status = f"Update check failed; setup state is unchanged. {message}"
+        self._clamp_cursor()
+
+    def set_lighting_state(self, state: LightingState) -> bool:
+        capability = next(
+            (item for item in self.choices.lighting_zones if item.zone_id == state.zone_id),
+            None,
+        )
+        if capability is None:
+            self.status = "The selected lighting zone is unavailable."
+            return False
+        if not capability.writable:
+            self.status = "Lighting knowledge is read-only; no write authority is available."
+            return False
+        try:
+            normalized = validate_lighting_state(state, capability)
+        except ValueError as exc:
+            self.status = f"Lighting value rejected: {exc}"
+            return False
+        self.choices.lighting[state.zone_id] = normalized
+        self.choices.lighting_changed = True
+        self.status = f"{capability.name} lighting staged as {normalized.mode.value}."
+        return True
 
     def set_dpi_value(self, index: int, requested: int) -> bool:
         """Compatibility helper used by controller tests; curses uses DpiEditSession."""
@@ -1422,11 +1532,113 @@ class SetupController:
             ))
             return rows
 
+        if self.section is SetupSection.LIGHTING:
+            rows = [
+                DisplayRow("Hardware lighting", role="heading"),
+                DisplayRow(
+                    "Optional capability · native device effects only · no host animation",
+                    dim=True,
+                ),
+            ]
+            if not self.choices.lighting_zones:
+                rows.extend((
+                    DisplayRow("Lighting unsupported or not yet qualified", 0, dim=True),
+                    DisplayRow("DPI, polling, buttons, remapping, and service remain supported.", dim=True),
+                ))
+                return rows
+            for index, zone in enumerate(self.choices.lighting_zones):
+                state = self.choices.lighting.get(zone.zone_id)
+                mode = state.mode.value if state else "unchanged"
+                color = f" · {state.color}" if state and state.color else ""
+                authority = "writable" if zone.writable else "read-only"
+                rows.append(DisplayRow(
+                    f"{zone.name}: {mode}{color}  [{authority}]", index, role="action"
+                ))
+                rows.append(DisplayRow(
+                    "Modes: " + ", ".join(item.value for item in zone.modes)
+                    + " · persistence: " + ", ".join(item.value for item in zone.persistence),
+                    dim=True,
+                ))
+            rows.append(DisplayRow("Colors use full #RRGGBB input where RGB24 is proven.", dim=True))
+            return rows
+
         if self.section is SetupSection.SERVICE:
             return [
                 DisplayRow("Background service", role="heading"),
                 DisplayRow("Enable at login" + ("  ✓" if self.choices.enable_service else ""), 0, role="action"),
                 DisplayRow("Keep disabled" + ("  ✓" if not self.choices.enable_service else ""), 1, role="action"),
+                DisplayRow("Show current status", 2, role="action"),
+                DisplayRow("Start now", 3, role="action"),
+                DisplayRow("Stop now", 4, role="action"),
+                DisplayRow("Restart now", 5, role="action"),
+            ]
+
+        if self.section is SetupSection.UPDATE:
+            state = self.update_status
+            rows = [
+                DisplayRow("Mouse Control Updates", role="heading"),
+                DisplayRow(
+                    f"Installed version: {state.installed_version if state else __version__}",
+                    role="primary",
+                ),
+                DisplayRow(f"Installation type: {self.update_installation.description}"),
+            ]
+            if self.update_installation.detail:
+                rows.append(DisplayRow(self.update_installation.detail, dim=True))
+            if self.update_error:
+                rows.append(DisplayRow(f"Update status: check failed — {self.update_error}"))
+            elif state is None:
+                rows.append(DisplayRow("Update status: not checked"))
+            elif not state.update_available:
+                rows.extend((
+                    DisplayRow(f"Latest stable version: {state.available_version}"),
+                    DisplayRow("Update status: installed version is current"),
+                ))
+            elif state.update_supported:
+                rows.extend((
+                    DisplayRow(f"Latest stable version: {state.available_version}"),
+                    DisplayRow("Update status: compatible update available"),
+                ))
+            else:
+                rows.extend((
+                    DisplayRow(f"Latest stable version: {state.available_version}"),
+                    DisplayRow("Update status: update available; automatic update unavailable"),
+                    DisplayRow(state.unavailable_reason, dim=True),
+                ))
+            rows.extend((
+                DisplayRow(""),
+                DisplayRow("Check for Updates", 0, role="action"),
+            ))
+            if self.update_action_available:
+                rows.append(DisplayRow("Update Mouse Control", 1, role="action"))
+            rows.extend((
+                DisplayRow("Checks occur only when you choose Check for Updates.", dim=True),
+                DisplayRow("Review / Save remains configuration-only.", dim=True),
+            ))
+            return rows
+
+        if self.section is SetupSection.TOOLS:
+            labels = (
+                "Diagnostics / doctor", "Permissions", "Support bundle",
+                "Configuration path", "Read-only HID inspection",
+                "Protocol / evidence inspection", "Discovery export / rediscovery",
+                "Logs and recovery guidance",
+            )
+            return [
+                DisplayRow("Tools / Advanced", role="heading"),
+                DisplayRow("Ordinary diagnostics and advanced research routes", dim=True),
+                *[DisplayRow(label, index, role="action") for index, label in enumerate(labels)],
+                DisplayRow("Hardware-writing research remains behind its existing authority gates.", dim=True),
+            ]
+
+        if self.section is SetupSection.ABOUT:
+            backend = getattr(self.backend, "name", "unavailable")
+            return [
+                DisplayRow("About Mouse Control", role="heading"),
+                DisplayRow(f"Version {__version__}", role="primary"),
+                DisplayRow(f"Selected backend: {backend}"),
+                DisplayRow("Linux evdev/uinput remapping with evidence-gated hardware control."),
+                DisplayRow("Project: github.com/DonGeronimo7/mouse-control", dim=True),
             ]
 
         rows = [
@@ -1485,6 +1697,7 @@ class SetupController:
                 if self.choices.polling_writable else "Polling write control: unavailable / unproven"
             ),
             DisplayRow(f"Buttons:     {len(self.choices.mappings)} mappings"),
+            DisplayRow(f"Lighting:    {len(self.choices.lighting)} zone preference(s)"),
             DisplayRow(f"Service:     {'enabled' if self.choices.enable_service else 'disabled'}"),
             DisplayRow(
                 "Capability limitation: hardware writes require exact-device PROVEN evidence."
@@ -1498,6 +1711,7 @@ class SetupController:
             DisplayRow("Edit DPI", 1, role="action"),
             DisplayRow("Edit polling", 2, role="action"),
             DisplayRow("Edit buttons", 3, role="action"),
+            DisplayRow("Edit lighting", 4, role="action"),
         ])
         return rows
 
@@ -1512,12 +1726,17 @@ def run_setup_tui(
     """Run the full-screen setup interface and always restore terminal state."""
     from .setup_tui_curses import CursesSetupApp, run_curses
 
+    try:
+        update_installation = detect_installation()
+    except (OSError, RuntimeError, ValueError):
+        update_installation = Installation("unknown", running_executable())
     controller = SetupController(
         devices,
         existing_config,
         choices_factory=choices_factory,
         backend_factory=backend_factory,
         initialize_backend=False,
+        update_installation=update_installation,
     )
     app = CursesSetupApp(controller)
     try:

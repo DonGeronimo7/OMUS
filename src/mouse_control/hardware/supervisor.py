@@ -9,7 +9,11 @@ from collections.abc import Callable
 
 from ..discovery import MouseDevice
 from .base import HardwareBackend, HardwareError
-from .capabilities import BatteryState, DpiState, HardwareCapabilities
+from .capabilities import (
+    BatteryState, DpiState, HardwareCapabilities, LightingPersistence, LightingState,
+    LightingWriteScope,
+)
+from ..lighting import validate_lighting_state
 from .discovery_backend import DiscoveryBackend
 from ..runtime_wake import RuntimeWakeCoordinator
 
@@ -23,6 +27,7 @@ class DesiredHardwareState:
     active_dpi: int = 0
     dpi_stages: tuple[int, ...] = ()
     polling_rate_hz: int | None = None
+    volatile_lighting: tuple[LightingState, ...] = ()
 
 
 class HardwareSupervisor(HardwareBackend):
@@ -51,6 +56,7 @@ class HardwareSupervisor(HardwareBackend):
         self._generation = 0
         self._closed = False
         self._wake_coordinator = wake_coordinator
+        self._reconciled_lighting: set[tuple[int, LightingState]] = set()
 
     @staticmethod
     def _backend_has_proven_adapter(backend: HardwareBackend) -> bool:
@@ -243,6 +249,29 @@ class HardwareSupervisor(HardwareBackend):
         except Exception as exc:
             LOG.warning("Could not reconcile %s DPI state: %s", backend.name, exc)
 
+        for state in desired.volatile_lighting:
+            if state.persistence is not LightingPersistence.VOLATILE:
+                continue
+            try:
+                capabilities = backend.get_capabilities(device).lighting
+                zone = next(item for item in capabilities.zones if item.zone_id == state.zone_id)
+                if not zone.writable:
+                    continue
+                if (zone.write_scope is LightingWriteScope.SHARED_DEVICE_CONFIG and
+                        not backend.supports_safe_shared_lighting_writes(device, zone.zone_id)):
+                    LOG.warning("Refused shared-config lighting zone %s without proven RMW support",
+                                state.zone_id)
+                    continue
+                key = (id(backend), state)
+                if key in self._reconciled_lighting:
+                    continue
+                backend.set_lighting_state(device, validate_lighting_state(state, zone))
+                self._reconciled_lighting.add(key)
+                LOG.info("Reconciled volatile lighting zone %s through %s", state.zone_id, backend.name)
+            except Exception as exc:
+                LOG.warning("Could not reconcile %s lighting zone %s: %s",
+                            backend.name, state.zone_id, exc)
+
     def reconcile(self) -> None:
         with self._lock:
             if not self._closed:
@@ -345,6 +374,9 @@ class HardwareSupervisor(HardwareBackend):
     def get_polling_rate(self, device): return self._call("get_polling_rate", device)
     def get_polling_rates(self, device): return self._call("get_polling_rates", device)
     def set_polling_rate(self, device, hz): return self._call("set_polling_rate", device, hz)
+    def get_lighting_state(self, device, zone_id): return self._call("get_lighting_state", device, zone_id)
+    def supports_safe_shared_lighting_writes(self, device, zone_id): return self._call("supports_safe_shared_lighting_writes", device, zone_id)
+    def set_lighting_state(self, device, state): return self._call("set_lighting_state", device, state)
 
     def observe_evdev_event(self, event_type, code, value) -> None:
         if self._wake_coordinator is not None:

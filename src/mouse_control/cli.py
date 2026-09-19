@@ -271,8 +271,28 @@ def _initial_choices(existing: dict[str, object]) -> SetupChoices:
         raise ValueError("Existing polling configuration is invalid")
     macros = existing.get("macros", {})
     parse_macros(macros)
+    from .hardware.capabilities import LightingMode, LightingPersistence, LightingState
+    lighting_raw = existing.get("lighting", {})
+    if not isinstance(lighting_raw, dict):
+        raise ValueError("Existing lighting configuration is invalid")
+    lighting = {}
+    for zone_id, value in lighting_raw.items():
+        if not isinstance(zone_id, str) or not isinstance(value, dict):
+            raise ValueError("Existing lighting zone configuration is invalid")
+        try:
+            lighting[zone_id] = LightingState(
+                zone_id=zone_id,
+                mode=LightingMode(str(value.get("mode", "off"))),
+                color=value.get("color"),
+                brightness=value.get("brightness"),
+                speed=value.get("speed"),
+                persistence=LightingPersistence(str(value.get("persistence", "unknown"))),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Existing lighting zone {zone_id!r} is invalid") from exc
     return SetupChoices(stages=list(stages), active_dpi=active, polling_rate=rate,
-                        mappings=_initial_mappings(existing), macros=macros)
+                        mappings=_initial_mappings(existing), macros=macros,
+                        lighting=lighting)
 
 
 def debug_hid(seconds: float = 10.0) -> int:
@@ -445,6 +465,44 @@ def _apply_hardware(backend: HardwareBackend, device: MouseDevice,
         logging.warning("Could not apply %s polling settings: %s", backend.name, exc)
 
 
+def _apply_lighting(backend, device, states) -> None:
+    """Apply each lighting zone independently; failures never affect core control."""
+    import logging
+    from .lighting import validate_lighting_state
+    from .hardware.capabilities import LightingWriteScope
+
+    try:
+        zones = {item.zone_id: item for item in backend.get_capabilities(device).lighting.zones}
+    except Exception as exc:
+        logging.warning("Could not query %s lighting capability: %s", backend.name, exc)
+        return
+    for state in states:
+        capability = zones.get(state.zone_id)
+        if capability is None or not capability.writable:
+            logging.info("Skipped unavailable/unproven lighting zone %s through %s",
+                         state.zone_id, backend.name)
+            continue
+        if (capability.write_scope is LightingWriteScope.SHARED_DEVICE_CONFIG and
+                not backend.supports_safe_shared_lighting_writes(device, state.zone_id)):
+            logging.warning(
+                "Refused %s shared-config lighting zone %s without proven baseline-preserving RMW",
+                backend.name, state.zone_id,
+            )
+            continue
+        try:
+            requested = validate_lighting_state(state, capability)
+            result = backend.set_lighting_state(device, requested)
+            if capability.readable:
+                actual = backend.get_lighting_state(device, state.zone_id)
+                if actual is None or actual.mode != requested.mode or actual.color != requested.color:
+                    raise HardwareError("lighting readback did not match the requested state")
+            elif result is not None and not result.confirmed:
+                logging.info("Lighting zone %s requested without canonical readback", state.zone_id)
+        except Exception as exc:
+            logging.warning("Could not apply %s lighting zone %s: %s",
+                            backend.name, state.zone_id, exc)
+
+
 def _resolve_runtime_device(configured: MouseDevice) -> MouseDevice:
     """Resolve reconnect identity without guessing among matching devices."""
     mice = get_mouse_devices()
@@ -507,6 +565,22 @@ def run_from_config(path: Path | None = None) -> int:
         logging.warning("Invalid DPI configuration; skipping DPI settings: %s", exc)
         dpi_stages, active_dpi = [], 0
     polling_rate_hz = config.get("polling", {}).get("rate_hz")
+    try:
+        from .hardware.capabilities import LightingMode, LightingPersistence, LightingState
+        lighting_states = tuple(
+            LightingState(
+                zone_id=zone_id,
+                mode=LightingMode(values.get("mode", "off")),
+                color=values.get("color"),
+                brightness=values.get("brightness"),
+                speed=values.get("speed"),
+                persistence=LightingPersistence(values.get("persistence", "unknown")),
+            )
+            for zone_id, values in config.get("lighting", {}).items()
+        )
+    except (AttributeError, TypeError, ValueError) as exc:
+        log.warning("Invalid lighting configuration; skipping lighting: %s", exc)
+        lighting_states = ()
 
     mouse = next((m for m in get_mouse_devices()
                   if os.path.realpath(m.path) == os.path.realpath(event_path)), None)
@@ -543,7 +617,11 @@ def run_from_config(path: Path | None = None) -> int:
         lambda selected: get_backend(selected, log_failures=False),
         DesiredHardwareState(active_dpi=active_dpi,
                              dpi_stages=tuple(dpi_stages),
-                             polling_rate_hz=polling_rate_hz),
+                             polling_rate_hz=polling_rate_hz,
+                             volatile_lighting=tuple(
+                                 state for state in lighting_states
+                                 if state.persistence is LightingPersistence.VOLATILE
+                             )),
         device_resolver=_resolve_runtime_device,
         discovery_pending=discovery_pending,
         wake_coordinator=wake_coordinator)

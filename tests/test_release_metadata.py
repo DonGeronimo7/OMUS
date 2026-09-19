@@ -51,6 +51,7 @@ def test_release_versions_are_synchronized():
     ("v0.9.7-1", "0.9.7.post1", "0.9.7", 1),
     ("v0.9.7-2", "0.9.7.post2", "0.9.7", 2),
     ("v0.9.8", "0.9.8", "0.9.8", 1),
+    ("v0.9.9", "0.9.9", "0.9.9", 1),
     ("0.9.6-2", "0.9.6.post2", "0.9.6", 2),
 ])
 def test_release_version_model_keeps_packaging_fields_distinct(
@@ -180,4 +181,6 @@ def test_ci_and_release_workflow_are_version_independent():
     assert "      contents: write" in release
     assert "      attestations: write" in release
     assert "      id-token: write" in release
+    assert "dispatch-virustotal:" in release
+    assert "gh workflow run virustotal-release.yml" in release
     assert 'test "$GITHUB_REF_NAME" = "v${version}"' in release

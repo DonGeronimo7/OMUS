@@ -1,5 +1,77 @@
 # AI handoff log
 
+## 2026-09-19 — v0.9.9 release candidate and VirusTotal gate
+
+- Advanced canonical release metadata from v0.9.8 to v0.9.9 and documented the
+  accepted canonical TUI, updater, complete Service controls, CLI/TUI parity,
+  safe multi-zone lighting model, and retained discovery/security work.
+- Added a release-published VirusTotal workflow for exactly the RPM, DEB,
+  AppImage, wheel, and source archive. `cssnr/virustotal-action` v2.0.0 is pinned
+  to immutable commit `5edfa4c982eb0caec6d568ea27cf715269f5c23b`; submissions are
+  limited to four per minute and use only `secrets.VT_API_KEY`. The successful
+  publisher explicitly dispatches the scan with job-scoped `actions: write`,
+  avoiding GitHub's workflow-token event suppression.
+- The repository-owned verifier waits for completed analyses, matches the
+  action's SHA-256 against the downloaded bytes, records direct report links and
+  malicious/suspicious counts in release notes, and fails the workflow when
+  either count is nonzero. Checksums, SBOM, and provenance are not submitted.
+- Removed the stale README no-lighting claim, added a truthful workflow-status
+  badge, and removed one unused Lighting TUI import exposed by the release Ruff
+  gate. No hardware behavior or write authority changed.
+- Local validation: focused TUI/updater/lighting/service/lifecycle coverage
+  passed 205 tests; release/security coverage passed 35 tests; the complete
+  suite passed 1135 tests with the existing GLib warning. Compileall, Ruff,
+  workflow-policy validation, `git diff --check`, and resolved-environment
+  `pip-audit` (no known vulnerabilities) passed. Wheel/sdist build, installed
+  wheel version/help/CPI smokes, Fedora 44 RPM build, RPM `%check` (1135 tests,
+  one warning), and packaged command smokes passed. The user's prior physical
+  TUI acceptance is retained; no new lighting family was physically validated.
+
+## 2026-09-19 — Parallel canonical-TUI updater reconciliation
+
+- Compared the updater/TUI implementations at unified-addendum commit
+  `bd22e158847f49a934f5f5eeb2e1e6b2d2f019c1` and dedicated-updater commit
+  `d3bb3bbc198a33825df2e716a431dcf47d3c4d4e`. Reconciliation was manual on
+  `codex/post-v0.9.8-unified-addendum`; no merge or cherry-pick was used.
+- Retained the unified addendum's single controller/state location, complete
+  twelve-screen navigation, Lighting architecture, Service controls, Tools,
+  About, and capability inventory. Adopted the dedicated branch's stronger
+  updater-owned compatibility policy, explicit-check-only behavior, dynamic
+  update action, protected source/unknown/package-source/AppImage states,
+  interactive approval, curses suspension during execution, and failure/
+  cancellation isolation from `SetupChoices`.
+- Release fetching, version comparison, asset selection, package detection,
+  SHA256SUMS and trusted-origin verification, package-manager execution, and
+  service restoration remain centralized in `updater.py`; no second controller,
+  updater state model, release logic, or package logic was created.
+- Validation passed: updater/TUI/navigation `218`; lighting `64`; service and
+  lifecycle `143`; packaging metadata/entry points `74`; full suite `1131
+  passed, 1 warning`; Fedora RPM `%check` `1131 passed, 1 warning`. Compileall,
+  `git diff --check`, workflow validation, wheel/sdist, Fedora RPM, and packaged
+  command smokes passed. The warning is the existing GLib warning. Build and
+  installation staging remained under `/tmp`; no host installation occurred.
+- Remaining acceptance is physical only: installed desktop/terminal layout and
+  navigation, a real explicit GitHub check, each supported installation/update
+  path on a disposable host, service restoration, and exact-model lighting/RMW/
+  reconnect behavior. No push, main merge, tag, or release occurred.
+
+## 2026-09-18 — Post-v0.9.8 unified addendum foundation
+
+- Started from clean tagged `v0.9.8` (`e3c48c5`) and created
+  `codex/post-v0.9.8-unified-addendum`; `main` was not modified.
+- Added complete canonical TUI product surfaces and an enforced CLI/TUI map;
+  update and service controls reuse the existing updater/service paths.
+- Added optional multi-zone native-lighting models, per-device config, RGB24
+  validation, persistence/write-scope vocabulary, volatile reconnect restore,
+  no-repeat reconciliation, and mandatory shared-record RMW proof gating.
+- Added source-backed/write-disabled lighting knowledge plus a comprehensive
+  research ledger. No generic HID writer or runtime authority was added.
+- Validation: 1122 full-suite tests passed with the existing GLib warning;
+  compileall and diff checks passed. Wheel/sdist, installed-wheel smoke, and
+  Fedora RPM `%check` passed at the packaging checkpoint. Debian/AppImage tools
+  and physical RGB hardware were unavailable. No install, push, merge, tag, or
+  release occurred.
+
 ## 2026-09-19 — OpenSSF Scorecard maximum hardening
 
 - Created `codex/openssf-scorecard-hardening` from current `origin/main`

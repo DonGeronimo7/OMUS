@@ -96,6 +96,8 @@ def run_tui_setup_wizard() -> int:
                     polling_request,
                     setup=True,
                 )
+                if choices.lighting_changed:
+                    cli._apply_lighting(backend, selected, choices.lighting.values())
                 content = cli.merge_setup_config(
                     existing_config,
                     selected,
@@ -104,6 +106,7 @@ def run_tui_setup_wizard() -> int:
                     active_dpi=choices.active_dpi,
                     polling_rate_hz=choices.polling_rate,
                     macros=choices.macros,
+                    lighting=choices.lighting,
                 )
                 path = cli.save_config(content)
                 saved = True
