@@ -51,6 +51,9 @@ problem and the hardware evidence.
 Before submitting a change, run:
 
 ```bash
+python3 -m ruff check src tests scripts
+python3 scripts/validate_workflows.py
+scripts/check-wheel-reproducibility.sh
 python3 -m pytest -q
 python3 -m compileall -q src tests
 git diff --check

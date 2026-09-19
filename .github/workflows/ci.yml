@@ -41,6 +41,10 @@ jobs:
       - run: python -m pip install -r requirements/dev.txt
       - name: Validate workflow security policy
         run: python scripts/validate_workflows.py
+      - name: Lint high-confidence correctness rules
+        run: python -m ruff check src tests scripts
+      - name: Verify reproducible wheel build
+        run: scripts/check-wheel-reproducibility.sh
 
   rpm:
     runs-on: ubuntu-latest

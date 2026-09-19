@@ -10,7 +10,7 @@ from mouse_control.config import DEFAULT_DPI, DEFAULT_DPI_STAGES, generate_confi
 from mouse_control.discovery import MouseDevice, has_mouse_capabilities
 from mouse_control.remapper import parse_action
 from mouse_control.wizard import get_button_name
-from mouse_control.permissions import UINPUT_PATH, permission_report
+from mouse_control.permissions import permission_report
 from mouse_control.service import build_service_text
 
 

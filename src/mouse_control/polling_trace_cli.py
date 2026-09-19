@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 import sys
 import threading
-import time
 
 from .device_profiles import get_profile_directory
 from .device_topology import build_device_graph
@@ -22,7 +21,7 @@ from .discovery import get_mouse_devices, select_mouse_device
 from .hardware.base import HardwareError
 from .hardware.native_hid import NativeHidBackend
 from .hid_session import HidSession, RawHidTraceEvent
-from .hidpp_driver import HOST_MODE, ONBOARD_MODE
+from .hidpp_driver import ONBOARD_MODE
 from .sensor_calibration import (
     EV_REL,
     EV_SYN,

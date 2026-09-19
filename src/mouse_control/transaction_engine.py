@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import time
-from typing import Any, Mapping, MutableMapping, Protocol
+from typing import Any, MutableMapping, Protocol
 
 from .protocol_grammar import SafetyClass, TransactionSpec, TransactionStep, TransportKind
 

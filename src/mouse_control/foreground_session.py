@@ -11,7 +11,6 @@ import tempfile
 
 from .service import (
     SERVICE_NAME,
-    SYSTEMCTL,
     is_service_active,
     request_stop_service,
     restart_service,

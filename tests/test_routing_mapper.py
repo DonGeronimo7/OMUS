@@ -12,7 +12,6 @@ from mouse_control.discovery_lab import (
     PersistenceLevel,
     ProtocolObservation,
     ProtocolTimingProfile,
-    ReceiverChildGraph,
     RestorationPlan,
     RouteEndpoint,
     RoutingEvidence,

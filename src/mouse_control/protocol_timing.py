@@ -39,7 +39,6 @@ from .temporal_dialogue import (
     DialogueRecord,
     PushedStateAssociation,
     PushedStateRecord,
-    StateEvidence,
     StateFreshness,
 )
 

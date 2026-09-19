@@ -15,7 +15,7 @@ import json
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Iterable, Mapping, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
 
 from .device_profiles import get_profile_directory
 from .discovery_lab import (

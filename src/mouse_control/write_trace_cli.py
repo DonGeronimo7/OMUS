@@ -25,7 +25,6 @@ from .learned_operations import (
     operation_from_grammar,
 )
 from .transaction_inference import (
-    DemonstratedTransaction,
     TransactionInferenceError,
     demonstration_from_trace,
     infer_transaction_grammar,

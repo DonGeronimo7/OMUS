@@ -53,3 +53,17 @@ gh attestation verify Mouse-Control-VERSION-x86_64.AppImage \
 The same command applies to the wheel, source archive, RPM, DEB, and SBOM.
 Checksums and attestations complement one another: checksums detect byte changes,
 while attestations bind those bytes to the repository workflow identity.
+
+## Reproducibility scope
+
+CI builds the wheel twice from clean `git archive` snapshots under the same
+`SOURCE_DATE_EPOCH`, UTC timezone, and stable locale, then requires byte-identical
+outputs. A bounded local trial confirmed the wheel is reproducible under those
+conditions.
+
+The sdist is not yet reproducible. Its file contents and ordering match, but
+setuptools records build-time subsecond mtimes on generated directories,
+`PKG-INFO`, and `setup.cfg`. Normalizing that archive would require a packaging
+change beyond this hardening pass. RPM, DEB, and AppImage reproducibility remain
+separate future work; all continue to receive checksums and attestations over
+their exact published bytes.
