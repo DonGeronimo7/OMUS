@@ -1,7 +1,9 @@
 # OMUS final pre-Rust whole-system quality audit
 
-Date: 2026-09-19  
-Branch: `codex/motion-transparency`  
+Date: 2026-09-19
+
+Branch: `codex/motion-transparency`
+
 Physical acceptance baseline: `5a1997f852fc026553df6549e6154493994e77c1`
 
 ## Result and scope

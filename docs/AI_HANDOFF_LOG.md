@@ -1,5 +1,21 @@
 # AI handoff log
 
+## 2026-09-19 — v1.0.1 production-release integration
+
+- Selected v1.0.1 because Git tags, package metadata, repository metadata, and
+  GitHub Releases agree that v1.0.0 is the current public release and this is a
+  backwards-compatible stabilization patch.
+- Preserved the accepted `febe21a` baseline linearly over v1.0.0, synchronized
+  canonical release metadata and user-facing notes, and included the exact
+  CI-approved pip 26.2 lock update for the open pip security advisories.
+- Local validation passed 1,178 complete and 282 focused tests, compileall,
+  workflow policy, version/identity checks, CLI smokes, wheel/sdist build and
+  installed-wheel smokes. Fedora RPM build and `%check` passed all 1,178 tests.
+- RPM inspection confirms OMUS package/desktop/icon/executable/service identity
+  and no package-owned legacy desktop, icon, or service file. Hosted DEB,
+  AppImage, SBOM, checksums, provenance, publication, VirusTotal, and downloaded-
+  artifact verification remain release-workflow/post-publication gates.
+
 ## 2026-09-19 — Final pre-Rust whole-system quality audit
 
 - Audited the production evdev/uinput path, workers and blocking waits,

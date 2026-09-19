@@ -1,5 +1,23 @@
 # OMUS Project Status
 
+## 2026-09-19 — v1.0.1 final Python baseline release candidate
+
+- The accepted motion-frame, wake/reconnect, physical G305, and whole-program
+  audit commits are integrated linearly over public v1.0.0 and versioned as the
+  next stabilization release, v1.0.1.
+- Canonical Python, RPM, Debian, Arch, AppImage, README, changelog, and release-
+  note version surfaces agree. Release notes scope the approximately 100,000-
+  frame, approximately 993 Hz, 0.016 ms median, and ten-wake measurements to the
+  exact G305/Fedora 44 acceptance system.
+- The reviewed pip 26.2 lock update is included to address the repository's
+  open pip advisories without importing stale pre-rebrand branch content.
+- Local source and focused gates pass 1,178 and 282 tests respectively; the
+  Fedora RPM `%check` passes 1,178 tests and installed-file inspection confirms
+  the OMUS desktop, icon, executable, service, package, and version identity.
+- The canonical final Python behavioral baseline is the annotated `v1.0.1` tag
+  and the exact commit to which that tag resolves. Rust work remains separate
+  and has not begun.
+
 ## 2026-09-19 — Final pre-Rust whole-system audit candidate
 
 - The complete runtime/background/security/compatibility inventory found no
