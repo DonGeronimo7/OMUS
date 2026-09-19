@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.2 — Secure release-asset updater correction
+
+- Accept bounded HTTPS redirects to the exact GitHub release-asset hosts used
+  by canonical OMUS release downloads.
+- Reject HTTP downgrade, external and deceptive hosts, credentials in URLs,
+  malformed targets, and excessive redirect chains while stripping sensitive
+  request headers across origins.
+- Preserve strict release identity, filename/version selection, SHA-256
+  verification, the intentional versioned provenance-bundle checksum-cycle
+  exemption, native-package fallback behavior, and the existing installed
+  package until a verified replacement is ready.
+
 ## 1.0.1 — Python baseline stabilization
 
 ### Native input fidelity

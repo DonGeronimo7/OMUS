@@ -20,7 +20,7 @@ import tempfile
 from typing import Callable
 from urllib.error import URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from packaging.version import InvalidVersion, Version
 
 from . import __version__
@@ -30,7 +30,15 @@ from .service import is_service_active, restart_service
 RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/OMUS/releases/latest"
 REPOSITORY = "DonGeronimo7/OMUS"
 CHECKSUMS_NAME = "SHA256SUMS"
-_DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com"})
+_DOWNLOAD_HOSTS = frozenset({
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+})
+_MAX_DOWNLOAD_REDIRECTS = 5
+_SENSITIVE_REDIRECT_HEADERS = (
+    "Authorization", "Cookie", "Proxy-Authorization",
+)
 
 
 class UpdateError(RuntimeError):
@@ -182,10 +190,58 @@ def _validate_response_url(response: object, *, expected_host: str | None = None
     if geturl is None:  # Small deterministic test doubles have no redirect state.
         return
     final_url = geturl()
+    if expected_host is None:
+        _validate_download_redirect(final_url)
+        return
     parsed = urlparse(final_url)
-    allowed = {expected_host} if expected_host else set(_DOWNLOAD_HOSTS)
-    if parsed.scheme != "https" or parsed.hostname not in allowed or parsed.username or parsed.password:
+    if (parsed.scheme != "https" or parsed.hostname != expected_host
+            or parsed.username or parsed.password or parsed.port not in {None, 443}):
         raise UpdateError("Release download was redirected to an untrusted source.")
+
+
+def _validate_download_redirect(url: str) -> None:
+    """Accept only HTTPS redirects to exact GitHub release infrastructure."""
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise UpdateError("Release download returned a malformed redirect.") from exc
+    if (parsed.scheme != "https" or not parsed.netloc or not hostname
+            or hostname not in _DOWNLOAD_HOSTS or parsed.username or parsed.password
+            or port not in {None, 443}):
+        raise UpdateError("Release download was redirected to an untrusted source.")
+    if (hostname == "github.com"
+            and not parsed.path.startswith(f"/{REPOSITORY}/releases/download/")):
+        raise UpdateError("Release download was redirected outside the official OMUS release.")
+
+
+class _TrustedReleaseRedirectHandler(HTTPRedirectHandler):
+    """Validate every release redirect instead of trusting only the final URL."""
+
+    max_redirections = _MAX_DOWNLOAD_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        redirect_count = sum(getattr(req, "redirect_dict", {}).values())
+        if redirect_count >= self.max_redirections:
+            raise UpdateError("Release download exceeded the redirect limit.")
+        _validate_download_redirect(newurl)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None:
+            old = urlparse(req.full_url)
+            new = urlparse(redirected.full_url)
+            if (old.scheme, old.hostname, old.port) != (new.scheme, new.hostname, new.port):
+                for header in _SENSITIVE_REDIRECT_HEADERS:
+                    redirected.remove_header(header)
+        return redirected
+
+
+def _open_release_url(request: Request, timeout: int, opener: Callable):
+    """Open a release URL with per-hop policy in production and injectable tests."""
+    _validate_download_redirect(request.full_url)
+    if opener is urlopen:
+        return build_opener(_TrustedReleaseRedirectHandler()).open(request, timeout=timeout)
+    return opener(request, timeout=timeout)
 
 
 def _architecture() -> str:
@@ -327,7 +383,8 @@ def _parse_checksums(data: bytes) -> dict[str, str]:
 def _download_bytes(asset: dict, *, opener: Callable = urlopen, limit: int = 1024 * 1024) -> bytes:
     url = asset["browser_download_url"]
     try:
-        with opener(Request(url, headers={"User-Agent": "omus-updater"}), timeout=30) as response:
+        with _open_release_url(
+                Request(url, headers={"User-Agent": "omus-updater"}), 30, opener) as response:
             _validate_response_url(response)
             data = response.read(limit + 1)
     except (URLError, OSError, ValueError) as exc:
@@ -341,9 +398,11 @@ def _expected_checksum(release: Release, filename: str, *, opener: Callable = ur
     checksums = _parse_checksums(_download_bytes(_checksum_asset(release), opener=opener))
     if filename not in checksums:
         raise UpdateError("Selected release artifact is missing from SHA256SUMS.")
+    provenance_name = f"omus-v{release.version}.intoto.jsonl"
     expected_names = {
         asset.get("name") for asset in release.assets
-        if isinstance(asset.get("name"), str) and asset.get("name") != CHECKSUMS_NAME
+        if (isinstance(asset.get("name"), str)
+            and asset.get("name") not in {CHECKSUMS_NAME, provenance_name})
     }
     if set(checksums) != expected_names:
         raise UpdateError("SHA256SUMS contains a missing or unexpected release asset.")
@@ -353,7 +412,8 @@ def _expected_checksum(release: Release, filename: str, *, opener: Callable = ur
 def _download(asset: dict, destination: Path, opener: Callable = urlopen) -> Path:
     url = asset["browser_download_url"]
     try:
-        with opener(Request(url, headers={"User-Agent": "omus-updater"}), timeout=60) as response:
+        with _open_release_url(
+                Request(url, headers={"User-Agent": "omus-updater"}), 60, opener) as response:
             _validate_response_url(response)
             with destination.open("wb") as output:
                 shutil.copyfileobj(response, output)

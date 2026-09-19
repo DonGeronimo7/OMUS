@@ -1,3 +1,27 @@
+# OMUS v1.0.2 — Secure updater redirect correction
+
+OMUS v1.0.2 corrects the RPM, DEB, and AppImage updater's handling of GitHub
+Release downloads. Canonical release URLs may redirect over HTTPS to GitHub's
+exact release-asset infrastructure; OMUS now validates every hop, enforces a
+bounded chain, strips sensitive headers across origins, and rejects downgrade,
+external, deceptive, malformed, credential-bearing, and excessive redirects.
+
+Artifact integrity remains independent of transport security. OMUS still
+requires the canonical repository, exact release/version filename, complete
+trusted `SHA256SUMS` manifest, and matching SHA-256 digest before installation.
+The exact versioned SLSA provenance bundle remains intentionally outside the
+checksum manifest, as required to avoid a checksum/provenance cycle; no other
+release asset receives that exemption.
+For repository-managed RPM installations, DNF is tried once first; if no newer
+repository package exists, OMUS intentionally downloads the verified canonical
+release RPM and asks DNF to install it.
+
+Primary candidate artifacts are `omus-1.0.2-1.fc44.noarch.rpm`,
+`omus_1.0.2_all.deb`, `OMUS-1.0.2-x86_64.AppImage`,
+`omus-1.0.2-py3-none-any.whl`, and `omus-1.0.2.tar.gz`.
+
+---
+
 # OMUS v1.0.1 — Final Python baseline stabilization
 
 OMUS v1.0.1 makes pointer handling smoother and more faithful by preserving the

@@ -1,5 +1,17 @@
 # OMUS Project Status
 
+## 2026-09-19 — v1.0.2 secure updater patch candidate
+
+- The published v1.0.1 RPM redirects once from the canonical OMUS `github.com`
+  release URL to the exact `release-assets.githubusercontent.com` host with
+  ephemeral signed query parameters before returning the artifact.
+- The updater now validates each redirect hop, permits only exact GitHub
+  release infrastructure over HTTPS, bounds redirects, strips sensitive
+  headers across origins, and retains canonical release and SHA-256 checks.
+- DNF still runs once against configured repositories and falls back to the
+  verified canonical release RPM only when the installed version remains old.
+- This is a v1.0.2 patch candidate only; v1.0.1 was not mutated or retagged.
+
 ## 2026-09-19 — v1.0.1 final Python baseline release candidate
 
 - The accepted motion-frame, wake/reconnect, physical G305, and whole-program

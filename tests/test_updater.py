@@ -1,6 +1,7 @@
 from pathlib import Path
 import hashlib
 import subprocess
+from urllib.request import Request
 
 import pytest
 from packaging.version import Version
@@ -635,6 +636,37 @@ def test_missing_checksum_and_unexpected_manifest_asset_are_rejected(tmp_path):
         )
 
 
+def test_exact_versioned_provenance_bundle_is_intentionally_outside_checksums(tmp_path):
+    name = "Mouse-Control-0.8.0-x86_64.AppImage"
+    rel, manifest = _verified_release(name, b"artifact")
+    rel = updater.Release(rel.version, (*rel.assets, {
+        "name": "omus-v0.8.0.intoto.jsonl",
+        "browser_download_url": (
+            "https://github.com/DonGeronimo7/OMUS/releases/download/"
+            "v0.8.0/omus-v0.8.0.intoto.jsonl"
+        ),
+    }))
+    responses = iter((_BytesResponse(manifest), _BytesResponse(b"artifact")))
+    assert updater._download_verified(
+        rel, rel.assets[0], tmp_path / name,
+        opener=lambda *_a, **_k: next(responses),
+    ).read_bytes() == b"artifact"
+
+
+def test_wrong_version_provenance_name_is_not_exempt_from_checksums(tmp_path):
+    name = "Mouse-Control-0.8.0-x86_64.AppImage"
+    rel, manifest = _verified_release(name, b"artifact")
+    rel = updater.Release(rel.version, (*rel.assets, {
+        "name": "omus-v9.9.9.intoto.jsonl",
+        "browser_download_url": "https://example.invalid/provenance",
+    }))
+    with pytest.raises(updater.UpdateError, match="missing or unexpected"):
+        updater._download_verified(
+            rel, rel.assets[0], tmp_path / name,
+            opener=lambda *_a, **_k: _BytesResponse(manifest),
+        )
+
+
 def test_untrusted_download_redirect_is_rejected(tmp_path):
     name = "Mouse-Control-0.8.0-x86_64.AppImage"
     rel, manifest = _verified_release(name, b"artifact")
@@ -645,6 +677,65 @@ def test_untrusted_download_redirect_is_rejected(tmp_path):
     with pytest.raises(updater.UpdateError, match="untrusted"):
         updater._download_verified(rel, rel.assets[0], tmp_path / name,
                                     opener=lambda *_a, **_k: next(responses))
+
+
+@pytest.mark.parametrize("url", [
+    "http://release-assets.githubusercontent.com/asset",
+    "https://evil.example/asset",
+    "https://github.com.attacker.example/asset",
+    "https://evilgithub.com/asset",
+    "https://githubusercontent.com.attacker.example/asset",
+    "https://192.0.2.1/asset",
+    "https://release-assets.githubusercontent.com:444/asset",
+    "https://user:password@release-assets.githubusercontent.com/asset",
+    "https://github.com/another/project/releases/download/v1/asset",
+])
+def test_release_redirect_policy_rejects_downgrade_external_deceptive_and_ip_hosts(url):
+    with pytest.raises(updater.UpdateError):
+        updater._validate_download_redirect(url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/asset.rpm",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/id/token?sig=ephemeral",
+    "https://objects.githubusercontent.com/github-production-release-asset/id/token",
+])
+def test_release_redirect_policy_accepts_only_canonical_and_exact_asset_hosts(url):
+    updater._validate_download_redirect(url)
+
+
+def test_release_redirect_handler_strips_credentials_across_origins():
+    request = Request(
+        "https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/asset.rpm",
+        headers={"Authorization": "secret", "Cookie": "session=secret"},
+    )
+    redirected = updater._TrustedReleaseRedirectHandler().redirect_request(
+        request, None, 302, "Found", {},
+        "https://release-assets.githubusercontent.com/github-production-release-asset/id/token?sig=value",
+    )
+    assert redirected is not None
+    assert redirected.get_header("Authorization") is None
+    assert redirected.get_header("Cookie") is None
+
+
+def test_release_redirect_handler_rejects_excessive_chain():
+    request = Request(
+        "https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/asset.rpm"
+    )
+    request.redirect_dict = {
+        f"https://release-assets.githubusercontent.com/asset/{index}": 1
+        for index in range(updater._MAX_DOWNLOAD_REDIRECTS)
+    }
+    with pytest.raises(updater.UpdateError, match="redirect limit"):
+        updater._TrustedReleaseRedirectHandler().redirect_request(
+            request, None, 302, "Found", {},
+            "https://release-assets.githubusercontent.com/asset/final",
+        )
+
+
+def test_release_redirect_policy_rejects_malformed_target():
+    with pytest.raises(updater.UpdateError, match="malformed"):
+        updater._validate_download_redirect("https://[invalid/asset")
 
 
 def test_fetch_latest_rejects_nonofficial_endpoint():

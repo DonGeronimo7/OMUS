@@ -1,5 +1,26 @@
 # AI handoff log
 
+## 2026-09-19 — v1.0.2 secure updater patch candidate
+
+- Reproduced the published v1.0.1 RPM redirect: canonical OMUS `github.com`
+  release URL returned HTTPS 302 to exact `release-assets.githubusercontent.com`
+  infrastructure with ephemeral signed query parameters, followed by 200.
+- Added per-hop HTTPS validation, a five-redirect limit, exact-host and canonical-
+  repository checks, cross-origin sensitive-header stripping, and rejection of
+  downgrade, external, deceptive, IP-literal, credential-bearing, malformed,
+  alternate-port, and excessive redirects.
+- Corrected strict manifest-set validation for the release workflow's exact
+  versioned SLSA provenance bundle, which is intentionally outside `SHA256SUMS`;
+  selected artifacts still require canonical identity and matching SHA-256.
+- The modified updater downloaded and verified the real published v1.0.1 RPM.
+  Network-isolated Fedora 44 tests upgraded published v1.0.0 to v1.0.1 and the
+  built v1.0.2 candidate while preserving sample mappings and `omus.service`,
+  retaining OMUS desktop/icon identity, and adding no obsolete launcher assets.
+- Focused updater/release coverage passed 114 tests; the complete source suite
+  and RPM `%check` each passed 1,195 tests with one external GLib warning.
+  Wheel/sdist and RPM builds passed. No tag, release, merge, push, live-host
+  package change, hardware behavior change, or Rust migration occurred.
+
 ## 2026-09-19 — v1.0.1 production-release integration
 
 - Selected v1.0.1 because Git tags, package metadata, repository metadata, and
