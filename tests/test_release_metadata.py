@@ -23,26 +23,26 @@ def _project():
 def test_release_versions_are_synchronized():
     version = ReleaseVersion.parse(__version__)
     assert _project()["version"] == version.display
-    assert f"Version:        {version.rpm_version}" in _text("mouse-control.spec")
-    assert f"Release:        {version.rpm_release}%{{?dist}}" in _text("mouse-control.spec")
-    assert f"%global python_version {version.python_version}" in _text("mouse-control.spec")
+    assert f"Version:        {version.rpm_version}" in _text("omus.spec")
+    assert f"Release:        {version.rpm_release}%{{?dist}}" in _text("omus.spec")
+    assert f"%global python_version {version.python_version}" in _text("omus.spec")
     assert f"pkgver={version.rpm_version}" in _text("PKGBUILD")
     assert f"pkgrel={version.rpm_release}" in _text("PKGBUILD")
     if (ROOT / ".SRCINFO").exists():
         assert f"pkgver = {version.rpm_version}" in _text(".SRCINFO")
         assert f"pkgrel = {version.rpm_release}" in _text(".SRCINFO")
         assert f"#tag={version.tag}" in _text(".SRCINFO")
-    assert _text("debian/changelog").startswith(f"mouse-control ({version.display})")
+    assert _text("debian/changelog").startswith(f"omus ({version.display})")
     assert f"Version: {version.display}" in _text("packaging/debian-binary-control")
     assert f"The current release is [{version.tag}]" in _text("README.md")
     assert version.rpm_filename("fc44", "noarch") in _text("README.md")
-    assert f"mouse-control_{version.display}_all.deb" in _text("README.md")
-    assert f"Mouse-Control-{version.display}-x86_64.AppImage" in _text("README.md")
-    assert f"mouse_control-{version.python_version}-py3-none-any.whl" in _text("README.md")
-    assert f"Mouse-Control-{version.display}-x86_64.AppImage" in _text(
+    assert f"omus_{version.display}_all.deb" in _text("README.md")
+    assert f"OMUS-{version.display}-x86_64.AppImage" in _text("README.md")
+    assert f"omus-{version.python_version}-py3-none-any.whl" in _text("README.md")
+    assert f"OMUS-{version.display}-x86_64.AppImage" in _text(
         "packaging/appimage/README.md"
     )
-    assert _text("RELEASE_NOTES.md").startswith(f"# Mouse Control {version.tag}")
+    assert _text("RELEASE_NOTES.md").startswith(f"# OMUS {version.tag}")
     assert f"## {version.display} — " in _text("CHANGELOG.md").splitlines()[2]
 
 
@@ -78,7 +78,7 @@ def test_previous_published_updater_recognizes_next_generated_rpm_asset():
 
 def test_rpm_packages_every_declared_console_script():
     scripts = set(_project()["scripts"])
-    spec = _text("mouse-control.spec")
+    spec = _text("omus.spec")
     files_section = spec.split("%files -f %{pyproject_files}", 1)[1].split(
         "%changelog", 1
     )[0]
@@ -91,9 +91,10 @@ def test_provenance_record_is_shipped_with_each_release_format():
         setuptools = tomllib.load(handle)["tool"]["setuptools"]
     assert setuptools["license-files"] == ["LICENSE", "CREDITS.md"]
     assert "CREDITS.md" in _text("MANIFEST.in")
-    assert "%doc README.md CHANGELOG.md CREDITS.md" in _text("mouse-control.spec")
+    assert "CONTRIBUTING.md" in _text("MANIFEST.in")
+    assert "%doc README.md CHANGELOG.md CREDITS.md" in _text("omus.spec")
     assert "CREDITS.md" in _text("PKGBUILD")
-    assert "CREDITS.md" in _text("debian/mouse-control.docs")
+    assert "CREDITS.md" in _text("debian/omus.docs")
     assert "CREDITS.md" in _text("packaging/appimage/build-appimage.sh")
 
 
@@ -112,7 +113,7 @@ def test_primary_cli_exposes_cpi_without_claiming_libevdev_command_name():
     assert "mouse-control" in scripts
     assert "mouse-dpi-tool" not in scripts
     assert "cpi" in _text("src/mouse_control/cli.py")
-    assert "mouse-control cpi --help" in _text("mouse-control.spec")
+    assert "mouse-control cpi --help" in _text("omus.spec")
 
 
 def test_release_artifacts_smoke_test_primary_cpi_command():
@@ -140,6 +141,7 @@ def test_release_finalizes_reproducible_cyclonedx_for_attestation():
     assert workflow.index("cyclonedx-py environment") < workflow.index(
         "scripts/finalize_cyclonedx_sbom.py"
     ) < workflow.index("Finalize and verify release checksums")
+    assert "omus-${version}.cdx.json" in workflow
 
 
 def test_release_exports_and_verifies_genuine_slsa_bundle_without_checksum_cycle():
@@ -155,7 +157,7 @@ def test_release_exports_and_verifies_genuine_slsa_bundle_without_checksum_cycle
     assert "--signer-workflow" in workflow
     assert "--source-digest \"$GITHUB_SHA\"" in workflow
     assert "--source-ref \"$GITHUB_REF\"" in workflow
-    assert "mouse-control-v${version}.intoto.jsonl" in workflow
+    assert "omus-v${version}.intoto.jsonl" in workflow
     assert "! grep -F \"$(basename \"$provenance\")\" release-assets/SHA256SUMS" in workflow
 
 

@@ -1,9 +1,13 @@
-Package: mouse-control
-Version: 0.9.9
+Package: omus
+Version: 1.0.0
 Section: utils
 Priority: optional
 Architecture: all
 Maintainer: Marc-A. Geronimo
+Homepage: https://github.com/DonGeronimo7/OMUS
 Depends: python3-evdev, python3-dbus-next, python3-packaging, udev
-Description: Linux mouse remapping with Automatic Discovery
+Provides: mouse-control
+Replaces: mouse-control (<< 1.0.0)
+Breaks: mouse-control (<< 1.0.0)
+Description: One Mouse Universal System for Linux
  Automatic Discovery provides conservative exact-model hardware control only after proof; evdev/uinput remapping remains available when advanced hardware control is unavailable.

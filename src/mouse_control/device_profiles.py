@@ -16,6 +16,8 @@ import re
 from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
 
+from .identity import canonical_directory, migrate_legacy_directory
+
 from .discovery_models import (
     DeviceNode,
     DiscoveredCapability,
@@ -68,10 +70,11 @@ def get_profile_directory() -> Path:
     if sudo_identity is not None:
         _uid, _gid, home = sudo_identity
         root = home / ".local" / "share"
+        destination = root / "omus"
+        migrate_legacy_directory(root / "mouse-control", destination)
+        return destination / "devices"
     else:
-        data_home = os.environ.get("XDG_DATA_HOME")
-        root = Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share"
-    return root / "mouse-control" / "devices"
+        return canonical_directory("data") / "devices"
 
 
 def _json_safe(value: Any) -> Any:

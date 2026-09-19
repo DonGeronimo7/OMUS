@@ -982,7 +982,7 @@ class SetupController:
         self.update_error = None
         self.update_installation = state.installation
         if not state.update_available:
-            self.status = f"Mouse Control {state.installed_version} is up to date."
+            self.status = f"OMUS {state.installed_version} is up to date."
         elif state.update_supported:
             self.status = (
                 f"Update available: {state.installed_version} → {state.available_version}."
@@ -1141,7 +1141,7 @@ class SetupController:
             ]
 
         if self.section is SetupSection.HARDWARE:
-            rows = [DisplayRow("Mouse Control Hardware Discovery", role="heading")]
+            rows = [DisplayRow("OMUS Hardware Discovery", role="heading")]
             rows.extend(
                 DisplayRow(
                     line,
@@ -1576,7 +1576,7 @@ class SetupController:
         if self.section is SetupSection.UPDATE:
             state = self.update_status
             rows = [
-                DisplayRow("Mouse Control Updates", role="heading"),
+                DisplayRow("OMUS Updates", role="heading"),
                 DisplayRow(
                     f"Installed version: {state.installed_version if state else __version__}",
                     role="primary",
@@ -1610,7 +1610,7 @@ class SetupController:
                 DisplayRow("Check for Updates", 0, role="action"),
             ))
             if self.update_action_available:
-                rows.append(DisplayRow("Update Mouse Control", 1, role="action"))
+                rows.append(DisplayRow("Update OMUS", 1, role="action"))
             rows.extend((
                 DisplayRow("Checks occur only when you choose Check for Updates.", dim=True),
                 DisplayRow("Review / Save remains configuration-only.", dim=True),
@@ -1634,11 +1634,13 @@ class SetupController:
         if self.section is SetupSection.ABOUT:
             backend = getattr(self.backend, "name", "unavailable")
             return [
-                DisplayRow("About Mouse Control", role="heading"),
+                DisplayRow("About OMUS", role="heading"),
                 DisplayRow(f"Version {__version__}", role="primary"),
                 DisplayRow(f"Selected backend: {backend}"),
                 DisplayRow("Linux evdev/uinput remapping with evidence-gated hardware control."),
-                DisplayRow("Project: github.com/DonGeronimo7/mouse-control", dim=True),
+                DisplayRow("Project: github.com/DonGeronimo7/OMUS", dim=True),
+                DisplayRow("One Mouse Universal System", dim=True),
+                DisplayRow("Every mouse. One system.", dim=True),
             ]
 
         rows = [

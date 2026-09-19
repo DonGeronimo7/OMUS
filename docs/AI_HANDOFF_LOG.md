@@ -1,5 +1,17 @@
 # AI handoff log
 
+## 2026-09-19 — OMUS public rebrand and compatibility migration
+
+- Rebranded current product surfaces to OMUS, added canonical command/desktop/
+  package identities, and retained the legacy command and internal namespace.
+- Added atomic, non-destructive, idempotent XDG config/data/cache migration and
+  ordered service replacement that disables the legacy unit before OMUS.
+- Added canonical v1.0.0 artifact recognition while retaining v0.9.9 updater
+  formats and preparing the canonical `DonGeronimo7/OMUS` endpoint.
+- Packaged the approved transparent logo at eight RGBA sizes; no redesign.
+- Full suite: 1,153 passed with one existing GLib warning. Wheel/sdist and RPM
+  (including `%check`) passed; DEB/AppImage builders were unavailable locally.
+
 ## 2026-09-19 — v0.9.9 VirusTotal checksum-set correction
 
 - The first post-publication VirusTotal run stopped before submission because

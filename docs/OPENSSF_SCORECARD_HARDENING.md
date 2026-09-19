@@ -106,7 +106,7 @@ Automated evidence only. No physical mouse or hardware validation was performed.
 
 If package-registry publication is desired, the owner should first claim or
 create the `mouse-control` project on PyPI, configure a Trusted Publisher for
-`DonGeronimo7/mouse-control` and the exact release workflow/environment, decide
+`DonGeronimo7/OMUS` and the exact release workflow/environment, decide
 the protected-environment approval policy, then add and review a full-SHA-pinned
 OIDC publish job for the already validated wheel and source archive. Do not add
 an API token and do not publish solely to change a Scorecard result.

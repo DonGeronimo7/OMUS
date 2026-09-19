@@ -139,7 +139,7 @@ def _exclusive_keyboards(devices: list[InputDevice]):
 
 
 def _print_grab_failure(*, chord: bool = False) -> None:
-    print("Safe keyboard capture is unavailable because Mouse Control could not")
+    print("Safe keyboard capture is unavailable because OMUS could not")
     print("temporarily reserve every keyboard input device.")
     print("No shortcut was recorded.")
     if chord:
@@ -209,7 +209,7 @@ def capture_keyboard_key(
                 if reporter is print:
                     _print_grab_failure()
                 elif reporter is not None:
-                    reporter("Safe keyboard capture is unavailable because Mouse Control could not reserve every keyboard input device.")
+                    reporter("Safe keyboard capture is unavailable because OMUS could not reserve every keyboard input device.")
     except KeyboardInterrupt:
         if reporter is not None:
             reporter("Keyboard capture cancelled.")
@@ -291,7 +291,7 @@ def capture_keyboard_chord(
                 if reporter is print:
                     _print_grab_failure(chord=True)
                 elif reporter is not None:
-                    reporter("Safe keyboard chord capture is unavailable because Mouse Control could not reserve every keyboard input device.")
+                    reporter("Safe keyboard chord capture is unavailable because OMUS could not reserve every keyboard input device.")
     except KeyboardInterrupt:
         if reporter is not None:
             reporter("Keyboard chord capture cancelled.")

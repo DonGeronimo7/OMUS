@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small repeatable performance suite for Mouse Control's representative paths."""
+"""Small repeatable performance suite for OMUS's representative paths."""
 from __future__ import annotations
 
 import argparse

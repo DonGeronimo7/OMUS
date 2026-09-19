@@ -143,7 +143,7 @@ def capture_calibrated_motion(
         except OSError as exc:
             raise PermissionError(
                 "could not exclusively grab the physical mouse for calibrated discovery; "
-                "stop mouse-control and other grabbers, then retry"
+                "stop OMUS and other grabbers, then retry"
             ) from exc
 
         selector.register(device.fd, selectors.EVENT_READ, ("evdev", device))

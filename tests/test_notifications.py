@@ -78,6 +78,8 @@ def test_each_dpi_notify_call_has_zero_replaces_id_and_osd_options():
 
     assert len(messages) == 5
     assert [message.member for message in messages] == ["Notify"] * 5
+    assert [message.body[0] for message in messages] == ["OMUS"] * 5
+    assert [message.body[2] for message in messages] == ["omus"] * 5
     assert [message.body[1] for message in messages] == [0] * 5
     assert [message.body[4] for message in messages] == [f"{dpi} DPI" for dpi in values]
     assert all(message.body[6]["transient"].value is True for message in messages)

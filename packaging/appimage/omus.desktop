@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OMUS
+GenericName=One Mouse Universal System
+Comment=Discover, configure, and remap mice on Linux
+Exec=omus-launcher
+Icon=omus
+Categories=Utility;System;
+Terminal=false
+Keywords=mouse;remap;dpi;polling;hid;linux;
+StartupNotify=true

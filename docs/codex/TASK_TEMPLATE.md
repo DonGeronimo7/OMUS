@@ -1,4 +1,4 @@
-# Codex Task Template — Mouse Control
+# Codex Task Template — OMUS
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # Unknown Mouse Hardware Acceptance
 
-This procedure validates automatic discovery on a mouse for which mouse-control
+This procedure validates automatic discovery on a mouse for which omus
 has no trusted model-specific backend.
 
 The acceptance goal is **not** to make the device writable immediately. The
@@ -11,7 +11,7 @@ and refuse to invent semantics that were not observed or proven.
 ## Non-negotiable discovery rules
 
 1. Start with the mouse in its normal firmware/native/onboard state.
-2. Stop the normal mouse-control runtime before the acceptance run.
+2. Stop the normal omus runtime before the acceptance run.
 3. Do not enter Host/software-control mode before or during discovery.
 4. Full-evidence acceptance runs use root hardware visibility so permission
    differences between composite hidraw siblings cannot hide protocol evidence.
@@ -27,7 +27,7 @@ and refuse to invent semantics that were not observed or proven.
 8. A momentary button trigger and a persistent hardware state are different
    semantic facts and must be learned separately.
 9. Privileged discovery profiles are persisted back to the invoking user's
-   mouse-control data directory rather than `/root`.
+   omus data directory rather than `/root`.
 
 ## Preparation
 
@@ -35,7 +35,7 @@ and refuse to invent semantics that were not observed or proven.
 cd ~/Mouse-control
 git switch main
 git pull --ff-only
-mouse-control stop
+omus stop
 ```
 
 Plug in the unknown mouse and do not run vendor configuration software or change
@@ -56,7 +56,7 @@ sudo env PYTHONPATH="$PWD/src" python -m mouse_control.discovery_cli \
 For an installed package (v0.9.0 or later) the equivalent command is:
 
 ```fish
-sudo mouse-control-discover \
+sudo omus-discover \
     --full-access \
     --generic-only \
     --learn-dpi-button \
@@ -82,7 +82,7 @@ ground truth without exposing its packet implementation to the learner.
 
 ### A. Physical identity — required
 
-Pass when mouse-control:
+Pass when omus:
 
 - finds the selected evdev device;
 - correlates its relevant hidraw siblings into one physical device;
@@ -92,7 +92,7 @@ Pass when mouse-control:
 
 ### B. HID grammar and acquisition completeness — required
 
-Pass when mouse-control:
+Pass when omus:
 
 - parses all HID report descriptors associated with the selected physical mouse;
 - inventories Input/Output/Feature reports and vendor-defined usage pages;
@@ -132,7 +132,7 @@ because the guided action was a DPI-button press.
 
 ### E. Semantic restraint — required
 
-Pass when mouse-control does **not** claim unsupported facts.
+Pass when omus does **not** claim unsupported facts.
 
 Examples:
 
@@ -173,7 +173,7 @@ Semantic hypothesis: dpi_cycle_trigger (correlated)
 Validated write semantics: none
 ```
 
-That means mouse-control acquired the complete host-visible evidence set,
+That means omus acquired the complete host-visible evidence set,
 correctly learned what the device actually exposed and refused to invent what it
 did not expose.
 
@@ -198,7 +198,7 @@ implicit side effect of discovery, startup, reconnect or a read operation.
 After an acceptance session on an already-configured daily-use mouse:
 
 ```fish
-mouse-control restart
+omus restart
 ```
 
 For a brand-new unknown test mouse, leave the runtime stopped until the captured

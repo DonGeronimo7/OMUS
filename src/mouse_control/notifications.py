@@ -33,7 +33,7 @@ class FreedesktopNotifier:
     async def _notify(self, bus, dpi):
         from dbus_next import Message, Variant
         from dbus_next.constants import MessageType
-        reply = await bus.call(Message(destination="org.freedesktop.Notifications", path="/org/freedesktop/Notifications", interface="org.freedesktop.Notifications", member="Notify", signature="susssasa{sv}i", body=["mouse-control", 0, "", "Mouse DPI", self._body(dpi), [], {"urgency": Variant("y", 1), "transient": Variant("b", True), "suppress-sound": Variant("b", True)}, 1500]))
+        reply = await bus.call(Message(destination="org.freedesktop.Notifications", path="/org/freedesktop/Notifications", interface="org.freedesktop.Notifications", member="Notify", signature="susssasa{sv}i", body=["OMUS", 0, "omus", "Mouse DPI", self._body(dpi), [], {"urgency": Variant("y", 1), "transient": Variant("b", True), "suppress-sound": Variant("b", True)}, 1500]))
         if reply.message_type == MessageType.ERROR: raise RuntimeError(reply.body[0] if reply.body else reply.error_name)
         return int(reply.body[0])
     async def _run_async(self):

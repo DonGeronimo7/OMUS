@@ -496,7 +496,7 @@ class CursesSetupApp:
 
         layout = frame_layout(height, width)
         if layout.mode is LayoutMode.TOO_SMALL:
-            self._put(stdscr, 1, 2, f"Mouse Control — Setup v{__version__}", max(0, width - 4), curses.A_BOLD)
+            self._put(stdscr, 1, 2, f"OMUS — Setup v{__version__}", max(0, width - 4), curses.A_BOLD)
             self._put(
                 stdscr,
                 3,
@@ -521,7 +521,7 @@ class CursesSetupApp:
             stdscr,
             0,
             2,
-            f" Mouse Control  v{__version__} ",
+            f" OMUS  v{__version__} ",
             width - 4,
             curses.A_BOLD,
         )
@@ -864,7 +864,7 @@ class CursesSetupApp:
             self.controller.status = "Check for a compatible update before starting one."
             return
         if not self._confirm(
-            "Update Mouse Control?",
+            "Update OMUS?",
             [
                 f"Update {state.installed_version} → {state.available_version}.",
                 "The existing updater will verify downloads and preserve package ownership.",
@@ -1025,7 +1025,7 @@ class CursesSetupApp:
             return
         selected = self._prompt_text(
             "Vendor capture file",
-            ["Enter a canonical Mouse Control JSON or JSONL capture path."],
+            ["Enter a canonical OMUS JSON or JSONL capture path."],
         )
         if selected is None:
             self.controller.cancel_vendor_capture_import()
@@ -1234,7 +1234,7 @@ class CursesSetupApp:
             if self._confirm(
                 "Run reversible write-possibility research?",
                 [
-                    "Mouse Control found an exact-model DEMONSTRATED transaction grammar.",
+                    "OMUS found an exact-model DEMONSTRATED transaction grammar.",
                     "Only previously demonstrated semantic values will be tested.",
                     "Raw readback and independent physical behavior must agree.",
                     "The original value will be restored through the same generic path.",
@@ -1249,7 +1249,7 @@ class CursesSetupApp:
                 "Continue to deeper protocol learning?",
                 [
                     "Automatic Discovery could not construct an executable generic write grammar.",
-                    "Mouse Control can now learn the complete physical DPI-stage cycle read-only.",
+                    "OMUS can now learn the complete physical DPI-stage cycle read-only.",
                     "This uses ruler-based CPI calibration plus simultaneous HID observation.",
                     "No unknown DPI or polling configuration write will be sent.",
                 ],
@@ -1640,7 +1640,7 @@ class CursesSetupApp:
                         [
                             "Press the keyboard key you want to assign.",
                             "Ctrl+C cancels capture.",
-                            "Mouse Control temporarily reserves keyboard input while recording.",
+                            "OMUS temporarily reserves keyboard input while recording.",
                         ],
                         prompt="Waiting for key…",
                     )
@@ -1659,7 +1659,7 @@ class CursesSetupApp:
                         [
                             "Press and hold the shortcut, then release all keys.",
                             "Esc cancels capture.",
-                            "Mouse Control temporarily reserves keyboard input while recording.",
+                            "OMUS temporarily reserves keyboard input while recording.",
                         ],
                         prompt="Waiting for chord…",
                     )
@@ -1697,13 +1697,13 @@ class CursesSetupApp:
     def _input_error_message(exc: OSError, *, phase: str) -> str:
         if exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY}:
             return (
-                f"Input device busy during {phase}. Mouse Control kept the current "
+                f"Input device busy during {phase}. OMUS kept the current "
                 "mappings unchanged."
             )
         return f"Input capture failed during {phase}: {exc}"
 
     def _button_editor(self) -> None:
-        """Give button capture sole Mouse Control ownership of the evdev node."""
+        """Give button capture sole OMUS ownership of the evdev node."""
         assert self.stdscr is not None
         device = None
         nodelay_enabled = False

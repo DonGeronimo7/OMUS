@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     backend.supports_device(device)
 
     if args.set_dpi is not None:
-        print("Mouse Control — Teacher-Free Learned Write Acceptance")
+        print("OMUS — Teacher-Free Learned Write Acceptance")
         print("=====================================================")
         print(f"Device: {backend.get_device_name(device)}")
         print("Vendor/native backend: BYPASSED")
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     values = backend.get_dpi_values(device)
-    print("Mouse Control — Automatic Discovery Runtime Monitor")
+    print("OMUS — Automatic Discovery Runtime Monitor")
     print("===================================================")
     print(f"Device: {backend.get_device_name(device)}")
     print("Vendor/native backend: BYPASSED")

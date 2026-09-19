@@ -57,7 +57,7 @@ jobs:
       - name: Install RPM build tooling
         run: dnf -y install dnf-plugins-core rpm-build rpmdevtools
       - name: Install spec build requirements
-        run: dnf -y builddep mouse-control.spec
+        run: dnf -y builddep omus.spec
       - name: Build and verify RPMs
         run: |
           release_version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
@@ -65,10 +65,10 @@ jobs:
           base_version=$(release_field rpm-version)
           package_release=$(release_field rpm-release)
           python3 -m build --sdist
-          rpmbuild -ba mouse-control.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
-          count=$(find rpms/noarch -maxdepth 1 -type f -name 'mouse-control-*.noarch.rpm' | wc -l)
+          rpmbuild -ba omus.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpms" --define "_srcrpmdir $PWD/rpms"
+          count=$(find rpms/noarch -maxdepth 1 -type f -name 'omus-*.noarch.rpm' | wc -l)
           test "$count" -eq 1
-          rpm_path=$(find rpms/noarch -maxdepth 1 -type f -name 'mouse-control-*.noarch.rpm' -print -quit)
+          rpm_path=$(find rpms/noarch -maxdepth 1 -type f -name 'omus-*.noarch.rpm' -print -quit)
           test "$(rpm -qp --qf '%{VERSION}' "$rpm_path")" = "$base_version"
           test "$(rpm -qp --qf '%{RELEASE}' "$rpm_path" | cut -d. -f1)" = "$package_release"
           rpm -qp --info "$rpm_path"

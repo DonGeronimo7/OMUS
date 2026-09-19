@@ -138,7 +138,7 @@ class StatusNotifierTray:
                 @dbus_property(access=PropertyAccess.READ)
                 def Category(self) -> "s": return "Hardware"
                 @dbus_property(access=PropertyAccess.READ)
-                def Id(self) -> "s": return "mouse-control-battery"
+                def Id(self) -> "s": return "omus-battery"
                 @dbus_property(access=PropertyAccess.READ)
                 def Title(self) -> "s": return self.device_name
                 @dbus_property(access=PropertyAccess.READ)
@@ -235,13 +235,13 @@ class StatusNotifierTray:
             menu = Menu(initial_device_name, initial_state)
             bus.export("/StatusNotifierItem", service)
             bus.export(SNI_MENU_PATH, menu)
-            await bus.request_name("org.kde.StatusNotifierItem-mouse-control")
+            await bus.request_name("org.kde.StatusNotifierItem-omus")
             # Registering is best effort: a missing watcher must not kill remapping.
             try:
                 from dbus_next import Message
                 await bus.call(Message(destination="org.kde.StatusNotifierWatcher", path="/StatusNotifierWatcher",
                     interface="org.kde.StatusNotifierWatcher", member="RegisterStatusNotifierItem",
-                    signature="s", body=["org.kde.StatusNotifierItem-mouse-control"]))
+                    signature="s", body=["org.kde.StatusNotifierItem-omus"]))
             except Exception as exc:
                 LOG.info("Battery tray watcher unavailable: %s", exc)
             while True:

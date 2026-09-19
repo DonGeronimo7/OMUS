@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Mouse Control problem
+description: Report a reproducible OMUS problem
 title: "[Bug]: "
 labels: [bug]
 body:
@@ -24,8 +24,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Mouse Control version and installation method
-      placeholder: "Example: 0.9.5 RPM"
+      label: OMUS version and installation method
+      placeholder: "Example: 1.0.0 RPM"
     validations:
       required: true
   - type: input
@@ -36,6 +36,6 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Sanitized mouse-control doctor --report output
+      label: Sanitized omus doctor --report output
       description: "Review before submitting; remove anything you do not want to share."
       render: text

@@ -15,7 +15,7 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 rm -rf AppDir
-mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/doc/mouse-control
+mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/doc/omus
 
 echo "Downloading pinned portable CPython 3.12 runtime..."
 
@@ -51,11 +51,13 @@ CC=gcc "$bundled_python" -m pip install \
   --no-deps \
   .
 
-# The AppImage enters Mouse Control through usr/bin/mouse-control below.  Drop
+# The AppImage enters OMUS through usr/bin/omus below. Drop
 # pip's redundant entry points, whose build-time shebangs refer to the AppDir's
 # temporary absolute path, and remove bytecode shipped by the portable runtime.
 for script in \
   mouse-control \
+  omus \
+  omus-launcher \
   mouse-control-launcher \
   mouse-control-discover \
   mouse-control-discovery-monitor \
@@ -81,6 +83,9 @@ EOF
 
 chmod +x AppDir/usr/bin/mouse-control
 
+cp AppDir/usr/bin/mouse-control AppDir/usr/bin/omus
+chmod +x AppDir/usr/bin/omus
+
 cat > AppDir/usr/bin/mouse-control-launcher <<'EOF'
 #!/bin/sh
 appdir=${APPDIR:-}
@@ -92,23 +97,23 @@ exec "$appdir/usr/python/bin/python3" -m mouse_control.graphical_launcher "$@"
 EOF
 
 chmod +x AppDir/usr/bin/mouse-control-launcher
+cp AppDir/usr/bin/mouse-control-launcher AppDir/usr/bin/omus-launcher
+chmod +x AppDir/usr/bin/omus-launcher
 
-install -Dm644 packaging/appimage/mouse-control.desktop \
-  AppDir/usr/share/applications/mouse-control.desktop
-install -Dm644 CREDITS.md AppDir/usr/share/doc/mouse-control/CREDITS.md
-install -Dm644 SECURITY.md AppDir/usr/share/doc/mouse-control/SECURITY.md
+install -Dm644 packaging/appimage/omus.desktop AppDir/usr/share/applications/omus.desktop
+install -Dm644 packaging/omus.metainfo.xml AppDir/usr/share/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
+install -Dm644 CREDITS.md AppDir/usr/share/doc/omus/CREDITS.md
+install -Dm644 SECURITY.md AppDir/usr/share/doc/omus/SECURITY.md
 
-for size in 512 256 128 64 48 32; do
+for size in 512 256 128 64 48 32 24 16; do
   install -Dm644 \
-    "assets/icons/hicolor/${size}x${size}/apps/mouse-control.png" \
-    "AppDir/usr/share/icons/hicolor/${size}x${size}/apps/mouse-control.png"
+    "assets/icons/hicolor/${size}x${size}/apps/omus.png" \
+    "AppDir/usr/share/icons/hicolor/${size}x${size}/apps/omus.png"
 done
 
-install -Dm644 packaging/appimage/mouse-control.desktop \
-  AppDir/mouse-control.desktop
+install -Dm644 packaging/appimage/omus.desktop AppDir/omus.desktop
 
-install -Dm644 assets/icons/hicolor/256x256/apps/mouse-control.png \
-  AppDir/mouse-control.png
+install -Dm644 assets/icons/hicolor/256x256/apps/omus.png AppDir/omus.png
 
 cat > AppDir/AppRun <<'EOF'
 #!/bin/sh
@@ -119,12 +124,12 @@ fi
 
 export APPDIR="$appdir"
 if [ "$#" -eq 0 ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
-  export MOUSE_CONTROL_APPIMAGE=${APPIMAGE:-$0}
-  exec "$appdir/usr/bin/mouse-control-launcher"
+  export OMUS_APPIMAGE=${APPIMAGE:-$0}
+  exec "$appdir/usr/bin/omus-launcher"
 fi
-exec "$appdir/usr/bin/mouse-control" "$@"
+exec "$appdir/usr/bin/omus" "$@"
 EOF
 
 chmod +x AppDir/AppRun
 
-appimagetool AppDir "Mouse-Control-${version}-x86_64.AppImage"
+appimagetool AppDir "OMUS-${version}-x86_64.AppImage"

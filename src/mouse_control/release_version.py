@@ -1,4 +1,4 @@
-"""Strict mappings between Mouse Control release and package versions."""
+"""Strict mappings between OMUS release and package versions."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -33,7 +33,7 @@ class ReleaseVersion:
             display = display[1:]
         match = _DISPLAY_VERSION.fullmatch(display)
         if match is None:
-            raise ValueError(f"unsupported Mouse Control release version: {value!r}")
+            raise ValueError(f"unsupported OMUS release version: {value!r}")
         rpm_version = ".".join(
             (match.group("version"), match.group("minor"), match.group("patch"))
         )
@@ -63,14 +63,14 @@ class ReleaseVersion:
         if not re.fullmatch(r"[A-Za-z0-9_]+", architecture):
             raise ValueError(f"invalid RPM architecture: {architecture!r}")
         return (
-            f"mouse-control-{self.rpm_version}-{self.rpm_release}."
+            f"omus-{self.rpm_version}-{self.rpm_release}."
             f"{dist}.{architecture}.rpm"
         )
 
     def match_rpm_filename(self, filename: str) -> re.Match[str] | None:
         """Match only this release's RPM Version/Release and safe suffix fields."""
         return re.fullmatch(
-            rf"mouse-control-{re.escape(self.rpm_version)}-{self.rpm_release}"
+            rf"(?:omus|mouse-control)-{re.escape(self.rpm_version)}-{self.rpm_release}"
             rf"(?:\.[A-Za-z0-9_+~]+)*\.(?P<architecture>[A-Za-z0-9_]+)\.rpm",
             filename,
         )

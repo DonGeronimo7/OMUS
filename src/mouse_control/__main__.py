@@ -1,4 +1,4 @@
-"""Source execution entry point for Mouse Control."""
+"""Source execution entry point for OMUS."""
 
 from .app import main
 

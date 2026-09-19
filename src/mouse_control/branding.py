@@ -105,8 +105,8 @@ def render_logo(*, columns: int | None = None, stream: TextIO | None = None) -> 
 def render_banner(*, columns: int | None = None, stream: TextIO | None = None) -> str:
     """Return the home/wizard banner without assuming a large terminal."""
     logo = render_logo(columns=columns, stream=stream)
-    title = style("MOUSE CONTROL", "blue", stream=stream)
-    subtitle = style("Linux Gaming Mouse Control", "muted", stream=stream)
+    title = style("OMUS", "purple", stream=stream)
+    subtitle = style("Every mouse. One system.", "muted", stream=stream)
     return "\n".join(part for part in (logo, title, subtitle) if part)
 
 

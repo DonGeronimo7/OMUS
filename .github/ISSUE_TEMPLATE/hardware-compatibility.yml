@@ -8,11 +8,11 @@ body:
         Your mouse does not need to be on the compatibility list. Successful,
         partial, and unsuccessful discovery results all help. Please run:
 
-        `mouse-control support --guided`
+        `omus support --guided`
 
         and, when possible:
 
-        `mouse-control discover --output mouse-control-discovery.json`
+        `omus discover --output omus-discovery.json`
 
         Attach the generated files after reviewing them. Do not include credentials,
         serial numbers, input history, or private information you do not want to share.
@@ -37,7 +37,7 @@ body:
     attributes: {label: Desktop environment or compositor, placeholder: "Example: GNOME on Wayland"}
   - type: input
     id: version
-    attributes: {label: Mouse Control version, placeholder: "Example: 0.9.5"}
+    attributes: {label: OMUS version, placeholder: "Example: 1.0.0"}
     validations: {required: true}
   - type: dropdown
     id: install
@@ -70,7 +70,7 @@ body:
   - type: textarea
     id: recognition
     attributes:
-      label: What did Mouse Control recognize?
+      label: What did OMUS recognize?
       description: "Copy the plain-language result shown in Hardware / Discovery. No protocol knowledge is required."
       placeholder: "Example: device detected; DPI button observed; DPI write command not yet proven."
   - type: textarea

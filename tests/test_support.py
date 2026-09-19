@@ -49,5 +49,5 @@ def test_support_command_saves_local_report_without_backend_writes(monkeypatch, 
     monkeypatch.setattr("builtins.input", lambda prompt: "1" if prompt.strip() == ">" else "y")
     with patch("mouse_control.support.probe", return_value=report_model()):
         assert cli.run_support() == 0
-    assert len(list(tmp_path.glob("mouse-control-*-report.txt"))) == 1
+    assert len(list(tmp_path.glob("omus-*-report.txt"))) == 1
     assert backend.method_calls == []

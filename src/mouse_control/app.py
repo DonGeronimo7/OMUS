@@ -1,4 +1,4 @@
-"""Installed Mouse Control application entry point."""
+"""Installed OMUS application entry point."""
 
 from __future__ import annotations
 

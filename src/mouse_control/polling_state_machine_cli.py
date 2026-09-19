@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Onboard-start and Host-start corpora resolved to different live interfaces"
             )
 
-        print("Mouse Control — Chained Generic Polling State-Machine Test")
+        print("OMUS — Chained Generic Polling State-Machine Test")
         print("=========================================================")
         print(
             f"Device: {mouse.name} "

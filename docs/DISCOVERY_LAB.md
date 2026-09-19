@@ -341,7 +341,7 @@ can never become `PROVEN`, experiment-eligible, or write-authorizing through
 this pipeline.
 
 The local content-addressed store keeps one JSON staging document per source
-digest under the Mouse Control discovery data directory. It retains the
+digest under the OMUS discovery data directory. It retains the
 manifest, provenance, normalized records, warnings, conflicts, review state,
 and stable relationships to generated evidence. Exact duplicate imports are
 recognized by source digest. Exact duplicate observations within one source are

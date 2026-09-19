@@ -3,9 +3,9 @@ requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mouse-control"
-version = "0.9.9"
-description = "Linux mouse remapping with Automatic Discovery and validated DPI/polling control"
+name = "omus"
+version = "1.0.0"
+description = "One Mouse Universal System for Linux discovery, configuration, and remapping"
 authors = [
     {name = "Marc-A. Geronimo"}
 ]
@@ -18,8 +18,16 @@ dependencies = [
     "packaging>=23.0"
 ]
 
+[project.urls]
+Homepage = "https://github.com/DonGeronimo7/OMUS"
+Repository = "https://github.com/DonGeronimo7/OMUS"
+Issues = "https://github.com/DonGeronimo7/OMUS/issues"
+Releases = "https://github.com/DonGeronimo7/OMUS/releases"
+
 [project.scripts]
+omus = "mouse_control.app:main"
 mouse-control = "mouse_control.app:main"
+omus-launcher = "mouse_control.graphical_launcher:main"
 mouse-control-launcher = "mouse_control.graphical_launcher:main"
 mouse-control-discover = "mouse_control.discovery_cli:main"
 mouse-control-sensor-calibrate = "mouse_control.sensor_calibration_cli:main"

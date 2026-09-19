@@ -171,7 +171,7 @@ def probe_demonstrated_dpi(
         if not prompt(
             "Reversible DPI write-possibility probe",
             (
-                f"Mouse Control will test {original} → {target} DPI using the learned generic HID grammar.",
+                f"OMUS will test {original} → {target} DPI using the learned generic HID grammar.",
                 "Only a previously demonstrated value will be sent.",
                 f"The same generic session will restore {original} DPI before the probe completes.",
                 "This validates possibility only; it does not grant runtime write authority.",
@@ -310,7 +310,7 @@ def _measure_polling(
         f"Physical polling verification — {label}",
         (
             f"Move the mouse rapidly and continuously for about {seconds:g} seconds.",
-            "Mouse Control will infer the report-rate fundamental from kernel event timing.",
+            "OMUS will infer the report-rate fundamental from kernel event timing.",
         ),
     ):
         raise ResearchProbeError("polling physical verification cancelled")
@@ -362,7 +362,7 @@ def probe_demonstrated_polling(
     if not prompt(
         "Reversible polling write-possibility probe",
         (
-            f"Mouse Control will test {original} → {target} Hz through the learned generic state machine.",
+            f"OMUS will test {original} → {target} Hz through the learned generic state machine.",
             "The starting report rate was established physically before any write.",
             f"The generic Host branch will restore {original} Hz before completion.",
             "This validates possibility only; it does not grant runtime write authority.",

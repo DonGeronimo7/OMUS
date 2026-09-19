@@ -1,4 +1,4 @@
-# Contributing to Mouse Control
+# Contributing to OMUS
 
 Contributions are welcome, especially hardware compatibility reports. This
 project needs reports from mice that work perfectly as much as reports of
@@ -6,14 +6,14 @@ failures: together they build an evidence-based compatibility database.
 
 ## Test a mouse
 
-Use the [New mouse / discovery result template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml)
+Use the [New mouse / discovery result template](https://github.com/DonGeronimo7/OMUS/issues/new?template=hardware-compatibility.yml)
 for any mouse result, including a fully working setup. Unknown, obscure, OEM,
 rebrand, wireless, older, and unusual devices are especially useful.
 
 Run the normal guided flow first:
 
 ```bash
-mouse-control
+omus
 ```
 
 Select the mouse and open **Hardware / Discovery**. If guided discovery is
@@ -22,8 +22,8 @@ offered, follow it; you do not need to understand HID or mouse protocols.
 Then create both shareable reports when possible:
 
 ```bash
-mouse-control support --guided
-mouse-control discover --output mouse-control-discovery.json
+omus support --guided
+omus discover --output omus-discovery.json
 ```
 
 The support command saves a text report in your home directory. The discovery
@@ -33,7 +33,7 @@ cache contents, and unrelated USB devices. Review every file before posting and
 remove anything you do not want to share.
 
 Include the exact model, connection type, distribution, installation method,
-Mouse Control version, what discovery recognized, what worked or failed,
+OMUS version, what discovery recognized, what worked or failed,
 whether DPI/polling changes were observed, and reconnect behavior. Do not spend
 time manually collecting identifiers already present in the generated reports.
 

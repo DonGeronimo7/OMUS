@@ -447,7 +447,7 @@ def _lines(controller: Any, tool_id: str) -> tuple[str, ...]:
                 f"Safety class: {plan.safety_class.value.replace('_', ' ')}",
                 "Execution uses existing identity, ambiguity, action-class, and verifier gates.")
     if tool_id == "vendor_import":
-        return ("Accepted formats: canonical Mouse Control JSON / JSONL",
+        return ("Accepted formats: canonical OMUS JSON / JSONL",
                 "Local parsing only · no packet replay · no hardware access",
                 "Imported evidence cannot become PROVEN or enable writes.")
     if tool_id == "import_review":

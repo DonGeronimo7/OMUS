@@ -22,7 +22,7 @@ _CPI_OUTLIER_THRESHOLD = 0.05
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    """Add the installed CPI interface to a Mouse Control argument parser."""
+    """Add the installed CPI interface to a OMUS argument parser."""
 
     parser.description = (
         "Measure current mouse CPI/DPI and polling from raw Linux evdev motion without "
@@ -56,7 +56,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         metavar="N",
         help=(
             "minimum ruler passes before confidence is evaluated (default: 3); "
-            "Mouse Control may request up to two extra passes when needed"
+            "OMUS may request up to two extra passes when needed"
         ),
     )
     parser.add_argument(
@@ -227,7 +227,7 @@ def run_calibration(args: argparse.Namespace) -> int:
 
     inches = args.distance_mm / 25.4
     resolved_path = os.path.realpath(mouse.path)
-    print("Mouse Control — Generic Sensor Calibration")
+    print("OMUS — Generic Sensor Calibration")
     print("==========================================")
     print(f"Device: {mouse.name} [{(mouse.vendor or 0):04x}:{(mouse.product or 0):04x}]")
     print(f"evdev source: {mouse.path} -> {resolved_path}")
@@ -235,14 +235,14 @@ def run_calibration(args: argparse.Namespace) -> int:
         f"For each pass, start at the ruler mark and move the mouse exactly "
         f"{args.distance_mm:g} mm ({inches:g} in) in one straight direction, then stop."
     )
-    print("Mouse Control isolates the deliberate motion segment and performs all CPI/DPI math internally.")
+    print("OMUS isolates the deliberate motion segment and performs all CPI/DPI math internally.")
     if args.axis == "auto":
         print("Linux X/Y orientation is detected automatically from two-dimensional motion.")
     else:
         print(f"Diagnostic override: measuring REL_{args.axis.upper()} explicitly.")
     print(
         "Calibration exclusively grabs the physical evdev stream during each capture. "
-        "If mouse-control is currently remapping it, stop the service first."
+        "If OMUS is currently remapping it, stop the service first."
     )
     if args.known_dpi is not None:
         print(f"Configured DPI stage label for comparison: {args.known_dpi} DPI")

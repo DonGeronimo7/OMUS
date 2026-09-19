@@ -1,4 +1,4 @@
-"""Safe, explicit update dispatch for Mouse Control installations.
+"""Safe, explicit update dispatch for OMUS and legacy installations.
 
 This deliberately delegates to the mechanism which owns the running copy; it
 never replaces files owned by a system package manager.
@@ -27,8 +27,8 @@ from . import __version__
 from .release_version import ReleaseVersion
 from .service import is_service_active, restart_service
 
-RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/mouse-control/releases/latest"
-REPOSITORY = "DonGeronimo7/mouse-control"
+RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/OMUS/releases/latest"
+REPOSITORY = "DonGeronimo7/OMUS"
 CHECKSUMS_NAME = "SHA256SUMS"
 _DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com"})
 
@@ -80,7 +80,7 @@ def is_newer(latest: str, installed: str) -> bool:
 
 
 def _run_capture(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-    """Run a command whose stdout/stderr Mouse Control must inspect."""
+    """Run a command whose stdout/stderr OMUS must inspect."""
     return subprocess.run(args, text=True, capture_output=True, **kwargs)  # type: ignore[arg-type]
 
 
@@ -141,11 +141,16 @@ def detect_installation(executable: Path | None = None) -> Installation:
     if appimage or executable.suffix.lower() == ".appimage":
         return Installation("appimage", Path(appimage or executable).resolve())
     try:
-        dist = importlib.metadata.distribution("mouse-control")
+        try:
+            dist = importlib.metadata.distribution("omus")
+            distribution_name = "omus"
+        except importlib.metadata.PackageNotFoundError:
+            dist = importlib.metadata.distribution("mouse-control")
+            distribution_name = "mouse-control"
         direct = dist.read_text("direct_url.json")
         if direct and json.loads(direct).get("dir_info", {}).get("editable"):
             return Installation("source", executable, detail="editable pip install")
-        return Installation("pip", executable, "mouse-control")
+        return Installation("pip", executable, distribution_name)
     except importlib.metadata.PackageNotFoundError:
         return Installation("unknown", executable)
     except (json.JSONDecodeError, OSError):
@@ -154,9 +159,9 @@ def detect_installation(executable: Path | None = None) -> Installation:
 
 def fetch_latest(url: str = RELEASE_URL, opener: Callable = urlopen) -> Release:
     if url != RELEASE_URL:
-        raise UpdateError("Release information URL is not the official Mouse Control endpoint.")
+        raise UpdateError("Release information URL is not the official OMUS endpoint.")
     try:
-        request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "mouse-control-updater"})
+        request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "omus-updater"})
         with opener(request, timeout=10) as response:
             _validate_response_url(response, expected_host="api.github.com")
             data = json.loads(response.read().decode("utf-8"))
@@ -203,7 +208,7 @@ def _safe_asset_filename(asset_name: str) -> str:
 
 
 def _asset_matches(name: str, version: str, suffix: str, architecture: str) -> bool:
-    """Match only documented Mouse Control release filenames."""
+    """Match canonical OMUS and v0.9.9-era release filenames."""
     escaped_version = re.escape(version.lstrip("vV"))
     if suffix == ".rpm":
         try:
@@ -214,11 +219,11 @@ def _asset_matches(name: str, version: str, suffix: str, architecture: str) -> b
                                or _normalize_architecture(match.group("architecture"))
                                == architecture))
     if suffix == ".deb":
-        match = re.fullmatch(rf"mouse-control_{escaped_version}_([^_]+)\.deb", name)
+        match = re.fullmatch(rf"(?:omus|mouse-control)_{escaped_version}_([^_]+)\.deb", name)
         return bool(match and (match.group(1) == "all"
                                or _normalize_architecture(match.group(1)) == architecture))
     if suffix == ".appimage":
-        match = re.fullmatch(rf"Mouse-Control-{escaped_version}-(.+)\.AppImage", name)
+        match = re.fullmatch(rf"(?:OMUS|Mouse-Control)-{escaped_version}-(.+)\.AppImage", name)
         return bool(match and _normalize_architecture(match.group(1)) == architecture)
     return False
 
@@ -242,7 +247,7 @@ def select_asset(release: Release, suffix: str) -> dict:
     url = candidates[0].get("browser_download_url")
     expected_prefix = f"https://github.com/{REPOSITORY}/releases/download/v{release.version}/"
     if not isinstance(url, str) or url != expected_prefix + candidates[0]["name"]:
-        raise UpdateError("Release asset URL is not from the official Mouse Control repository.")
+        raise UpdateError("Release asset URL is not from the official OMUS repository.")
     return candidates[0]
 
 
@@ -294,7 +299,7 @@ def _checksum_asset(release: Release) -> dict:
     asset = matches[0]
     expected = f"https://github.com/{REPOSITORY}/releases/download/v{release.version}/{CHECKSUMS_NAME}"
     if asset.get("browser_download_url") != expected:
-        raise UpdateError("Checksum manifest URL is not from the official Mouse Control release.")
+        raise UpdateError("Checksum manifest URL is not from the official OMUS release.")
     return asset
 
 
@@ -322,7 +327,7 @@ def _parse_checksums(data: bytes) -> dict[str, str]:
 def _download_bytes(asset: dict, *, opener: Callable = urlopen, limit: int = 1024 * 1024) -> bytes:
     url = asset["browser_download_url"]
     try:
-        with opener(Request(url, headers={"User-Agent": "mouse-control-updater"}), timeout=30) as response:
+        with opener(Request(url, headers={"User-Agent": "omus-updater"}), timeout=30) as response:
             _validate_response_url(response)
             data = response.read(limit + 1)
     except (URLError, OSError, ValueError) as exc:
@@ -348,7 +353,7 @@ def _expected_checksum(release: Release, filename: str, *, opener: Callable = ur
 def _download(asset: dict, destination: Path, opener: Callable = urlopen) -> Path:
     url = asset["browser_download_url"]
     try:
-        with opener(Request(url, headers={"User-Agent": "mouse-control-updater"}), timeout=60) as response:
+        with opener(Request(url, headers={"User-Agent": "omus-updater"}), timeout=60) as response:
             _validate_response_url(response)
             with destination.open("wb") as output:
                 shutil.copyfileobj(response, output)
@@ -387,7 +392,7 @@ def _installed_package_version(installation: Installation, run_capture: Callable
     Incremental release tags include the package revision, so RPM and Debian
     queries retain it. RPM's distro suffix is removed before PEP 440 ordering.
     """
-    package = installation.package or "mouse-control"
+    package = installation.package or "omus"
     command = (['rpm', '-q', '--qf', '%{VERSION}-%{RELEASE}\\n', package]
                if installation.kind == 'rpm'
                else ['dpkg-query', '-W', '-f=${Version}\\n', package])
@@ -405,6 +410,9 @@ def _installed_package_version(installation: Installation, run_capture: Callable
 def _package_is_current(installation: Installation, release: Release,
                         run_capture: Callable) -> bool:
     installed = _installed_package_version(installation, run_capture)
+    if installed is None and installation.kind in {"rpm", "deb"} and installation.package != "omus":
+        installed = _installed_package_version(
+            Installation(installation.kind, installation.executable, "omus"), run_capture)
     if installed is None:
         return False
     try:
@@ -438,7 +446,7 @@ def _package_update(installation: Installation, release: Release,
     manager = "dnf" if installation.kind == "rpm" else "apt"
     if not shutil.which(manager):
         raise UpdateError(f"{manager} is unavailable; package-owned files were not changed.")
-    package = installation.package or "mouse-control"
+    package = installation.package or "omus"
     yes_args = (["--assumeyes"] if manager == "dnf" else ["--yes"]) if assume_yes else []
 
     if not assume_yes:
@@ -456,7 +464,7 @@ def _package_update(installation: Installation, release: Release,
     # A direct GitHub package can be upgraded safely through the same manager.
     suffix = ".rpm" if installation.kind == "rpm" else ".deb"
     asset = select_asset(release, suffix)
-    with tempfile.TemporaryDirectory(prefix="mouse-control-update-") as directory:
+    with tempfile.TemporaryDirectory(prefix="omus-update-") as directory:
         filename = _safe_asset_filename(asset["name"])
         destination = (Path(directory) / filename).resolve()
         if destination.parent != Path(directory).resolve():
@@ -508,7 +516,7 @@ def _appimage_update(installation: Installation, release: Release, opener: Calla
 
 
 def _shadowed(executable: Path) -> Path | None:
-    found = shutil.which("mouse-control")
+    found = shutil.which("omus") or shutil.which("mouse-control")
     if found and Path(found).resolve() != executable:
         return Path(found).resolve()
     return None
@@ -521,16 +529,16 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
     installation = detect_installation(executable)
     shadow = _shadowed(installation.executable)
     if shadow:
-        print(f"Mouse Control appears to be installed more than once.\nRunning: {installation.executable}\nAlso detected: {shadow}\nThe updater will only update the running installation.")
+        print(f"OMUS appears to be installed more than once.\nRunning: {installation.executable}\nAlso detected: {shadow}\nThe updater will only update the running installation.")
     try:
         inspected = inspect_update(installation=installation, fetcher=fetcher)
     except UpdateError as exc:
-        print(f"Could not check for Mouse Control updates.\nYour current installation was not changed.\n\nReason: {exc}", file=sys.stderr)
+        print(f"Could not check for OMUS updates.\nYour current installation was not changed.\n\nReason: {exc}", file=sys.stderr)
         return 1
     release = inspected.release
-    print(f"Mouse Control Updater\nInstalled: {__version__}\nLatest:    {release.version}\nInstall:   {installation.description}")
+    print(f"OMUS Updater\nInstalled: {__version__}\nLatest:    {release.version}\nInstall:   {installation.description}")
     if not inspected.update_available:
-        print(f"Mouse Control {__version__} is already up to date.")
+        print(f"OMUS {__version__} is already up to date.")
         return 0
     print(f"\nUpdate available: {__version__} → {release.version}")
     if check:
@@ -540,7 +548,7 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
         return 1
     if not assume_yes:
         try:
-            if input_func("Update Mouse Control? [Y/n]: ").strip().lower() not in {"", "y", "yes"}:
+            if input_func("Update OMUS? [Y/n]: ").strip().lower() not in {"", "y", "yes"}:
                 print("Update cancelled.")
                 return 0
         except (EOFError, KeyboardInterrupt):
@@ -564,7 +572,7 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
         elif installation.kind == "appimage":
             _appimage_update(installation, release, opener)
         elif installation.kind == "pip":
-            result = runner([sys.executable, "-m", "pip", "install", "--upgrade", "mouse-control"])
+            result = runner([sys.executable, "-m", "pip", "install", "--upgrade", "omus"])
             if result.returncode:
                 raise UpdateError(result.stderr.strip() or "pip update failed.")
     except KeyboardInterrupt:
@@ -573,7 +581,7 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
     except UpdateError as exc:
         print(f"Update failed. Your existing installation was not manually replaced.\nReason: {exc}", file=sys.stderr)
         return 1
-    print(f"Mouse Control was updated successfully to {release.version}.")
+    print(f"OMUS was updated successfully to {release.version}.")
     if active:
         try:
             restart_service()

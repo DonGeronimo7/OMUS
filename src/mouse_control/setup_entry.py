@@ -117,7 +117,7 @@ def run_tui_setup_wizard() -> int:
                         from .foreground_session import record_service_preference
                         cli.install_service(start=False)
                         record_service_preference(True)
-                        print("Mouse Control background service enabled.")
+                        print("OMUS background service enabled.")
                     except Exception as exc:
                         print(f"Warning: could not enable background service: {exc}")
                         print("Your mouse configuration was still saved successfully.")
@@ -128,7 +128,7 @@ def run_tui_setup_wizard() -> int:
                         record_service_preference(False)
                         print(
                             "Background service disabled. "
-                            "You can enable it later with: mouse-control install-service"
+                            "You can enable it later with: omus install-service"
                         )
                     except Exception as exc:
                         print(f"Warning: could not disable background service: {exc}")

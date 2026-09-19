@@ -13,7 +13,7 @@ from mouse_control import foreground_session
 
 def _use_state_directory(monkeypatch, tmp_path: Path) -> Path:
     monkeypatch.setattr(foreground_session, "_runtime_directory", lambda: tmp_path)
-    return tmp_path / "mouse-control" / "foreground-session.json"
+    return tmp_path / "omus" / "foreground-session.json"
 
 
 def test_prepare_records_active_state_before_stopping(monkeypatch, tmp_path):

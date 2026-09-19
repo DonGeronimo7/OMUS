@@ -490,7 +490,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         revision="fc55-research-v1",
         sources=(
             _source(
-                "Mouse Control research corpus",
+                "OMUS research corpus",
                 "DISCOVERY 90%+ research payload — Holtek Venus",
                 SourceTrust.REFERENCE,
                 notes="Project-owned declarative facts only; no upstream capture or executable write recipe imported.",
@@ -536,7 +536,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         revision="ffc1-research-v1",
         sources=(
             _source(
-                "Mouse Control research corpus",
+                "OMUS research corpus",
                 "DISCOVERY 90%+ research payload — Keychron M6",
                 SourceTrust.REFERENCE,
                 notes="Project-owned structural fixture; semantic offsets and write packets were not imported.",
@@ -583,7 +583,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         revision="burst-research-v1",
         sources=(
             _source(
-                "Mouse Control research corpus",
+                "OMUS research corpus",
                 "DISCOVERY 90% research payload — Finalmouse ULX bounded response bursts",
                 SourceTrust.REFERENCE,
                 notes="Independently reconstructed abstract fixture; no upstream source or capture imported.",
@@ -724,7 +724,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
             FieldBinding(SemanticBehavior.CHARGING_STATE, "telemetry", 5),
             FieldBinding(
                 SemanticBehavior.LED_MODE, "telemetry", 6,
-                evidence_note="Classification only; Mouse Control does not manage RGB.",
+                evidence_note="Classification only; OMUS does not manage RGB.",
             ),
         ),
         write_scope=WriteScope.NEVER,
@@ -737,7 +737,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         revision="logical-record-research-v1",
         sources=(
             _source(
-                "Mouse Control research corpus",
+                "OMUS research corpus",
                 "DISCOVERY 90% research payload — RAWM logical record framing",
                 SourceTrust.REFERENCE,
                 notes=(
@@ -778,7 +778,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
         revision="async-state-research-v1",
         sources=(
             _source(
-                "Mouse Control research corpus",
+                "OMUS research corpus",
                 "DISCOVERY 90% research payload — MCHOSE Realtek/L7 pushed state",
                 SourceTrust.REFERENCE,
                 notes="Independently reconstructed read-side fixture; no upstream capture or command imported.",

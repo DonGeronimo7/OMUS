@@ -1,10 +1,23 @@
-# Mouse Control
+# OMUS
 
-The full-screen TUI is the complete interactive Mouse Control application.
+## One Mouse Universal System
+
+**Every mouse. One system.**
+
+OMUS is a Linux-native system for discovering, understanding, configuring, and
+controlling mice across vendors and protocols. It combines safe evdev/uinput
+remapping with exact-device hardware backends and evidence-driven Automatic
+Discovery. Proven operations remain distinct from inferred, learned, and
+experimental behavior.
+
+OMUS was previously known as Mouse Control. The `mouse-control` command and
+legacy configuration remain supported for existing users and scripts.
+
+The full-screen TUI is the complete interactive OMUS application.
 The CLI remains available for scripting, diagnostics, and advanced workflows;
 ordinary product capabilities are reachable from the TUI.
 
-Lighting is an optional per-device capability. Mouse Control models native
+Lighting is an optional per-device capability. OMUS models native
 Off, Static, Breathing, and Spectrum effects, full `#RRGGBB` color, zones,
 brightness, speed, and persistence only when the exact hardware reports them.
 It does not provide host-streamed animation or whole-PC RGB synchronization,
@@ -15,71 +28,72 @@ granting hardware write authority.
 **Native Linux mouse configuration backed by automatic hardware discovery.**
 
 Configure buttons, DPI, and polling where those controls are proven safe. If
-Mouse Control has never seen your exact mouse, its guided discovery workflow
+OMUS has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v0.9.9](https://img.shields.io/badge/release-v0.9.9-2ea44f)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.9)
-[![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
-[![VirusTotal release scan](https://github.com/DonGeronimo7/mouse-control/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/virustotal-release.yml)
-[![CodeQL](https://github.com/DonGeronimo7/mouse-control/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/mouse-control/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/mouse-control)
+[![Current release: v1.0.0](https://img.shields.io/badge/release-v1.0.0-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.0)
+[![CI](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml)
+[![VirusTotal release scan](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml)
+[![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
 
-> **Your unsupported mouse is exactly what we need.** If Mouse Control already
+> **Your unsupported mouse is exactly what we need.** If OMUS already
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v0.9.9](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.9).
+The current release is [v1.0.0](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.0).
 
 ## Install and run
 
 Download the package for your system from the
-[v0.9.9 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.9.9),
+[v1.0.0 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.0),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse-control-0.9.9-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus-1.0.0-1.fc44.noarch.rpm), then run:
 
 ```bash
-sudo dnf install ./mouse-control-0.9.9-1.fc44.noarch.rpm
+sudo dnf install ./omus-1.0.0-1.fc44.noarch.rpm
 ```
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse-control_0.9.9_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus_1.0.0_all.deb), then run:
 
 ```bash
-sudo apt install ./mouse-control_0.9.9_all.deb
+sudo apt install ./omus_1.0.0_all.deb
 ```
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/Mouse-Control-0.9.9-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/OMUS-1.0.0-x86_64.AppImage), then run:
 
 ```bash
-chmod +x Mouse-Control-0.9.9-x86_64.AppImage
-./Mouse-Control-0.9.9-x86_64.AppImage setup
+chmod +x OMUS-1.0.0-x86_64.AppImage
+./OMUS-1.0.0-x86_64.AppImage setup
 ```
 
 Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse_control-0.9.9-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.9.9/mouse_control-0.9.9.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus-1.0.0-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus-1.0.0.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:
 
 ```bash
-mouse-control
+omus
 ```
 
-`mouse-control setup` and `mouse-control tui` open the same interface. Do not
+`omus setup` and `omus tui` open the same interface. The former
+`mouse-control` command is a compatibility alias. Do not
 run normal setup or the background service as root.
 
 ## What to expect
@@ -93,7 +107,7 @@ review. Nothing is saved until you choose **Review / Save**.
 - Use `g/G` to jump to the first or last item.
 - Unknown DPI or polling support never prevents ordinary button remapping.
 
-Mouse Control can:
+OMUS can:
 
 - remap mouse buttons to mouse actions, keys, shortcuts, DPI cycling, or simple
   ordered macros;
@@ -106,7 +120,7 @@ Mouse Control can:
 - update supported installations without making users reinstall each release
   by hand.
 
-Mouse Control also models native per-device lighting where an exact backend
+OMUS also models native per-device lighting where an exact backend
 reports independently proven capability and write authority. Unqualified and
 source-backed-only lighting writes remain disabled.
 
@@ -119,43 +133,43 @@ that normally require Windows software or are not supported by Piper/libratbag.
 
 The shortest testing flow is:
 
-1. Install Mouse Control and connect the mouse.
-2. Run `mouse-control`.
+1. Install OMUS and connect the mouse.
+2. Run `omus`.
 3. Select the mouse under **Device**.
 4. Open **Hardware / Discovery** and choose **Run Guided Discovery** if offered.
 5. Follow the on-screen actions. You can skip discovery and still save normal
    button mappings.
 6. Generate the reports below and attach them to a
-   [New mouse / discovery result issue](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml).
+   [New mouse / discovery result issue](https://github.com/DonGeronimo7/OMUS/issues/new?template=hardware-compatibility.yml).
 
 Guided Discovery begins read-only. For DPI-button learning it collects quiet,
 normal-use, and repeated button samples so ordinary movement can be separated
 from action-specific reports. Recognizing a button or state is useful evidence;
-it does not by itself authorize Mouse Control to write a DPI or polling value.
+it does not by itself authorize OMUS to write a DPI or polling value.
 
 ### Create reports to attach
 
 Create the simple, human-readable hardware report:
 
 ```bash
-mouse-control support --guided
+omus support --guided
 ```
 
-After you confirm, it saves `mouse-control-<mouse-name>-report.txt` in your home
+After you confirm, it saves `omus-<mouse-name>-report.txt` in your home
 directory. It includes selected-device and basic system information, not a dump
 of unrelated USB devices.
 
 Create the structured Automatic Discovery report in the current directory:
 
 ```bash
-mouse-control discover --output mouse-control-discovery.json
+omus discover --output omus-discovery.json
 ```
 
 This JSON report is allowlisted and designed for community sharing: it excludes
 device paths, serial numbers, usernames, and input history. **Review every file
 before posting it** and remove anything you do not want to share.
 
-In the issue, tell us the exact model and connection type, what Mouse Control
+In the issue, tell us the exact model and connection type, what OMUS
 recognized, what worked or did not, whether DPI buttons or polling changes were
 observed, and what happened after reconnecting. The generated reports already
 contain technical identifiers such as VID:PID when available; you do not need
@@ -168,7 +182,7 @@ brands may share controllers, firmware families, report layouts, or sensors.
 ## Known hardware and discoverable hardware
 
 Not appearing in a compatibility table does **not** mean a mouse is useless to
-Mouse Control.
+OMUS.
 
 - **Known / validated hardware** has model-specific evidence for the listed
   operations. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
@@ -184,7 +198,7 @@ Mouse Control.
 
 ## Update
 
-Open the normal Mouse Control application and choose **Updates** to see the
+Open the normal OMUS application and choose **Updates** to see the
 installed version and installation type. Choose **Check for Updates** when you
 want to contact the official release endpoint; simply opening or redrawing the
 screen does not perform a network request. When a compatible stable release is
@@ -194,7 +208,7 @@ action while preserving package-manager ownership and approval.
 The command-line form remains available:
 
 ```bash
-mouse-control update
+omus update
 ```
 
 The updater recognizes documented RPM, DEB, AppImage, Python, and source
@@ -202,8 +216,8 @@ installations and respects the installation owner. It does not overwrite a
 package-managed install behind the package manager's back.
 
 ```bash
-mouse-control update --check   # check without changing anything
-mouse-control update --yes     # update without a confirmation question
+omus update --check   # check without changing anything
+omus update --yes     # update without a confirmation question
 ```
 
 ## Security and privacy
@@ -271,7 +285,7 @@ for the auditable details and provenance.
 
 Internally, evidence progresses through `OBSERVED`, `CORRELATED`, `VALIDATED`,
 and `PROVEN`. Beginners do not need to understand those states; their practical
-meaning is that Mouse Control says “not yet learned” instead of guessing.
+meaning is that OMUS says “not yet learned” instead of guessing.
 
 ## Everyday configuration
 
@@ -279,19 +293,22 @@ After setup, install the user service once if you want mappings restored when
 you sign in:
 
 ```bash
-mouse-control install-service
-mouse-control start
-mouse-control status
+omus install-service
+omus start
+omus status
 ```
 
-Other service commands are `mouse-control stop` and `mouse-control restart`.
-`mouse-control run` is the explicit foreground/debug command.
+Other service commands are `omus stop` and `omus restart`.
+`omus run` is the explicit foreground/debug command.
 
 Configuration is stored at:
 
 ```text
-~/.config/mouse-control/config.toml
+~/.config/omus/config.toml
 ```
+
+On first use, if this location is absent, OMUS copies the complete legacy
+`~/.config/mouse-control/` tree and retains the original as a backup.
 
 The TUI can create button mappings and basic sequential macros without manual
 editing. Macros consist only of key, chord, mouse-button, and millisecond-delay
@@ -303,15 +320,15 @@ The installed, vendor-neutral ruler tool measures physical CPI and observed
 polling from Linux motion events without sending vendor-protocol commands:
 
 ```bash
-mouse-control cpi --help
-mouse-control cpi --distance-mm 50.8
+omus cpi --help
+omus cpi --distance-mm 50.8
 ```
 
-Stop the Mouse Control service first if it owns the selected event device.
+Stop the OMUS service first if it owns the selected event device.
 
 ### Permissions
 
-Native packages install Mouse Control's udev rules. If a source installation
+Native packages install OMUS's udev rules. If a source installation
 cannot access the mouse or `/dev/uinput`, install the supplied rule:
 
 ```bash
@@ -323,7 +340,7 @@ sudo udevadm control --reload-rules
 Reconnect the mouse or log out and back in, then run:
 
 ```bash
-mouse-control check-permissions
+omus check-permissions
 ```
 
 ## Developers and protocol researchers
@@ -331,8 +348,8 @@ mouse-control check-permissions
 Source development belongs here rather than in the beginner install path:
 
 ```bash
-git clone https://github.com/DonGeronimo7/mouse-control.git
-cd mouse-control
+git clone https://github.com/DonGeronimo7/OMUS.git
+cd OMUS
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -368,7 +385,7 @@ Recommended topics: `linux`, `linux-gaming`, `mouse`, `gaming-mouse`, `hid`,
 
 ## Credits and provenance
 
-Mouse Control builds on public Linux input and mouse-protocol research. Its
+OMUS builds on public Linux input and mouse-protocol research. Its
 contribution is bringing that knowledge together with evidence-driven discovery
 and strict write-safety boundaries—not claiming every protocol fact was
 independently discovered here. See [CREDITS.md](CREDITS.md) for the projects and
@@ -378,5 +395,5 @@ maintainer review.
 
 ## License
 
-Mouse Control is licensed under the GNU General Public License, version 3 or
+OMUS is licensed under the GNU General Public License, version 3 or
 later. See [`LICENSE`](LICENSE).

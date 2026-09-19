@@ -1,4 +1,4 @@
-"""Command-line interface for mouse-control."""
+"""Command-line interface for OMUS."""
 
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ def status_service(*args, **kwargs):
 
 
 def _build_parser(*, configure_cpi: bool = False) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mouse-control")
+    parser = argparse.ArgumentParser(prog="omus", description="OMUS — One Mouse Universal System")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
@@ -347,7 +347,7 @@ def run_support(*, guided: bool = False) -> int:
     from .support import capture_button, probe, render_report
 
     print_banner()
-    print(style("Mouse Control Hardware Support", "purple") + "\n" + "─" * 31)
+    print(style("OMUS Hardware Support", "purple") + "\n" + "─" * 21)
     mice = get_mouse_devices()
     if not mice:
         print("No mouse devices were detected. Check that your mouse is connected and try again.")
@@ -375,7 +375,7 @@ def run_support(*, guided: bool = False) -> int:
         print("Support report cancelled.")
         return 0
     slug = "".join(char.lower() if char.isalnum() else "-" for char in selected.name).strip("-") or "mouse"
-    destination = Path.home() / f"mouse-control-{slug}-report.txt"
+    destination = Path.home() / f"omus-{slug}-report.txt"
     try:
         destination.write_text(render_report(report), encoding="utf-8")
     except OSError as exc:
@@ -394,7 +394,7 @@ def run_setup_wizard() -> int:
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         print(
-            "Mouse Control setup requires an interactive terminal. "
+            "OMUS setup requires an interactive terminal. "
             "No legacy prompt fallback is available.",
             file=sys.stderr,
         )

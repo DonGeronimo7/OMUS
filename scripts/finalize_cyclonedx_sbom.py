@@ -8,17 +8,17 @@ from pathlib import Path
 import uuid
 
 
-PROJECT_ID = "https://github.com/DonGeronimo7/mouse-control"
+PROJECT_ID = "https://github.com/DonGeronimo7/OMUS"
 
 
 def finalize(path: Path, version: str) -> str:
-    """Validate and finalize a reproducible Mouse Control CycloneDX document."""
+    """Validate and finalize a reproducible OMUS CycloneDX document."""
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("bomFormat") != "CycloneDX" or not document.get("specVersion"):
         raise ValueError("expected a CycloneDX JSON document with a specVersion")
 
     component = document.get("metadata", {}).get("component", {})
-    if component.get("name") != "mouse-control" or component.get("version") != version:
+    if component.get("name") != "omus" or component.get("version") != version:
         raise ValueError("SBOM root component does not match the release version")
 
     serial = f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'{PROJECT_ID}@{version}')}"

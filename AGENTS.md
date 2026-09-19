@@ -1,8 +1,8 @@
-# Mouse Control — Codex Operating Instructions
+# OMUS — Codex Operating Instructions
 
 ## Purpose and authority
 
-Mouse Control is a headless Linux mouse remapper. Optimize for correctness,
+OMUS is a headless Linux mouse remapper. Optimize for correctness,
 architecture preservation, demonstrated hardware evidence, regression
 prevention, and clear Git handoffs. Repository state is authoritative: if chat
 context conflicts with committed code, tests, this file, project status, or the
@@ -89,7 +89,7 @@ For read-only discovery, keep physical calibration, observation, and write
 authority separate. Trigger-only state must never invent a current stage and
 loses synchronization on reconnect; an absolute source may resynchronize.
 Observed physical DPI transitions never call `set_dpi()`, `DpiCycler`, or
-update desired hardware state as though Mouse Control wrote the hardware.
+update desired hardware state as though OMUS wrote the hardware.
 `MouseRemapper` owns grabbed evdev input: observers use its stream and never
 open competing readers. Preserve one-reader HID ownership through the existing
 session/subscription mechanism.

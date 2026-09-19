@@ -5,10 +5,10 @@ from __future__ import annotations
 import copy
 from datetime import date, datetime, time
 import json
-import os
 from pathlib import Path
 from typing import Any
 
+from .identity import canonical_directory
 from .performance import timed
 
 DEFAULT_DPI_STAGES = [800, 1500, 2000, 2500, 3000]
@@ -16,7 +16,7 @@ DEFAULT_DPI = 800
 
 
 def get_config_path() -> Path:
-    return Path(os.path.expanduser("~/.config/mouse-control/config.toml"))
+    return canonical_directory("config") / "config.toml"
 
 
 def generate_config(
@@ -29,7 +29,7 @@ def generate_config(
     """Generate the human-editable TOML configuration."""
     stages = DEFAULT_DPI_STAGES if dpi_stages is None else dpi_stages
     lines = [
-        "# mouse-control configuration",
+        "# OMUS configuration",
         "# Actions: passthrough, disable, dpi-cycle, mouse:BTN_*, key:KEY_*, chord:KEY_*+KEY_*, macro:NAME",
         "",
         "[device]",
@@ -144,7 +144,7 @@ def _dump_toml(data: dict[str, Any]) -> str:
     """Write parsed TOML while retaining unknown nested tables."""
     if not isinstance(data, dict):
         raise ValueError("Configuration root must be a table")
-    lines = ["# mouse-control configuration"]
+    lines = ["# OMUS configuration"]
 
     def write_table(values: dict[str, Any], path: list[str] | None = None) -> None:
         scalar_items = [(key, value) for key, value in values.items()

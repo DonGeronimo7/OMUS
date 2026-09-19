@@ -88,7 +88,7 @@ def test_udev_rule_is_not_world_writable_or_keyboard_permissive():
 def test_packaging_declares_gpl_and_installs_udev_rule():
     root = Path(__file__).parents[1]
     metadata = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
-    spec = (root / 'mouse-control.spec').read_text(encoding='utf-8')
+    spec = (root / 'omus.spec').read_text(encoding='utf-8')
     assert metadata['project']['license'] == {'text': 'GPL-3.0-or-later'}
     assert metadata['tool']['setuptools']['license-files'] == ['LICENSE', 'CREDITS.md']
     assert 'License:        GPL-3.0-or-later' in spec

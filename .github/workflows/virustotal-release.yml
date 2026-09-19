@@ -38,21 +38,21 @@ jobs:
           test "$RELEASE_TAG" = "v${version}"
           mkdir scan-assets
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir scan-assets \
-            --pattern "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
-            --pattern "mouse-control_${version}_all.deb" \
-            --pattern "Mouse-Control-${version}-x86_64.AppImage" \
-            --pattern "mouse_control-${python_version}-py3-none-any.whl" \
-            --pattern "mouse_control-${python_version}.tar.gz" \
-            --pattern "mouse-control-${version}.cdx.json" \
+            --pattern "omus-${base_version}-${package_release}.fc44.noarch.rpm" \
+            --pattern "omus_${version}_all.deb" \
+            --pattern "OMUS-${version}-x86_64.AppImage" \
+            --pattern "omus-${python_version}-py3-none-any.whl" \
+            --pattern "omus-${python_version}.tar.gz" \
+            --pattern "omus-${version}.cdx.json" \
             --pattern SHA256SUMS
           (cd scan-assets && sha256sum --check --strict SHA256SUMS)
           find scan-assets -maxdepth 1 -type f ! -name SHA256SUMS ! -name '*.cdx.json' -printf '%f\n' | LC_ALL=C sort > /tmp/scan-files
           printf '%s\n' \
-            "Mouse-Control-${version}-x86_64.AppImage" \
-            "mouse-control-${base_version}-${package_release}.fc44.noarch.rpm" \
-            "mouse-control_${version}_all.deb" \
-            "mouse_control-${python_version}-py3-none-any.whl" \
-            "mouse_control-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-scan-files
+            "OMUS-${version}-x86_64.AppImage" \
+            "omus-${base_version}-${package_release}.fc44.noarch.rpm" \
+            "omus_${version}_all.deb" \
+            "omus-${python_version}-py3-none-any.whl" \
+            "omus-${python_version}.tar.gz" | LC_ALL=C sort > /tmp/expected-scan-files
           diff -u /tmp/expected-scan-files /tmp/scan-files
       - name: Submit primary artifacts to VirusTotal
         id: virustotal

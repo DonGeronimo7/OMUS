@@ -6,7 +6,7 @@ This module deliberately separates three things that were historically mixed:
 * reversible research probes -- DEMONSTRATED exact-model grammars may be tested
   under explicit setup/research authorization; and
 * deeper read-side learning -- used when an unknown device has no executable
-  write grammar yet, so Mouse Control can still learn stage events/notifications.
+  write grammar yet, so OMUS can still learn stage events/notifications.
 
 A structural repertoire match is evidence about *where to investigate*.  It is
 never write authority by itself.

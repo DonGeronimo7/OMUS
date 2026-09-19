@@ -14,7 +14,7 @@ def _document(version="0.9.8"):
         "metadata": {
             "component": {
                 "bom-ref": "root-component",
-                "name": "mouse-control",
+                "name": "omus",
                 "type": "application",
                 "version": version,
             }

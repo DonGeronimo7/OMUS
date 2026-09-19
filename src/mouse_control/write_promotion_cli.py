@@ -191,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
 
         node = matching_interface_node(operation, physical)
 
-        print("Mouse Control — Learned Write Promotion")
+        print("OMUS — Learned Write Promotion")
         print("=======================================")
         print(
             f"Device: {mouse.name} "

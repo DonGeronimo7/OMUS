@@ -1,6 +1,6 @@
 # Codex → ChatGPT Implementation Handoff
 
-Use this template at the end of every substantial Mouse Control implementation task.
+Use this template at the end of every substantial OMUS implementation task.
 
 ---
 

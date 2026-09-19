@@ -69,8 +69,8 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
                   Path("/etc/udev/rules.d/71-mouse-control-uaccess.rules"))
 
     lines = [
-        "Mouse Control diagnostic (read-only)",
-        _status("Mouse Control", "PASS", __version__),
+        "OMUS diagnostic (read-only)",
+        _status("OMUS", "PASS", __version__),
         _status("Linux", "PASS", f"{distribution()} / {platform.release()}"),
         _status("Architecture", "PASS", platform.machine()),
         _status("Python", "PASS", platform.python_version()),
@@ -82,9 +82,9 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
                 "usable" if input_ok else "no readable mouse and writable /dev/uinput combination"),
         _status("Native HID", "PASS", "protocol drivers enabled"),
         _status("Native Razer", "PASS", "exact-model protocol driver enabled"),
-        _status("mouse-control user service", "PASS" if service_running else ("WARNING" if service_installed else "MISSING"),
+        _status("OMUS user service", "PASS" if service_running else ("WARNING" if service_installed else "MISSING"),
                 "running" if service_running else ("stopped" if service_installed else "not installed")),
-        _status("Mouse Control udev rule", "PASS" if any(path.is_file() for path in rule_paths) else "MISSING"),
+        _status("OMUS udev rule", "PASS" if any(path.is_file() for path in rule_paths) else "MISSING"),
         "Detected mouse devices:",
     ]
     lines.extend(_mouse_lines(mice) or ["- none safely readable"])
@@ -92,7 +92,7 @@ def doctor_lines(mice: list[MouseDevice] | None = None) -> list[str]:
 
 
 def print_doctor(*, report: bool = False, mice: list[MouseDevice] | None = None) -> int:
-    title = "Mouse Control hardware compatibility report" if report else None
+    title = "OMUS hardware compatibility report" if report else None
     if title:
         print(title)
         print("=" * len(title))
@@ -120,5 +120,5 @@ def doctor_fix(confirm: Callable[[str], str] = input) -> int:
     if answer not in ("y", "yes"):
         print("No changes made.")
         return 0
-    print("For safety, Mouse Control does not run privileged package commands. Copy and run the proposed command yourself.")
+    print("For safety, OMUS does not run privileged package commands. Copy and run the proposed command yourself.")
     return 0

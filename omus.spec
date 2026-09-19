@@ -1,10 +1,11 @@
-Name:           mouse-control
-Version:        0.9.9
+Name:           omus
+Version:        1.0.0
 Release:        1%{?dist}
-Summary:        Linux mouse remapping with Automatic Discovery
+Summary:        One Mouse Universal System for Linux
 License:        GPL-3.0-or-later
-%global python_version 0.9.9
-Source0:        mouse_control-%{python_version}.tar.gz
+URL:            https://github.com/DonGeronimo7/OMUS
+%global python_version 1.0.0
+Source0:        omus-%{python_version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  python3-build
@@ -25,14 +26,16 @@ Requires:       python3-evdev
 Requires:       python3-dbus-next
 Requires:       python3-packaging
 Requires:       systemd-udev
+Provides:       mouse-control = %{version}-%{release}
+Obsoletes:      mouse-control < %{version}-%{release}
 
 %description
-A command-line mouse button remapper using evdev and uinput, with validated
+OMUS discovers, configures, and remaps mice using evdev and uinput, with validated
 hardware DPI configuration through native protocol drivers. Includes an
 interactive setup wizard and commands for managing a systemd user service.
 
 %prep
-%autosetup -n mouse_control-%{python_version}
+%autosetup -n omus-%{python_version}
 
 %build
 %pyproject_wheel
@@ -43,13 +46,15 @@ export PIP_NO_COMPILE=1
 %pyproject_install
 install -Dpm 0644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
   %{buildroot}%{_udevrulesdir}/71-mouse-control-uaccess.rules
-install -Dpm 0644 packaging/appimage/mouse-control.desktop \
-  %{buildroot}%{_datadir}/applications/mouse-control.desktop
-for size in 512 256 128 64 48 32; do
-  install -Dpm 0644 assets/icons/hicolor/${size}x${size}/apps/mouse-control.png \
-    %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/mouse-control.png
+install -Dpm 0644 packaging/appimage/omus.desktop \
+  %{buildroot}%{_datadir}/applications/omus.desktop
+for size in 512 256 128 64 48 32 24 16; do
+  install -Dpm 0644 assets/icons/hicolor/${size}x${size}/apps/omus.png \
+    %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/omus.png
 done
-desktop-file-validate %{buildroot}%{_datadir}/applications/mouse-control.desktop
+desktop-file-validate %{buildroot}%{_datadir}/applications/omus.desktop
+install -Dpm 0644 packaging/omus.metainfo.xml \
+  %{buildroot}%{_datadir}/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
 %pyproject_save_files mouse_control
 # pip records bytecode even when it is not a distributable source file.  Remove
 # it only after the generated file manifest has been created, then omit it from
@@ -60,7 +65,7 @@ sed -i '\|__pycache__|d' %{pyproject_files}
 %check
 /usr/bin/python3 -m pytest -q tests
 /usr/bin/python3 -m compileall -q src tests
-for command in mouse-control mouse-control-discover mouse-control-sensor-calibrate mouse-control-write-trace mouse-control-write-promote mouse-control-discovery-monitor mouse-control-polling-promote; do
+for command in omus mouse-control mouse-control-discover mouse-control-sensor-calibrate mouse-control-write-trace mouse-control-write-promote mouse-control-discovery-monitor mouse-control-polling-promote; do
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
     %{buildroot}%{_bindir}/$command --help >/dev/null
 done
@@ -72,6 +77,8 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %doc README.md CHANGELOG.md CREDITS.md SECURITY.md
 %doc docs/COMPATIBILITY.md
 %{_bindir}/mouse-control
+%{_bindir}/omus
+%{_bindir}/omus-launcher
 %{_bindir}/mouse-control-launcher
 %{_bindir}/mouse-control-discover
 %{_bindir}/mouse-control-sensor-calibrate
@@ -80,9 +87,13 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_bindir}/mouse-control-discovery-monitor
 %{_bindir}/mouse-control-polling-promote
 %{_udevrulesdir}/71-mouse-control-uaccess.rules
-%{_datadir}/applications/mouse-control.desktop
-%{_datadir}/icons/hicolor/*/apps/mouse-control.png
+%{_datadir}/applications/omus.desktop
+%{_datadir}/icons/hicolor/*/apps/omus.png
+%{_datadir}/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
 %changelog
+* Sat Sep 19 2026 Marc-Anthony Geronimo - 1.0.0-1
+- Rebrand the public product as OMUS while preserving Mouse Control compatibility.
+
 * Sat Sep 19 2026 Marc-Anthony Geronimo - 0.9.9-1
 - Complete the canonical TUI, updater, service controls, and CLI capability parity.
 - Add safe per-device, multi-zone lighting models with write authority unchanged.

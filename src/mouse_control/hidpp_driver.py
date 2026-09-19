@@ -198,7 +198,7 @@ class Hidpp20Driver:
         flags = response.parameters[0]
         values = tuple(1000 // milliseconds for milliseconds in range(1, 9)
                        if flags & (1 << (milliseconds - 1)))
-        # The driver describes protocol mechanics. Whether Mouse Control may
+        # The driver describes protocol mechanics. Whether OMUS may
         # enter Host mode is a device-specific policy decision in the backend.
         writable = ONBOARD_PROFILES_FEATURE_ID in self.features
         return ReportRateCapabilities(readable=bool(values), writable=writable,

@@ -117,7 +117,7 @@ ACTION_TEMPLATES: Mapping[str, ControlledAction] = {
     "PROTOCOL_REREAD": _action(
         "PROTOCOL_REREAD", ControlledActionType.QUIET,
         "fresh protocol state re-read", ActionSafetyClass.PASSIVE,
-        "Leave the selected mouse unchanged while Mouse Control waits for fresh state.",
+        "Leave the selected mouse unchanged while OMUS waits for fresh state.",
         effort=0, duration=1, burden=1, tags=("persistence", "reread", "freshness"),
     ),
     "RECONNECT_PERSISTENCE": _action(

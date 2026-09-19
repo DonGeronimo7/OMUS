@@ -191,7 +191,7 @@ def run_guided_dpi_learning(
             1,
             5,
             "Quiet control",
-            "Leave the mouse completely untouched. This teaches Mouse Control what idle traffic looks like.",
+            "Leave the mouse completely untouched. This teaches OMUS what idle traffic looks like.",
         ),
         GuidedStep(
             2,
@@ -533,7 +533,7 @@ def run_deep_dpi_stage_learning(
             "Advance physical DPI stage",
             (
                 "Keep the mouse still. After starting the sample, press the physical DPI/profile "
-                "button exactly once. Mouse Control will then calibrate the resulting stage."
+                "button exactly once. OMUS will then calibrate the resulting stage."
             ),
         )
         if not prompt(step):

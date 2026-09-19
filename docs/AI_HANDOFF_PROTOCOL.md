@@ -1,7 +1,7 @@
 # ChatGPT ↔ Codex Handoff Protocol
 
 This file is the persistent coordination contract for AI-assisted development of
-Mouse Control. It exists so ChatGPT can act as project manager/reviewer while
+OMUS. It exists so ChatGPT can act as project manager/reviewer while
 Codex acts as the implementation engineer without relying on chat memory.
 
 The protocol is intentionally stored in Git. Repository state is authoritative.
