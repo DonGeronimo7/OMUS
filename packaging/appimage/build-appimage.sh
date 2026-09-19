@@ -42,6 +42,13 @@ fi
 CC=gcc "$bundled_python" -m pip install \
   --disable-pip-version-check \
   --no-compile \
+  --require-hashes \
+  --requirement requirements/runtime.lock.txt
+
+"$bundled_python" -m pip install \
+  --disable-pip-version-check \
+  --no-compile \
+  --no-deps \
   .
 
 # The AppImage enters Mouse Control through usr/bin/mouse-control below.  Drop

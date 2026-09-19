@@ -194,6 +194,11 @@ authority, and the shipped udev rules avoid blanket keyboard or hidraw access.
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting, updater trust,
 device-write, usbmon, service, and privacy boundaries.
+Release checksums, SBOMs, attestations, offline provenance, and dependency-lock
+policy are documented in
+[`docs/SECURITY_SUPPLY_CHAIN.md`](docs/SECURITY_SUPPLY_CHAIN.md). Contributors
+should also follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
+[`development policy`](docs/DEVELOPMENT_POLICY.md).
 
 ## How discovery works
 

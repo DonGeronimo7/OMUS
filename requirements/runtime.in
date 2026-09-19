@@ -1,0 +1,4 @@
+# Direct runtime dependencies used to resolve the CI/release lock.
+dbus-next>=0.2.3
+evdev>=1.0.0
+packaging>=23.0

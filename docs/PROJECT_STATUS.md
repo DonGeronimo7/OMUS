@@ -1,5 +1,29 @@
 # Mouse Control Project Status
 
+## 2026-09-19 — OpenSSF Scorecard maximum hardening
+
+- All Python workflow environments now use separate reviewed inputs and exact,
+  SHA-256-checked transitive locks. CI, audit, build, SBOM, release, AppImage,
+  and fuzz paths install with hash enforcement and local artifacts use
+  dependency-free installation only after the lock is present.
+- ClusterFuzzLite now continuously exercises the bounded HID descriptor/report
+  and offline vendor-capture parsers. Its builder image is digest-pinned, its
+  Actions are full-SHA pinned, and both real Atheris targets built and passed
+  100-run libFuzzer smokes without hardware, network, persistence, or writes.
+- Future releases export and verify genuine GitHub/Sigstore SLSA provenance as
+  a downloadable release asset. The original v0.9.8 provenance was verified
+  against every exact checksum-listed artifact and published; older releases
+  lacked original attestation records and remain untouched.
+- Security reporting, development/change control, regression-test rules,
+  dependency maintenance, and Best Practices evidence are now explicit.
+  External badge enrollment, PyPI ownership, branch protection, and repository
+  security toggles remain separate owner-verifiable controls.
+- Locked CI validation passed 1101 tests, Ruff, workflow/lock validation,
+  compilation, and whitespace checks. The clean Fedora RPM `%check` also passed
+  1101 tests plus packaged CLI smokes; wheel reproducibility, clean wheel/sdist
+  builds, and dependency audit passed. No runtime or hardware path changed, and
+  no physical hardware validation was performed.
+
 ## 2026-09-18 — PR #6 clean-build and runtime-teardown remediation
 
 - The no-isolation reproducibility environment now installs explicit pinned
