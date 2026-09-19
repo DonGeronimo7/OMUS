@@ -13,6 +13,7 @@ from enum import Enum, auto
 import io
 from typing import Any, Callable
 
+from . import __version__
 from .calibrated_profiles import find_calibrated_profile
 from .guided_discovery import GuidedDiscoveryOutcome, load_known_device_state
 from .hardware import HardwareError, get_backend
@@ -22,6 +23,7 @@ from .discovery_models import DiscoveryProgress
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 from .performance import timed
 from .lab_orchestrator import initial_lab_hypotheses, plan_next_experiment
+from .updater import Installation, UpdateStatus, detect_installation, running_executable
 
 
 def _format_timing_ns(value: int | None) -> str:
@@ -186,6 +188,7 @@ class SetupController:
         known_device_loader: Callable[[Any], Any | None] = load_known_device_state,
         initialize_backend: bool = True,
         selected_index: int | None = None,
+        update_installation: Installation | None = None,
     ) -> None:
         self.devices = tuple(devices)
         self.existing_config = existing_config
@@ -210,7 +213,11 @@ class SetupController:
         self.polling_measurement: Any | None = None
         self.battery_state: Any | None = None
         self.battery_error: str | None = None
-        self.update_status: Any | None = None
+        self.update_installation = update_installation or Installation(
+            "unknown", running_executable()
+        )
+        self.update_status: UpdateStatus | None = None
+        self.update_error: str | None = None
         self.observed_hardware = ObservedHardwareState()
         self.status = "Choose a mouse. Automatic hardware discovery runs before configuration."
         self.notice = ""
@@ -257,6 +264,7 @@ class SetupController:
             backend_factory=self._backend_factory,
             known_device_loader=self._known_device_loader,
             selected_index=selected_index,
+            update_installation=self.update_installation,
         )
 
     @property
@@ -753,7 +761,7 @@ class SetupController:
         if self.section is SetupSection.SERVICE:
             return 6
         if self.section is SetupSection.UPDATE:
-            return 2
+            return 2 if self.update_action_available else 1
         if self.section is SetupSection.TOOLS:
             return 8
         if self.section is SetupSection.ABOUT:
@@ -931,9 +939,11 @@ class SetupController:
                                     ("status", "start", "stop", "restart")[self.row_cursor - 2])
 
         if self.section is SetupSection.UPDATE:
-            return ControllerAction(
-                ActionKind.CHECK_UPDATE if self.row_cursor == 0 else ActionKind.START_UPDATE
-            )
+            if self.row_cursor == 0:
+                return ControllerAction(ActionKind.CHECK_UPDATE)
+            if self.update_action_available:
+                return ControllerAction(ActionKind.START_UPDATE)
+            return ControllerAction()
 
         if self.section is SetupSection.TOOLS:
             return ControllerAction(ActionKind.OPEN_PRODUCT_TOOL, self.row_cursor)
@@ -954,6 +964,39 @@ class SetupController:
             self.row_cursor = 0
             return ControllerAction()
         return ControllerAction()
+
+    @property
+    def update_action_available(self) -> bool:
+        state = self.update_status
+        return bool(
+            state
+            and not self.update_error
+            and state.update_available
+            and state.update_supported
+        )
+
+    def apply_update_status(self, state: UpdateStatus) -> None:
+        """Store one updater-owned check result without touching setup choices."""
+
+        self.update_status = state
+        self.update_error = None
+        self.update_installation = state.installation
+        if not state.update_available:
+            self.status = f"Mouse Control {state.installed_version} is up to date."
+        elif state.update_supported:
+            self.status = (
+                f"Update available: {state.installed_version} → {state.available_version}."
+            )
+        else:
+            self.status = state.unavailable_reason
+        self._clamp_cursor()
+
+    def apply_update_error(self, message: str) -> None:
+        """Record a failed check without mutating configuration or prior evidence."""
+
+        self.update_error = message
+        self.status = f"Update check failed; setup state is unchanged. {message}"
+        self._clamp_cursor()
 
     def set_lighting_state(self, state: LightingState) -> bool:
         capability = next(
@@ -1531,18 +1574,48 @@ class SetupController:
             ]
 
         if self.section is SetupSection.UPDATE:
-            from . import __version__
-            latest = (
-                getattr(self.update_status, "available_version", None) or "not checked"
-            )
-            return [
+            state = self.update_status
+            rows = [
                 DisplayRow("Mouse Control Updates", role="heading"),
-                DisplayRow(f"Installed version: {__version__}", role="primary"),
-                DisplayRow(f"Available version: {latest}"),
-                DisplayRow("Check for updates", 0, role="action"),
-                DisplayRow("Start verified update", 1, role="action"),
-                DisplayRow("Uses the canonical signed-source/checksum updater path.", dim=True),
+                DisplayRow(
+                    f"Installed version: {state.installed_version if state else __version__}",
+                    role="primary",
+                ),
+                DisplayRow(f"Installation type: {self.update_installation.description}"),
             ]
+            if self.update_installation.detail:
+                rows.append(DisplayRow(self.update_installation.detail, dim=True))
+            if self.update_error:
+                rows.append(DisplayRow(f"Update status: check failed — {self.update_error}"))
+            elif state is None:
+                rows.append(DisplayRow("Update status: not checked"))
+            elif not state.update_available:
+                rows.extend((
+                    DisplayRow(f"Latest stable version: {state.available_version}"),
+                    DisplayRow("Update status: installed version is current"),
+                ))
+            elif state.update_supported:
+                rows.extend((
+                    DisplayRow(f"Latest stable version: {state.available_version}"),
+                    DisplayRow("Update status: compatible update available"),
+                ))
+            else:
+                rows.extend((
+                    DisplayRow(f"Latest stable version: {state.available_version}"),
+                    DisplayRow("Update status: update available; automatic update unavailable"),
+                    DisplayRow(state.unavailable_reason, dim=True),
+                ))
+            rows.extend((
+                DisplayRow(""),
+                DisplayRow("Check for Updates", 0, role="action"),
+            ))
+            if self.update_action_available:
+                rows.append(DisplayRow("Update Mouse Control", 1, role="action"))
+            rows.extend((
+                DisplayRow("Checks occur only when you choose Check for Updates.", dim=True),
+                DisplayRow("Review / Save remains configuration-only.", dim=True),
+            ))
+            return rows
 
         if self.section is SetupSection.TOOLS:
             labels = (
@@ -1559,7 +1632,6 @@ class SetupController:
             ]
 
         if self.section is SetupSection.ABOUT:
-            from . import __version__
             backend = getattr(self.backend, "name", "unavailable")
             return [
                 DisplayRow("About Mouse Control", role="heading"),
@@ -1654,12 +1726,17 @@ def run_setup_tui(
     """Run the full-screen setup interface and always restore terminal state."""
     from .setup_tui_curses import CursesSetupApp, run_curses
 
+    try:
+        update_installation = detect_installation()
+    except (OSError, RuntimeError, ValueError):
+        update_installation = Installation("unknown", running_executable())
     controller = SetupController(
         devices,
         existing_config,
         choices_factory=choices_factory,
         backend_factory=backend_factory,
         initialize_backend=False,
+        update_installation=update_installation,
     )
     app = CursesSetupApp(controller)
     try:

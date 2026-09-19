@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import curses
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 import errno
+import io
 from pathlib import Path
 import queue
 import threading
@@ -52,6 +54,7 @@ from .tui_presentation import (
     visible_window,
     wrap_text,
 )
+from .updater import UpdateError, inspect_update, run_update
 from .vendor_capture import VendorCaptureError, VendorCaptureStore
 from .wizard import ButtonCaptureError, get_button_name
 
@@ -186,8 +189,16 @@ class DpiEditSession:
 class CursesSetupApp:
     """Yazi-inspired curses renderer around the pure setup controller."""
 
-    def __init__(self, controller: SetupController) -> None:
+    def __init__(
+        self,
+        controller: SetupController,
+        *,
+        update_inspector: Callable[..., Any] = inspect_update,
+        update_runner: Callable[..., int] = run_update,
+    ) -> None:
         self.controller = controller
+        self._update_inspector = update_inspector
+        self._update_runner = update_runner
         self.stdscr = None
         self._highlight = curses.A_REVERSE
         self._ok = curses.A_BOLD
@@ -833,47 +844,75 @@ class CursesSetupApp:
             persistence=(current.persistence if current is not None else zone.persistence[0]),
         ))
 
-    def _run_update_action(self, *, install: bool) -> None:
-        from contextlib import redirect_stderr, redirect_stdout
-        import io
-        from .updater import inspect_update, run_update
-        if install and not self._confirm(
+    def _check_for_updates(self) -> None:
+        """Run exactly one updater-owned check after an explicit action."""
+
+        try:
+            state = self._update_inspector(
+                installation=self.controller.update_installation
+            )
+        except UpdateError as exc:
+            self.controller.apply_update_error(str(exc))
+            return
+        self.controller.apply_update_status(state)
+
+    def _start_update(self) -> None:
+        """Hand off to the canonical updater with package approval preserved."""
+
+        state = self.controller.update_status
+        if not self.controller.update_action_available or state is None:
+            self.controller.status = "Check for a compatible update before starting one."
+            return
+        if not self._confirm(
             "Update Mouse Control?",
             [
-                "The canonical updater verifies the official release and checksum manifest.",
-                "The current installation is retained if verification fails.",
+                f"Update {state.installed_version} → {state.available_version}.",
+                "The existing updater will verify downloads and preserve package ownership.",
+                "Package-manager approval remains interactive.",
             ],
-            yes="Enter Start update",
+            yes="Enter Continue",
             no="b Cancel",
         ):
+            self.controller.status = "Update cancelled; the installation was not changed."
             return
+
+        output = io.StringIO()
+        terminal_suspended = self.stdscr is not None
         try:
-            if not install:
-                state = inspect_update()
-                self.controller.update_status = state
-                self.controller.status = (
-                    f"Update available: {state.installed_version} → {state.available_version}."
-                    if state.update_available else
-                    f"Mouse Control {state.installed_version} is up to date."
-                )
-                return
-            output = io.StringIO()
+            if terminal_suspended:
+                curses.def_prog_mode()
+                curses.endwin()
             with redirect_stdout(output), redirect_stderr(output):
-                status = run_update(check=False, assume_yes=True)
+                result = self._update_runner(
+                    check=False,
+                    assume_yes=False,
+                    input_func=lambda _prompt: "y",
+                )
+        except KeyboardInterrupt:
+            self.controller.status = "Update cancelled; the installation was not changed."
+            return
         except Exception as exc:
             self.controller.status = f"Update failed safely: {exc}"
             return
-        self.controller.status = (
-            "Update check finished."
-            if not install
-            else (
-                "Update finished successfully."
-                if status == 0
-                else "Update did not complete; existing installation retained."
-            )
-        )
+        finally:
+            if terminal_suspended:
+                try:
+                    curses.reset_prog_mode()
+                    self.stdscr.refresh()
+                except curses.error:
+                    pass
+
         detail = output.getvalue().strip()
-        if detail:
+        if result == 0:
+            self.controller.status = (
+                "Updater operation finished without an error; check again to refresh "
+                "version status."
+            )
+        else:
+            self.controller.status = (
+                "Update did not complete; the existing installation was not manually replaced."
+            )
+        if detail and self.stdscr is not None:
             self._modal("Update result", detail.splitlines()[-8:])
             self.stdscr.getch()
 
@@ -1049,6 +1088,7 @@ class CursesSetupApp:
                 "Enter  select, edit, or continue",
                 "b / Esc  go back",
                 "q  cancel setup (confirmation required)",
+                "Update checks run only from Updates → Check for Updates.",
                 "No configuration is saved until Review → Save and Finish.",
             ],
             yes="Enter Close",
@@ -2043,9 +2083,9 @@ class CursesSetupApp:
                 elif action.kind is ActionKind.EDIT_LIGHTING:
                     self._lighting_editor(int(action.payload))
                 elif action.kind is ActionKind.CHECK_UPDATE:
-                    self._run_update_action(install=False)
+                    self._check_for_updates()
                 elif action.kind is ActionKind.START_UPDATE:
-                    self._run_update_action(install=True)
+                    self._start_update()
                 elif action.kind is ActionKind.OPEN_PRODUCT_TOOL:
                     self._open_product_tool(int(action.payload))
                 elif action.kind is ActionKind.SERVICE_ACTION:

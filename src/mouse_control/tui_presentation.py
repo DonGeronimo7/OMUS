@@ -137,7 +137,7 @@ def status_label(text: str) -> str:
         return "ERROR"
     if any(word in lowered for word in ("warning", "unknown", "unverified", "pending")):
         return "CHECK"
-    if any(word in lowered for word in ("ready", "complete", "saved", "proven")):
+    if any(word in lowered for word in ("ready", "complete", "saved", "proven", "up to date")):
         return "READY"
     if any(word in lowered for word in ("preparing", "loading", "progress")):
         return "WORKING"

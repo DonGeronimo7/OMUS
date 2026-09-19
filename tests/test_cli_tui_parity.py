@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from mouse_control import updater
 from mouse_control.cli import _build_parser
 from mouse_control.product_capabilities import CAPABILITIES
 from mouse_control.setup_tui import ActionKind, SetupSection
@@ -49,6 +52,15 @@ def test_service_update_and_tools_rows_dispatch_canonical_actions():
     controller.section_index = tuple(SetupSection).index(SetupSection.UPDATE)
     controller.row_cursor = 0
     assert controller.activate().kind is ActionKind.CHECK_UPDATE
+    state = updater.UpdateStatus(
+        updater.__version__,
+        "999.0",
+        True,
+        updater.Installation("rpm", Path("/usr/bin/mouse-control"), "mouse-control"),
+        updater.Release("999.0", ()),
+        True,
+    )
+    controller.apply_update_status(state)
     controller.row_cursor = 1
     assert controller.activate().kind is ActionKind.START_UPDATE
 

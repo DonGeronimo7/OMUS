@@ -30,6 +30,8 @@ def test_inspect_update_is_presentation_free_and_reuses_canonical_detection(monk
     assert status.installed_version == updater.__version__
     assert status.available_version == future_release_version()
     assert status.update_available
+    assert status.update_supported is False
+    assert "source workflow" in status.unavailable_reason
 
 
 def asset(name, version="0.8.0"):
@@ -118,6 +120,41 @@ def test_asset_selection_normalizes_architecture_and_rejects_ambiguity(monkeypat
 
 def test_future_release_version_is_newer_than_current():
     assert updater.is_newer(future_release_version(), updater.__version__)
+
+
+def test_inspect_update_performs_one_fetch_and_preserves_owner_policy():
+    installation = updater.Installation(
+        "deb", Path("/usr/bin/mouse-control"), "mouse-control"
+    )
+    calls = []
+
+    def fetch():
+        calls.append(True)
+        return release(future_release_version())
+
+    state = updater.inspect_update(installation=installation, fetcher=fetch)
+
+    assert calls == [True]
+    assert state.installation is installation
+    assert state.installed_version == updater.__version__
+    assert state.available_version == future_release_version()
+    assert state.update_available is True
+    assert state.update_supported is True
+
+
+def test_inspect_update_requires_compatible_appimage_asset(monkeypatch):
+    monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
+    installation = updater.Installation(
+        "appimage", Path("/opt/Mouse-Control.AppImage")
+    )
+    state = updater.inspect_update(
+        installation=installation,
+        fetcher=lambda: release(future_release_version()),
+    )
+
+    assert state.update_available is True
+    assert state.update_supported is False
+    assert "identify one .appimage" in state.unavailable_reason
 
 @pytest.mark.parametrize(("installed", "latest", "expected"), [
     ("0.7.4", "0.8.0", True), ("0.9.9", "0.10.0", True),

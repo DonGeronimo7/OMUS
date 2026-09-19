@@ -5,6 +5,29 @@ Baseline: `v0.9.8` at `e3c48c56f67c00568de0052228adb6832180c37b`
 clean on `main`; implementation continues on
 `codex/post-v0.9.8-unified-addendum`.
 
+## Parallel updater reconciliation
+
+The canonical-TUI updater implementations at unified-addendum commit
+`bd22e158847f49a934f5f5eeb2e1e6b2d2f019c1` and dedicated-updater commit
+`d3bb3bbc198a33825df2e716a431dcf47d3c4d4e` were compared component by
+component before reconciliation. The result has one Updates route, one setup
+controller, one updater UI state, and one updater authority.
+
+| Overlap | Retained implementation | Reason |
+|---|---|---|
+| navigation and screen integration | unified addendum | preserves the broader canonical surface and parity inventory |
+| controller/state location | unified addendum, strengthened in place | avoids a second controller or updater model; remains outside `SetupChoices` |
+| check and compatibility result | dedicated updater behavior in `updater.py` | structured source/unknown/package-source/AppImage protection is updater-owned |
+| network timing | dedicated updater behavior | only the explicit Check action calls the inspector; open/redraw/back are inert |
+| action visibility and status/error rendering | dedicated updater behavior adapted to the unified screen | update is offered only after a successful compatible check |
+| execution and approval | dedicated updater behavior | existing updater is called with interactive semantics while curses is suspended |
+| download, checksum, origin, package, and service operations | existing shared `updater.py` paths | preserves the mature single source of truth and package ownership |
+
+The final canonical order is exactly: Device; Hardware Discovery; Discovery
+Lab; DPI; Polling; Buttons; Lighting; Service; Updates; Tools / Advanced;
+About; Review / Save. The enforced capability inventory confirms that no mature
+top-level CLI capability lost its canonical application route.
+
 ## CLI / TUI parity
 
 The executable inventory is enforced by `product_capabilities.CAPABILITIES`.

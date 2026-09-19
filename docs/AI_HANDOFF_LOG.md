@@ -1,5 +1,33 @@
 # AI handoff log
 
+## 2026-09-19 — Parallel canonical-TUI updater reconciliation
+
+- Compared the updater/TUI implementations at unified-addendum commit
+  `bd22e158847f49a934f5f5eeb2e1e6b2d2f019c1` and dedicated-updater commit
+  `d3bb3bbc198a33825df2e716a431dcf47d3c4d4e`. Reconciliation was manual on
+  `codex/post-v0.9.8-unified-addendum`; no merge or cherry-pick was used.
+- Retained the unified addendum's single controller/state location, complete
+  twelve-screen navigation, Lighting architecture, Service controls, Tools,
+  About, and capability inventory. Adopted the dedicated branch's stronger
+  updater-owned compatibility policy, explicit-check-only behavior, dynamic
+  update action, protected source/unknown/package-source/AppImage states,
+  interactive approval, curses suspension during execution, and failure/
+  cancellation isolation from `SetupChoices`.
+- Release fetching, version comparison, asset selection, package detection,
+  SHA256SUMS and trusted-origin verification, package-manager execution, and
+  service restoration remain centralized in `updater.py`; no second controller,
+  updater state model, release logic, or package logic was created.
+- Validation passed: updater/TUI/navigation `218`; lighting `64`; service and
+  lifecycle `143`; packaging metadata/entry points `74`; full suite `1131
+  passed, 1 warning`; Fedora RPM `%check` `1131 passed, 1 warning`. Compileall,
+  `git diff --check`, workflow validation, wheel/sdist, Fedora RPM, and packaged
+  command smokes passed. The warning is the existing GLib warning. Build and
+  installation staging remained under `/tmp`; no host installation occurred.
+- Remaining acceptance is physical only: installed desktop/terminal layout and
+  navigation, a real explicit GitHub check, each supported installation/update
+  path on a disposable host, service restoration, and exact-model lighting/RMW/
+  reconnect behavior. No push, main merge, tag, or release occurred.
+
 ## 2026-09-18 — Post-v0.9.8 unified addendum foundation
 
 - Started from clean tagged `v0.9.8` (`e3c48c5`) and created

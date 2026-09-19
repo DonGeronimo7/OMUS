@@ -1,5 +1,30 @@
 # Mouse Control Project Status
 
+## 2026-09-19 — Parallel pre-v1 TUI updater reconciliation
+
+- Reconciled the dedicated updater work at `d3bb3bb` into the broader canonical
+  TUI at `bd22e15` without merging or cherry-picking either implementation.
+  The unified controller, Updates screen, navigation, Lighting, Tools / Advanced,
+  About, Service controls, and capability-parity inventory remain authoritative.
+- The updater now owns the structured installed/latest/installation-policy
+  result used by the TUI. Source checkouts, unknown/package-source installs, and
+  incompatible AppImages are represented honestly and cannot expose an update
+  action. RPM, DEB, AppImage, and pip continue through their existing updater
+  paths; checksums, trusted origins, package ownership, approval, and service
+  restoration remain in `updater.py`.
+- Entering, redrawing, backing out of, or cancelling the Updates screen performs
+  no network or updater operation. A check occurs only from its explicit action,
+  and updater UI status remains independent of configuration choices and Review /
+  Save. The update action uses the existing updater with interactive approval
+  semantics and temporarily leaves curses so package-manager interaction remains
+  usable.
+- Focused validation passed 218 updater/TUI/navigation tests, 64 lighting tests,
+  143 service/lifecycle tests, and 74 packaging/entry-point tests. The complete
+  suite and Fedora RPM `%check` each passed 1131 tests with the existing GLib
+  warning. Compileall, whitespace, workflow policy, wheel/sdist, RPM, and
+  packaged-command smoke checks passed. No host installation, push, merge, tag,
+  release, or physical hardware validation occurred.
+
 ## 2026-09-18 — Post-v0.9.8 canonical TUI and lighting foundation
 
 - The canonical TUI now includes dedicated Lighting, Updates, Tools / Advanced,

@@ -60,23 +60,15 @@ class Installation:
 
 @dataclass(frozen=True)
 class UpdateStatus:
+    """One explicit, read-only release check and its safe update policy."""
+
     installed_version: str
     available_version: str
     update_available: bool
     installation: Installation
-
-
-def inspect_update(*, executable: Path | None = None,
-                   fetcher: Callable[[], Release] = lambda: fetch_latest()) -> UpdateStatus:
-    """Return updater state without presentation or mutation."""
-    installation = detect_installation(executable)
-    release = fetcher()
-    return UpdateStatus(
-        installed_version=__version__,
-        available_version=release.version,
-        update_available=is_newer(release.version, __version__),
-        installation=installation,
-    )
+    release: Release
+    update_supported: bool
+    unavailable_reason: str = ""
 
 
 def is_newer(latest: str, installed: str) -> bool:
@@ -252,6 +244,47 @@ def select_asset(release: Release, suffix: str) -> dict:
     if not isinstance(url, str) or url != expected_prefix + candidates[0]["name"]:
         raise UpdateError("Release asset URL is not from the official Mouse Control repository.")
     return candidates[0]
+
+
+def inspect_update(
+    *,
+    installation: Installation | None = None,
+    executable: Path | None = None,
+    fetcher: Callable[[], Release] | None = None,
+) -> UpdateStatus:
+    """Perform one explicit check without modifying the installation.
+
+    Release lookup, version parsing, installation ownership, and AppImage
+    compatibility remain updater-owned so presentation layers do not reproduce
+    updater policy.
+    """
+
+    installation = installation or detect_installation(executable)
+    release = (fetcher or fetch_latest)()
+    update_available = is_newer(release.version, __version__)
+    supported = installation.kind in {"rpm", "deb", "appimage", "pip"}
+    reason = ""
+    if installation.kind == "source":
+        reason = "Source/development checkouts must be updated through their source workflow."
+    elif installation.kind == "unknown":
+        reason = "The installation owner is unknown, so automatic replacement is disabled."
+    elif installation.kind == "arch":
+        reason = "This pacman-owned installation must be updated through its package source."
+    elif installation.kind == "appimage" and update_available:
+        try:
+            select_asset(release, ".appimage")
+        except UpdateError as exc:
+            supported = False
+            reason = str(exc)
+    return UpdateStatus(
+        installed_version=__version__,
+        available_version=release.version,
+        update_available=update_available,
+        installation=installation,
+        release=release,
+        update_supported=supported,
+        unavailable_reason=reason,
+    )
 
 
 def _checksum_asset(release: Release) -> dict:
@@ -490,17 +523,13 @@ def run_update(*, check: bool = False, assume_yes: bool = False, executable: Pat
     if shadow:
         print(f"Mouse Control appears to be installed more than once.\nRunning: {installation.executable}\nAlso detected: {shadow}\nThe updater will only update the running installation.")
     try:
-        release = fetcher()
+        inspected = inspect_update(installation=installation, fetcher=fetcher)
     except UpdateError as exc:
         print(f"Could not check for Mouse Control updates.\nYour current installation was not changed.\n\nReason: {exc}", file=sys.stderr)
         return 1
+    release = inspected.release
     print(f"Mouse Control Updater\nInstalled: {__version__}\nLatest:    {release.version}\nInstall:   {installation.description}")
-    try:
-        newer = is_newer(release.version, __version__)
-    except UpdateError as exc:
-        print(f"Could not check for Mouse Control updates.\nYour current installation was not changed.\n\nReason: {exc}", file=sys.stderr)
-        return 1
-    if not newer:
+    if not inspected.update_available:
         print(f"Mouse Control {__version__} is already up to date.")
         return 0
     print(f"\nUpdate available: {__version__} → {release.version}")

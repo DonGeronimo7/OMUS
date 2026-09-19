@@ -180,6 +180,15 @@ Mouse Control.
 
 ## Update
 
+Open the normal Mouse Control application and choose **Updates** to see the
+installed version and installation type. Choose **Check for Updates** when you
+want to contact the official release endpoint; simply opening or redrawing the
+screen does not perform a network request. When a compatible stable release is
+available, the same verified updater used by the command line offers the Update
+action while preserving package-manager ownership and approval.
+
+The command-line form remains available:
+
 ```bash
 mouse-control update
 ```

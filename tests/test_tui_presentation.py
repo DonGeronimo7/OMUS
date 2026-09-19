@@ -42,6 +42,7 @@ def test_status_wrap_and_labels_do_not_depend_on_color():
     )
     assert status_label("Hardware initialization failed: unavailable") == "ERROR"
     assert status_label("Known device ready") == "READY"
+    assert status_label("Mouse Control is up to date") == "READY"
     assert status_label("Physical qualification pending") == "CHECK"
 
 
