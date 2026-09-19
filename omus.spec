@@ -1,10 +1,10 @@
 Name:           omus
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        One Mouse Universal System for Linux
 License:        GPL-3.0-or-later
 URL:            https://github.com/DonGeronimo7/OMUS
-%global python_version 1.0.0
+%global python_version 1.0.1
 Source0:        omus-%{python_version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
@@ -91,6 +91,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/omus.png
 %{_datadir}/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
 %changelog
+* Sat Sep 19 2026 Marc-Anthony Geronimo - 1.0.1-1
+- Preserve native evdev frames and isolate input from hardware management.
+- Stabilize sleep, wake, reconnect, and synthetic-state recovery.
+- Record the accepted final Python baseline before the planned Rust migration.
+
 * Sat Sep 19 2026 Marc-Anthony Geronimo - 1.0.0-1
 - Rebrand the public product as OMUS while preserving Mouse Control compatibility.
 

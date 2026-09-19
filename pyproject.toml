@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omus"
-version = "1.0.0"
+version = "1.0.1"
 description = "One Mouse Universal System for Linux discovery, configuration, and remapping"
 authors = [
     {name = "Marc-A. Geronimo"}

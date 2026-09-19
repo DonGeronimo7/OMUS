@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.0.1 — Python baseline stabilization
+
+### Native input fidelity
+
+- Preserve each physical evdev frame through remapping, including ordered
+  relative axes, buttons, wheels, and exactly one virtual `SYN_REPORT` for each
+  trusted physical frame.
+- Recover safely from `SYN_DROPPED`, disconnect, and shutdown by discarding
+  untrusted partial frames and releasing tracked synthetic state.
+
+### Wake, reconnect, and management isolation
+
+- Separate input readiness from optional hardware-management readiness so
+  discovery, backend reconciliation, DPI operations, notifications, and other
+  management work cannot block ordinary pointer forwarding.
+- Run mapped DPI cycling on an ordered, generation-isolated worker and prevent
+  stale reconnect workers from consuming new-generation operations.
+- Preserve exact identity, ambiguity refusal, backend affinity, permissions,
+  write authority, safe shutdown ordering, and terminal `STOPPING` behavior.
+
+### Accepted final Python baseline
+
+- Record the complete pre-Rust architecture, security, compatibility,
+  performance, resource, and behavioral contract audits.
+- Physically validate the exact Logitech G305 reference run across about
+  100,000 matched frames with zero observed integrity violations and ten of ten
+  successful genuine wake trials. These measurements are device- and
+  system-specific, not universal performance claims.
+
 ## 1.0.0 — OMUS
 
 - Establish the first public OMUS release and the v0.9.9 → v1.0.0 upgrade path.

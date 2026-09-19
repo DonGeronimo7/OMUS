@@ -1,3 +1,11 @@
+omus (1.0.1) unstable; urgency=medium
+
+  * Preserve native evdev frame boundaries through remapping.
+  * Isolate input forwarding from optional hardware management.
+  * Stabilize sleep, wake, reconnect, and synthetic-state recovery.
+
+ -- Marc-A. Geronimo <noreply@example.com>  Sat, 19 Sep 2026 18:00:00 -0400
+
 omus (1.0.0) unstable; urgency=medium
 
   * Rebrand as OMUS with lossless legacy configuration and command compatibility.

@@ -1,5 +1,5 @@
 pkgname=omus
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc='One Mouse Universal System for Linux'
 arch=('any')

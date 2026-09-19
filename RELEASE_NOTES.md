@@ -1,23 +1,40 @@
-# OMUS v1.0.0 — Every mouse. One system.
+# OMUS v1.0.1 — Final Python baseline stabilization
 
-OMUS is One Mouse Universal System: the public successor to Mouse Control.
-This is the first public OMUS release; the supported transition is Mouse
-Control v0.9.9 → OMUS v1.0.0.
-This release introduces the `omus` command, OMUS desktop identity and canonical
-artwork, lossless/idempotent migration from legacy configuration, data, and
-cache paths, and package transitions that preserve upgrades from v0.9.9. The
-`mouse-control` command and `mouse_control` Python namespace remain compatible.
-The canonical repository is now `DonGeronimo7/OMUS`; GitHub redirects links
-from `DonGeronimo7/mouse-control` after the repository rename.
+OMUS v1.0.1 makes pointer handling smoother and more faithful by preserving the
+mouse's native evdev report frames all the way through remapping. Relative X/Y,
+wheel, and button events from one physical report remain together and produce
+one corresponding virtual synchronization boundary. If the kernel reports
+`SYN_DROPPED`, OMUS now discards the unreliable interval and safely releases
+tracked synthetic keys and buttons instead of inventing input.
 
-The canonical service is `omus.service`. Installing it disables the legacy
-unit before enabling OMUS so only one remapper owns evdev/HID resources.
-Hardware write authority, discovery gates, remapping, reconnect behavior,
-DPI/polling, and independent notification replacement IDs are unchanged.
+Sleep, wake, and reconnect handling are stronger. Ordinary pointer input can
+recover independently of slower optional hardware management, and stale
+workers cannot consume DPI operations belonging to a newer reconnect
+generation. Discovery, backend reconciliation, HID DPI work, notifications,
+battery, and other optional management activity stay outside the physical input
+frame path.
 
-Primary artifacts are `omus-1.0.0-1.fc44.noarch.rpm`,
-`omus_1.0.0_all.deb`, `OMUS-1.0.0-x86_64.AppImage`,
-`omus-1.0.0-py3-none-any.whl`, and `omus-1.0.0.tar.gz`.
+These corrections retain OMUS's security protections: exact device identity,
+permissions, ambiguity refusal, backend affinity, proof-gated hardware writes,
+safe shutdown ordering, and terminal `STOPPING` behavior were not weakened for
+performance.
+
+The exact Logitech G305 validation run matched 99,932 physical and virtual
+frames and 160,291 events with zero observed loss, duplication, modification,
+ordering, unexpected coalescing, framing, batching, or reported latency-spike
+violations. The fast workload sustained approximately 993 physical and virtual
+frames per second, with about 0.016 ms median measured forwarding latency.
+Ten of ten genuine wake trials passed. These are measured results for that
+specific G305 and Fedora 44 test system, not universal mouse or system claims.
+
+The final whole-program audit found no additional proven production defect
+after the input and wake corrections. This release establishes the final
+validated Python behavioral baseline for a separately planned Rust migration.
+The Rust migration has not started and is not included in this release.
+
+Primary artifacts are `omus-1.0.1-1.fc44.noarch.rpm`,
+`omus_1.0.1_all.deb`, `OMUS-1.0.1-x86_64.AppImage`,
+`omus-1.0.1-py3-none-any.whl`, and `omus-1.0.1.tar.gz`.
 
 # Mouse Control v0.9.9
 

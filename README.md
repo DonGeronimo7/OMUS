@@ -32,7 +32,7 @@ OMUS has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v1.0.0](https://img.shields.io/badge/release-v1.0.0-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.0)
+[![Current release: v1.0.1](https://img.shields.io/badge/release-v1.0.1-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.1)
 [![CI](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml)
 [![VirusTotal release scan](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml)
 [![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
@@ -45,45 +45,45 @@ privacy-conscious report that helps expand support.
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v1.0.0](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.0).
+The current release is [v1.0.1](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.1).
 
 ## Install and run
 
 Download the package for your system from the
-[v1.0.0 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.0),
+[v1.0.1 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.1),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus-1.0.0-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.1/omus-1.0.1-1.fc44.noarch.rpm), then run:
 
 ```bash
-sudo dnf install ./omus-1.0.0-1.fc44.noarch.rpm
+sudo dnf install ./omus-1.0.1-1.fc44.noarch.rpm
 ```
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus_1.0.0_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.1/omus_1.0.1_all.deb), then run:
 
 ```bash
-sudo apt install ./omus_1.0.0_all.deb
+sudo apt install ./omus_1.0.1_all.deb
 ```
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/OMUS-1.0.0-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.1/OMUS-1.0.1-x86_64.AppImage), then run:
 
 ```bash
-chmod +x OMUS-1.0.0-x86_64.AppImage
-./OMUS-1.0.0-x86_64.AppImage setup
+chmod +x OMUS-1.0.1-x86_64.AppImage
+./OMUS-1.0.1-x86_64.AppImage setup
 ```
 
 Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus-1.0.0-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/omus-1.0.0.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.1/omus-1.0.1-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.1/omus-1.0.1.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:
