@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.validate_workflows import ROOT, validate_repository, validate_workflow
+from scripts.validate_workflows import (
+    ROOT,
+    validate_dependabot,
+    validate_repository,
+    validate_workflow,
+)
 
 
 def _write_workflow(tmp_path: Path, body: str) -> Path:
@@ -62,3 +67,13 @@ def test_malformed_workflow_is_rejected(tmp_path: Path) -> None:
 
 def test_workflow_validator_uses_repository_root() -> None:
     assert (ROOT / ".github" / "workflows").is_dir()
+
+
+def test_dependabot_requires_both_ecosystems_and_monthly_groups(tmp_path: Path) -> None:
+    path = tmp_path / "dependabot.yml"
+    path.write_text("version: 2\nupdates: []\n", encoding="utf-8")
+
+    errors = validate_dependabot(path)
+
+    assert any("missing github-actions" in error for error in errors)
+    assert any("missing pip" in error for error in errors)

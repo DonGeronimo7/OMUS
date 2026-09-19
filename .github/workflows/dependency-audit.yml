@@ -1,0 +1,31 @@
+name: Dependency audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Create resolved audit environment
+        run: |
+          python -m venv .audit-venv
+          .audit-venv/bin/python -m pip install . -r requirements/security.txt
+          .audit-venv/bin/python -m pip uninstall --yes mouse-control
+      - name: Audit runtime, build, test, and security dependencies
+        run: .audit-venv/bin/python -m pip_audit --local --strict --progress-spinner off
