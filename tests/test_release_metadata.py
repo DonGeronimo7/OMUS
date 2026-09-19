@@ -98,6 +98,16 @@ def test_provenance_record_is_shipped_with_each_release_format():
     assert "CREDITS.md" in _text("packaging/appimage/build-appimage.sh")
 
 
+def test_no_isolation_build_backend_is_pinned_in_development_environment():
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        build_requirements = tomllib.load(handle)["build-system"]["requires"]
+    dev_requirements = set(_text("requirements/dev.txt").splitlines())
+
+    assert build_requirements == ["setuptools>=77.0.3", "wheel"]
+    assert "setuptools==83.0.0" in dev_requirements
+    assert "wheel==0.48.0" in dev_requirements
+
+
 def test_primary_cli_exposes_cpi_without_claiming_libevdev_command_name():
     scripts = _project()["scripts"]
     assert "mouse-control" in scripts
@@ -118,6 +128,7 @@ def test_source_archive_includes_repository_security_scripts():
     manifest = _text("MANIFEST.in")
     assert "recursive-include scripts *.py *.sh" in manifest
     assert "recursive-include .github *.yml *.yaml" in manifest
+    assert "recursive-include requirements *.txt" in manifest
 
 
 def test_ci_and_release_workflow_are_version_independent():

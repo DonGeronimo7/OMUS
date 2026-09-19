@@ -1,5 +1,37 @@
 # AI handoff log
 
+## 2026-09-18 — PR #6 cloud CI remediation
+
+- Continued `codex/openssf-pre-v1-hardening` from pushed checkpoint `1c25ffc`.
+  The repository-security failure came from invoking `build --no-isolation`
+  after installing `requirements/dev.txt` without the declared setuptools/wheel
+  backend. Added explicit pins for `setuptools==83.0.0` and `wheel==0.48.0` plus
+  a metadata regression; the older initially evaluated setuptools pin was
+  rejected after `pip-audit` identified its current advisory.
+- The Python 3.12 retry/write storms came from stopping the wake coordinator
+  before setting the shared shutdown event. Its generation change released DPI
+  and battery waits while teardown still appeared live, allowing repeated
+  rebind and desired-state reconciliation. Teardown now publishes shutdown
+  intent first; STOPPING is terminal to both loops, is not returned as wake
+  evidence, and cannot be revived by late input activity.
+- Added deterministic coverage for zero teardown rebinds, exactly one initial
+  DPI and polling write, prompt DPI/battery retry termination, no late wake
+  revival, and pinned no-isolation build requirements. Existing matching-device
+  wake-backoff cancellation remains covered and unchanged.
+- Validation: 50 repetitions of each of the two cloud failures and the new
+  end-to-end teardown test passed (`150` executions); focused lifecycle/wake/
+  hardware/notification coverage passed `114`; the full suite passed
+  `1086 passed, 1 warning`. Compileall, Ruff, workflow validation, whitespace,
+  clean no-isolation wheel/sdist builds, two-build byte-identical wheel
+  comparison, and dependency audit (`No known vulnerabilities found`) passed.
+- The Fedora RPM gate exposed that the new metadata test needed
+  `requirements/dev.txt` inside the sdist. The source manifest now includes all
+  pinned requirement inputs; the rebuilt RPM passed `%check` (`1086 passed, 1
+  warning`) and packaged CLI smoke checks.
+- No hardware access, physical test, `main` change, merge, tag, or release
+  occurred. PR #6 CI, CodeQL, dependency audit, and Scorecard status require the
+  post-push cloud rerun.
+
 ## 2026-09-18 — Maximum pre-v1 OpenSSF and supply-chain hardening
 
 - Created `codex/openssf-pre-v1-hardening` from the requested clean checkpoint

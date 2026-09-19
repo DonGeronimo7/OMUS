@@ -298,7 +298,8 @@ class BatteryMonitorSupervisor:
                         else:
                             self.wake_coordinator.wait(
                                 wake_generation, self.interval, self.shutdown_event)
-                            stopped = self.shutdown_event.is_set()
+                            stopped = (self.shutdown_event.is_set()
+                                       or self.wake_coordinator.stopping)
                         if stopped:
                             break
                         continue
@@ -315,7 +316,8 @@ class BatteryMonitorSupervisor:
                 else:
                     self.wake_coordinator.wait(
                         wake_generation, self.interval, self.shutdown_event)
-                    stopped = self.shutdown_event.is_set()
+                    stopped = (self.shutdown_event.is_set()
+                               or self.wake_coordinator.stopping)
                 if stopped: break
                 continue
             except Exception as exc:
@@ -331,7 +333,8 @@ class BatteryMonitorSupervisor:
                 self.wake_coordinator.reconnecting()
                 self.wake_coordinator.wait(
                     wake_generation, self.retry_interval, self.shutdown_event)
-                stopped = self.shutdown_event.is_set()
+                stopped = (self.shutdown_event.is_set()
+                           or self.wake_coordinator.stopping)
             else:
                 stopped = self.shutdown_event.wait(self.retry_interval)
             if stopped: break

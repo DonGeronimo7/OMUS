@@ -1,5 +1,28 @@
 # Mouse Control Project Status
 
+## 2026-09-18 — PR #6 clean-build and runtime-teardown remediation
+
+- The no-isolation reproducibility environment now installs explicit pinned
+  build backends: `setuptools==83.0.0` and `wheel==0.48.0`. The project build
+  contract retains its distro-compatible minimum while a regression test keeps
+  the clean CI environment synchronized with both required backend packages.
+- Runtime teardown now sets the shared shutdown event before moving the wake
+  coordinator to `STOPPING`. Coordinator stop notifications are not reported as
+  wake evidence, late activity cannot revive a stopped coordinator, and DPI and
+  battery retry loops treat `STOPPING` as terminal before backend rebind.
+- Regression coverage proves teardown performs no backend reselection and no
+  repeated DPI or polling reconciliation writes, both monitor loops exit
+  promptly, and real matching device-return evidence still cancels long
+  reconnect backoff. The three race-sensitive runtime cases passed 50 repeated
+  iterations each.
+- Focused lifecycle/wake/hardware/notification coverage passed 114 tests; the
+  full suite passed 1086 tests with the existing GLib warning. Compileall,
+  Ruff, workflow validation, dependency audit, wheel reproducibility, clean
+  no-isolation wheel/sdist builds, Fedora RPM build and `%check`, and
+  whitespace checks passed. The source manifest includes the pinned requirement
+  inputs required by package-level metadata tests. No physical hardware test,
+  merge, tag, release, or `main` modification occurred.
+
 ## 2026-09-18 — Pre-v1 repository and release supply-chain hardening
 
 - GitHub workflows now default to read-only permissions; the only job-scoped

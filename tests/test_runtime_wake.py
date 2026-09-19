@@ -4,6 +4,7 @@ import threading
 import time
 from unittest.mock import Mock
 
+from mouse_control.battery import BatteryMonitorSupervisor
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware.capabilities import DpiState
 from mouse_control.hardware.supervisor import HardwareSupervisor
@@ -158,9 +159,10 @@ def test_shutdown_interrupts_event_driven_wait_without_polling():
     wake = RuntimeWakeCoordinator()
     shutdown = threading.Event()
     returned = threading.Event()
+    results = []
 
     def waiter():
-        wake.wait(wake.generation, 60, shutdown)
+        results.append(wake.wait(wake.generation, 60, shutdown))
         returned.set()
 
     thread = threading.Thread(target=waiter)
@@ -169,3 +171,55 @@ def test_shutdown_interrupts_event_driven_wait_without_polling():
     wake.stop()
     assert returned.wait(1)
     thread.join(1)
+    assert results == [False]
+
+
+def test_stopping_coordinator_ignores_late_wake_evidence():
+    wake = RuntimeWakeCoordinator()
+    generation = wake.generation
+
+    wake.stop()
+    wake.device_event("late-device-return")
+    wake.activity("late-input")
+
+    assert wake.state is RuntimeWakeState.STOPPING
+    assert wake.generation == generation + 1
+
+
+def test_stopping_coordinator_ends_dpi_and_battery_retry_loops_without_rebind():
+    wake = RuntimeWakeCoordinator()
+    shutdown = threading.Event()
+    dpi_attempted = threading.Event()
+    battery_attempted = threading.Event()
+    dpi_backend = Mock(discovery_pending=True)
+    battery_backend = Mock(discovery_pending=True)
+    dpi_backend.supports_dpi_events.side_effect = (
+        lambda _device: dpi_attempted.set() or False
+    )
+    dpi_backend.supports_dpi_monitoring.return_value = False
+    battery_backend.supports_battery.side_effect = (
+        lambda _device: battery_attempted.set() or False
+    )
+    dpi_factory = Mock()
+    battery_factory = Mock()
+    dpi = DpiMonitorSupervisor(
+        dpi_backend, MOUSE, dpi_factory, [800], 800, shutdown, Mock(),
+        retry_interval=60, wake_coordinator=wake,
+    )
+    battery = BatteryMonitorSupervisor(
+        battery_backend, MOUSE, battery_factory, shutdown, tray=Mock(),
+        interval=60, retry_interval=60, wake_coordinator=wake,
+    )
+
+    dpi.start()
+    battery.start()
+    assert dpi_attempted.wait(1)
+    assert battery_attempted.wait(1)
+    wake.stop()
+    dpi._thread.join(1)
+    battery._thread.join(1)
+
+    assert not dpi._thread.is_alive()
+    assert not battery._thread.is_alive()
+    dpi_factory.assert_not_called()
+    battery_factory.assert_not_called()

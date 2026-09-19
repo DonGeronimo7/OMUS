@@ -137,6 +137,11 @@ class RuntimeWakeCoordinator:
         with self._condition:
             return self._generation
 
+    @property
+    def stopping(self) -> bool:
+        with self._condition:
+            return self._state is RuntimeWakeState.STOPPING
+
     def _signal(self) -> None:
         self._generation += 1
         self._condition.notify_all()
@@ -158,6 +163,8 @@ class RuntimeWakeCoordinator:
         """Mark the first usable input/report after quiet or reconnect."""
         timestamp_ns = self._clock_ns() if timestamp_ns is None else timestamp_ns
         with self._condition:
+            if self._state is RuntimeWakeState.STOPPING:
+                return
             waking = (
                 self._state is not RuntimeWakeState.ACTIVE
                 or timestamp_ns - self._last_activity_ns >= self.quiescent_after_ns
@@ -199,7 +206,11 @@ class RuntimeWakeCoordinator:
                 lambda: (self._generation != after_generation
                          or self._state is RuntimeWakeState.STOPPING
                          or shutdown_event.is_set()), timeout)
-            return self._generation != after_generation
+            return (
+                self._generation != after_generation
+                and self._state is not RuntimeWakeState.STOPPING
+                and not shutdown_event.is_set()
+            )
 
     def stop(self) -> None:
         with self._condition:

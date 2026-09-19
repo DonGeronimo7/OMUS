@@ -598,6 +598,10 @@ def run_from_config(path: Path | None = None) -> int:
                       event_observer=hardware, macros=macros,
                       wake_coordinator=wake_coordinator).run()
     finally:
+        # Establish shared teardown intent before waking any retry wait.  A
+        # coordinator stop changes its generation, so stopping it first could
+        # otherwise be mistaken for reconnect evidence by monitor threads.
+        shutdown_event.set()
         wake_coordinator.stop()
         device_event_monitor.stop()
         if monitor is not None:

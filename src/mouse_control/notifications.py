@@ -226,7 +226,8 @@ class DpiMonitorSupervisor:
                     self.wake_coordinator.unavailable()
                     self.wake_coordinator.wait(
                         wake_generation, max(30., self.retry_interval), self.shutdown_event)
-                    stopped = self.shutdown_event.is_set()
+                    stopped = (self.shutdown_event.is_set()
+                               or self.wake_coordinator.stopping)
                 if stopped:
                     break
                 continue
@@ -235,7 +236,8 @@ class DpiMonitorSupervisor:
             else:
                 self.wake_coordinator.wait(
                     wake_generation, self.retry_interval, self.shutdown_event)
-                stopped = self.shutdown_event.is_set()
+                stopped = (self.shutdown_event.is_set()
+                           or self.wake_coordinator.stopping)
             if self.shutdown_event.is_set() or stopped: break
             try:
                 rebind = getattr(type(backend), "rebind", None)
