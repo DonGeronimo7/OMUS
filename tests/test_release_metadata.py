@@ -129,6 +129,14 @@ def test_source_archive_includes_repository_security_scripts():
     assert "recursive-include requirements *.txt" in manifest
 
 
+def test_release_finalizes_reproducible_cyclonedx_for_attestation():
+    workflow = _text(".github/workflows/release-artifacts.yml")
+    assert "scripts/finalize_cyclonedx_sbom.py" in workflow
+    assert workflow.index("cyclonedx-py environment") < workflow.index(
+        "scripts/finalize_cyclonedx_sbom.py"
+    ) < workflow.index("Finalize and verify release checksums")
+
+
 def test_ci_and_release_workflow_are_version_independent():
     ci_path = ROOT / ".github/workflows/ci.yml"
     release_path = ROOT / ".github/workflows/release-artifacts.yml"

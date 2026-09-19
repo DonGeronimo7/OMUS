@@ -171,6 +171,8 @@ jobs:
             --output-reproducible \
             --output-format JSON \
             --output-file "release-assets/mouse-control-${version}.cdx.json"
+          python3 scripts/finalize_cyclonedx_sbom.py \
+            "release-assets/mouse-control-${version}.cdx.json" "$version"
           python3 -m json.tool "release-assets/mouse-control-${version}.cdx.json" >/dev/null
           printf 'path=release-assets/mouse-control-%s.cdx.json\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Finalize and verify release checksums
