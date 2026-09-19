@@ -1,7 +1,9 @@
 include LICENSE CREDITS.md SECURITY.md README.md CHANGELOG.md RELEASE_NOTES.md mouse-control.spec
 include PKGBUILD
+recursive-include .github *.yml *.yaml
 recursive-include docs *.md
 recursive-include debian *
 recursive-include packaging *
+recursive-include scripts *.py *.sh
 recursive-include assets/icons *.png
 recursive-include src/mouse_control/udev *.rules

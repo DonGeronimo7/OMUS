@@ -114,6 +114,12 @@ def test_release_artifacts_smoke_test_primary_cpi_command():
     assert "AppImage cpi --help" in workflow
 
 
+def test_source_archive_includes_repository_security_scripts():
+    manifest = _text("MANIFEST.in")
+    assert "recursive-include scripts *.py *.sh" in manifest
+    assert "recursive-include .github *.yml *.yaml" in manifest
+
+
 def test_ci_and_release_workflow_are_version_independent():
     ci_path = ROOT / ".github/workflows/ci.yml"
     release_path = ROOT / ".github/workflows/release-artifacts.yml"
