@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.9.8 — 2026-09-18
+
+### Security and release engineering
+
+- Add CodeQL, resolved-environment dependency auditing, OpenSSF Scorecard,
+  Dependabot, and repository-owned workflow-policy validation.
+- Pin every remote GitHub Action to a full commit SHA and apply least-privilege
+  workflow permissions.
+- Verify reproducible wheels, publish a CycloneDX project SBOM, generate and
+  verify `SHA256SUMS`, and attest artifact provenance plus the SBOM binding.
+- Separate release-commit validation, tag creation, artifact construction, and
+  publication so a release is published only after all package and integrity
+  gates succeed.
+- Declare clean-build inputs explicitly, including the Fedora `%check` PyYAML
+  dependency used by workflow-security tests.
+
+### Runtime reliability
+
+- Publish shutdown intent before wake-coordinator teardown and make `STOPPING`
+  terminal so late activity cannot revive device wake or backend rebind logic.
+- Prevent shutdown from causing repeated DPI or polling reconciliation writes
+  while preserving genuine matching-device wake behavior.
+
+### Compatibility and validation boundary
+
+- Preserve the v0.8.2 contract and all established v0.9.x remapping, native
+  HID++, discovery, service, TUI, notification, reconnect, and PROVEN-only
+  hardware-write behavior.
+- The security and release-engineering changes were extensively validated by
+  automated tests. This hardening pass included no new physical-hardware
+  acceptance testing and makes no new hardware-support claim.
+
 ## 0.9.7-2 — 2026-09-18
 
 ### Accepted launcher/TUI responsiveness

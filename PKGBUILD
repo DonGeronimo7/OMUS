@@ -1,6 +1,6 @@
 pkgname=mouse-control
-pkgver=0.9.7
-pkgrel=2
+pkgver=0.9.8
+pkgrel=1
 pkgdesc='Linux mouse remapping with Automatic Discovery and validated hardware control'
 arch=('any')
 url='https://github.com/DonGeronimo7/mouse-control'
@@ -8,7 +8,7 @@ license=('GPL-3.0-or-later')
 depends=('python' 'python-evdev' 'python-dbus-next' 'python-packaging' 'systemd')
 makedepends=('git' 'python-build' 'python-installer' 'python-setuptools')
 # Stable source is pinned to the exact upstream release tag.
-source=("mouse-control::git+https://github.com/DonGeronimo7/mouse-control.git#tag=v${pkgver}-${pkgrel}")
+source=("mouse-control::git+https://github.com/DonGeronimo7/mouse-control.git#tag=v${pkgver}")
 sha256sums=('SKIP')
 
 build() {

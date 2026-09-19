@@ -1,3 +1,69 @@
+# Mouse Control v0.9.8
+
+Mouse Control v0.9.8 is a security, reliability, and release-engineering
+hardening milestone. It preserves the established interface and hardware
+authority model while strengthening how every change and downloadable package
+is tested, built, verified, and published.
+
+## Security and supply chain
+
+- CodeQL, resolved-environment dependency auditing, and OpenSSF Scorecard now
+  run as dedicated security checks, with low-noise Dependabot updates for
+  Python and GitHub Actions dependencies.
+- All remote GitHub Actions are pinned to full commit SHAs. Workflows default
+  to read-only access and grant only the narrow job-level write permissions
+  required for security reporting, tag creation, attestations, and release
+  publication.
+- A repository-owned policy validator checks workflow syntax, immutable action
+  pins, permission allowlists, safe event-data handling, required security
+  wiring, and Dependabot configuration.
+- Clean builds use declared, pinned build inputs. The Fedora `%check` path
+  explicitly provides PyYAML for the workflow-security tests without adding it
+  as an application runtime dependency.
+- Release validation checks wheel reproducibility and produces a verified
+  `SHA256SUMS` manifest plus a reproducible CycloneDX 1.6 project dependency
+  SBOM.
+- GitHub artifact attestations bind provenance to the exact RPM, DEB,
+  AppImage, wheel, source distribution, and SBOM bytes. A separate SBOM
+  attestation binds the SBOM to the five primary release artifacts.
+- Release automation now separates commit validation, tag creation, package
+  construction, integrity finalization, attestation, and publication. A public
+  release is created only after the package and supply-chain gates succeed.
+
+## Runtime reliability
+
+- Shutdown intent is published before wake-coordination teardown, and
+  `STOPPING` is terminal.
+- Late device activity during shutdown can no longer revive wake handling or
+  backend rebind logic.
+- Shutdown no longer produces repeated DPI or polling reconciliation writes.
+- Genuine matching-device wake evidence still interrupts reconnect backoff and
+  retains the established recovery behavior.
+
+## Compatibility and hardware safety
+
+The complete v0.8.2 behavior contract and the established v0.9.x native HID++,
+safe discovery, remapping, keyboard/chord, DPI, polling, battery, notification,
+reconnect, service, TUI, CPI, support-report, and evidence-engine behavior are
+preserved. Unknown or insufficiently proven hardware remains protected from
+writes; only independently PROVEN exact-model operations can authorize them.
+
+The security and release-engineering changes were extensively tested through
+automated regression, packaging, and clean-build checks. This specific
+hardening pass did **not** include new physical-hardware acceptance testing and
+does not claim physical verification for any additional device.
+
+## Downloads
+
+- RPM: `mouse-control-0.9.8-1.fc44.noarch.rpm`
+- DEB: `mouse-control_0.9.8_all.deb`
+- AppImage: `Mouse-Control-0.9.8-x86_64.AppImage`
+- Wheel: `mouse_control-0.9.8-py3-none-any.whl`
+- Source: `mouse_control-0.9.8.tar.gz`
+- CycloneDX SBOM: `mouse-control-0.9.8.cdx.json`
+- Integrity manifest: `SHA256SUMS`
+
+---
 # Mouse Control v0.9.7-2
 
 Accepted responsiveness revision for the canonical desktop-launched TUI. It

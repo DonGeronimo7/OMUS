@@ -50,6 +50,7 @@ def test_release_versions_are_synchronized():
     ("0.9.7", "0.9.7", "0.9.7", 1),
     ("v0.9.7-1", "0.9.7.post1", "0.9.7", 1),
     ("v0.9.7-2", "0.9.7.post2", "0.9.7", 2),
+    ("v0.9.8", "0.9.8", "0.9.8", 1),
     ("0.9.6-2", "0.9.6.post2", "0.9.6", 2),
 ])
 def test_release_version_model_keeps_packaging_fields_distinct(
@@ -67,13 +68,10 @@ def test_release_version_model_rejects_ambiguous_or_unsupported_versions(invalid
 
 
 def test_previous_published_updater_recognizes_next_generated_rpm_asset():
-    """Freeze the v0.9.7-1 matcher contract against the next release output."""
-    version = ReleaseVersion.parse("0.9.7-2")
+    """Freeze the v0.9.7-2 matcher contract against the next release output."""
+    version = ReleaseVersion.parse("0.9.8")
     filename = version.rpm_filename("fc44", "noarch")
-    escaped = re.escape(version.display)
-    match = re.fullmatch(
-        rf"mouse-control-{escaped}(?:\.[^.]+)*\.([^.]+)\.rpm", filename
-    )
+    match = version.match_rpm_filename(filename)
     assert match is not None and match.group(1) == "noarch"
 
 
