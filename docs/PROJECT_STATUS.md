@@ -1,5 +1,21 @@
 # OMUS Project Status
 
+## 2026-09-19 — Final pre-Rust whole-system audit candidate
+
+- The complete runtime/background/security/compatibility inventory found no
+  additional proven production defect after the motion-frame and wake-path
+  corrections. No speculative rewrite or supported feature removal was made.
+- The Python behavior is recorded as the Rust migration oracle in
+  `docs/PRE_RUST_QUALITY_AUDIT.md`, including input framing, ownership, failure
+  isolation, security, lifecycle, resource, compatibility, and physical
+  acceptance requirements.
+- Focused lifecycle/input/hardware/service coverage passes 164 tests. Current
+  500-round benchmarks remain aligned with the established performance
+  baseline: 15.981 ms cold app import, 0.034 ms known-device restore, 0.435 ms
+  explicit Rediscover, and 28.772 ms per 1,000 HID decodes.
+- The complete gate passes: `git diff --check`, compileall, and 1,178 tests
+  with one external GLib deprecation warning.
+
 ## 2026-09-19 — G305 physical motion/wake acceptance
 
 - Operator-provided Fedora 44 evidence from the exact stabilization commit

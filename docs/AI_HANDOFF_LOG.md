@@ -1,5 +1,22 @@
 # AI handoff log
 
+## 2026-09-19 — Final pre-Rust whole-system quality audit
+
+- Audited the production evdev/uinput path, workers and blocking waits,
+  HID/HID++ ownership, discovery and write authority, DPI/polling/lighting,
+  battery and D-Bus presentation, reconnect/shutdown, service hardening,
+  configuration migration, persistence, startup, and retained compatibility.
+- No additional production defect was established after the frame-preservation
+  and wake-path corrections. The final pass therefore removes no feature and
+  makes no speculative runtime refactor.
+- Added `docs/PRE_RUST_QUALITY_AUDIT.md` as the behavioral oracle and explicit
+  acceptance contract for a separately approved Rust migration. Legacy command,
+  namespace, state migration, service replacement, package/schema readers, and
+  named protocol-family surfaces remain intentional compatibility contracts.
+- Focused final lifecycle/input/hardware/service coverage passed 164 tests; the
+  complete suite passed 1,178. Compileall and whitespace checks passed. Both
+  runs retained one external GLib deprecation warning.
+
 ## 2026-09-19 — G305 physical motion/wake acceptance evidence
 
 - Inspected operator-provided `motion-A/B/C.json` and `motion-wake.json` from

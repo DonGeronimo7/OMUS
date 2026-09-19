@@ -172,3 +172,24 @@ statistics and immediate cancellation of a simulated 60-second retry wait, but
 those fixtures are not physical latency evidence. The `<50 ms` median target
 for a receiver that remains enumerated still requires repeated observation on
 an actually sleeping wireless mouse.
+
+## Final pre-Rust audit measurement — 2026-09-19
+
+The same permanent fixture was rerun for 500 rounds after motion-frame and wake
+stabilization. Medians were 8.180 ms for an empty Python process, 15.981 ms for
+cold `mouse_control.app` import, 0.016 ms for configuration load, 0.069 ms for
+topology construction, 0.031 ms for persisted evidence, 0.034 ms for known
+startup, 0.435 ms for explicit Rediscover, 0.000150 ms for cached descriptor
+parsing, 0.029 ms for one HID decode, 28.772 ms for 1,000 decodes, 0.0015 ms for
+first-frame preparation, and 0.0034 ms for reconnect/rebind.
+
+The 500-cycle memory pass retained 120 bytes for reconnect, 5,148 bytes for
+Rediscover, and 32 bytes for setup enter/exit, with respective peaks of 2,312,
+184,964, and 15,604 bytes. These results remain consistent with the bounded
+resident-runtime baseline; no additional optimization or authority relaxation
+was justified.
+
+The formerly pending wake target is now physically accepted on the exact G305
+reference device: ten genuine trials recorded T0→T3 minimum 0.086 ms, median
+0.129 ms, and p95/p99/maximum 0.207 ms. This is device-specific evidence and
+does not include pre-kernel radio wake time.
