@@ -17,6 +17,16 @@ verify = _load("verify_virustotal_results", "scripts/verify_virustotal_results.p
 notes = _load("update_virustotal_release_notes", "scripts/update_virustotal_release_notes.py")
 
 
+def test_workflow_verifies_sbom_checksum_but_excludes_it_from_scanning():
+    workflow = (ROOT / ".github/workflows/virustotal-release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert '--pattern "mouse-control-${version}.cdx.json"' in workflow
+    assert "! -name '*.cdx.json'" in workflow
+    assert "!scan-assets/*.cdx.json" in workflow
+    assert "!scan-assets/SHA256SUMS" in workflow
+
+
 def test_result_markdown_is_truthful_and_includes_preserved_evidence():
     rendered = verify.render_markdown([{
         "name": "mouse_control-0.9.9.tar.gz",
