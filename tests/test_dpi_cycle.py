@@ -66,18 +66,22 @@ def test_backend_without_dpi_support_is_nonfatal():
 
 def test_remapper_consumes_dpi_action_on_press_only_and_key_mapping_still_emits():
     target, _, _ = cycler()
-    remapper = object.__new__(MouseRemapper)
-    remapper.mappings = {
-        ecodes.BTN_TASK: __import__('mouse_control.remapper', fromlist=['parse_action']).parse_action('dpi-cycle'),
-        ecodes.BTN_EXTRA: __import__('mouse_control.remapper', fromlist=['parse_action']).parse_action('key:KEY_LEFTMETA'),
-    }
-    remapper.dpi_cycler = target
+    remapper = MouseRemapper(
+        "/dev/input/test",
+        {"BTN_TASK": "dpi-cycle", "BTN_EXTRA": "key:KEY_LEFTMETA"},
+        dpi_cycler=target,
+    )
     remapper.ui = MagicMock()
     remapper._handle(ecodes.EV_KEY, ecodes.BTN_TASK, 1)
     remapper._handle(ecodes.EV_KEY, ecodes.BTN_TASK, 0)
+    for _ in range(100):
+        if target.current_dpi == 1500:
+            break
+        threading.Event().wait(.001)
     assert target.current_dpi == 1500
     remapper._handle(ecodes.EV_KEY, ecodes.BTN_EXTRA, 1)
     remapper.ui.write.assert_called_once_with(ecodes.EV_KEY, ecodes.KEY_LEFTMETA, 1)
+    remapper._stop_dpi_worker()
 
 
 def run_config(mappings, backend):

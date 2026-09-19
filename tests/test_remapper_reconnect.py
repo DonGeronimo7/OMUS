@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from evdev import ecodes
 from mouse_control.discovery import MouseDevice
 from mouse_control import remapper as module
+from mouse_control.runtime_wake import RuntimeWakeCoordinator, RuntimeWakeState
 
 
 TARGET = MouseDevice("G305", "/dev/input/by-id/g305-event-mouse",
@@ -34,13 +35,20 @@ def test_enodev_read_closes_stale_device_and_rebinds_stable_path():
     old.read.side_effect = OSError(errno.ENODEV, "No such device")
     stop = threading.Event()
     cycler = MagicMock()
+    cycled = threading.Event()
+    cycler.cycle.side_effect = lambda: cycled.set() or True
     remapper = module.MouseRemapper(
         TARGET.path, {"BTN_EXTRA": "key:KEY_F13", "BTN_TASK": "dpi-cycle"}, stop,
         dpi_cycler=cycler, target_device=TARGET, retry_interval=0)
     ui = MagicMock()
 
+    selections = 0
+
     def selected(*_args):
-        if old.read.call_count:
+        nonlocal selections
+        selections += 1
+        if selections >= 3:
+            assert cycled.wait(1)
             stop.set()
         return [9], [], []
 
@@ -130,3 +138,52 @@ def test_shutdown_while_disconnected_does_not_open_or_wait_forever():
          patch.object(module.signal, "signal"):
         remapper.run()
     factory.assert_not_called()
+
+
+def test_ten_reconnect_cycles_preserve_first_frame_mapping_and_syn_boundary():
+    stop = threading.Event()
+    physical_frames = [
+        [
+            MagicMock(type=ecodes.EV_REL, code=ecodes.REL_X, value=index + 1),
+            MagicMock(type=ecodes.EV_REL, code=ecodes.REL_Y, value=-(index + 2)),
+            MagicMock(type=ecodes.EV_KEY, code=ecodes.BTN_EXTRA, value=1),
+            MagicMock(type=ecodes.EV_KEY, code=ecodes.BTN_EXTRA, value=0),
+            MagicMock(type=ecodes.EV_SYN, code=ecodes.SYN_REPORT, value=0),
+        ]
+        for index in range(11)
+    ]
+    devices = []
+    for index, events in enumerate(physical_frames):
+        current = device(f"/dev/input/event{index + 5}")
+        if index < 10:
+            current.read.side_effect = [events, OSError(errno.ENODEV, "sleep")]
+        else:
+            current.read.side_effect = lambda events=events: stop.set() or events
+        devices.append(current)
+
+    wake = RuntimeWakeCoordinator(quiescent_after=0)
+    remapper = module.MouseRemapper(
+        TARGET.path, {"BTN_EXTRA": "key:KEY_F13"}, stop,
+        target_device=TARGET, retry_interval=60, wake_coordinator=wake,
+    )
+    ui = MagicMock()
+    with patch.object(module, "InputDevice", side_effect=devices) as factory, \
+         patch.object(module, "UInput", return_value=ui), \
+         patch.object(module.select, "select", return_value=([9], [], [])), \
+         patch.object(module.signal, "signal"):
+        remapper.run()
+
+    assert factory.call_count == 11
+    assert ui.syn.call_count == 11
+    assert [entry.args for entry in ui.write.call_args_list] == [
+        output
+        for index in range(11)
+        for output in (
+            (ecodes.EV_REL, ecodes.REL_X, index + 1),
+            (ecodes.EV_REL, ecodes.REL_Y, -(index + 2)),
+            (ecodes.EV_KEY, ecodes.KEY_F13, 1),
+            (ecodes.EV_KEY, ecodes.KEY_F13, 0),
+        )
+    ]
+    assert not remapper._pressed_keys
+    assert wake.state is RuntimeWakeState.ACTIVE

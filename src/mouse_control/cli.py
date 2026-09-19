@@ -700,11 +700,13 @@ def run_from_config(path: Path | None = None, *, motion_diagnostic=None) -> int:
         for stage, values in wake_summary.items():
             log.info(
                 "Wake latency summary %s (%d trials): min %.3f ms, "
-                "median %.3f ms, p95 %.3f ms, max %.3f ms",
+                "median %.3f ms, p95 %.3f ms, p99 %.3f ms, max %.3f ms",
                 stage, trial_count, values["minimum_ms"], values["median_ms"],
-                values["p95_ms"], values["maximum_ms"])
+                values["p95_ms"], values["p99_ms"], values["maximum_ms"])
         if motion_diagnostic is not None:
-            summary = motion_diagnostic.write_report()
+            summary = motion_diagnostic.write_report(
+                wake_samples=wake_coordinator.recorder.samples
+            )
             result = "PASS" if summary["pass"] else "FAIL"
             print(f"Motion transparency {result}: {motion_diagnostic.output}")
     return 0

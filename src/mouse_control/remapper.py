@@ -248,6 +248,9 @@ class MouseRemapper:
         self._macro_queue: queue.Queue[tuple[MacroStep, ...] | None] = queue.Queue()
         self._macro_cancel = threading.Event()
         self._macro_thread: threading.Thread | None = None
+        self._dpi_queue: queue.Queue[bool | None] = queue.Queue()
+        self._dpi_cancel = threading.Event()
+        self._dpi_thread: threading.Thread | None = None
         self._pending_frame: list[tuple[int, int, int]] = []
         self._discard_until_syn_report = False
 
@@ -319,32 +322,43 @@ class MouseRemapper:
                 if emitted and self.ui is not None:
                     self.ui.syn()
 
-    def _play_macro(self, steps: tuple[MacroStep, ...]) -> None:
+    def _play_macro(
+        self,
+        steps: tuple[MacroStep, ...],
+        cancel_event: threading.Event | None = None,
+    ) -> None:
+        cancel_event = self._macro_cancel if cancel_event is None else cancel_event
         for step in steps:
-            if self._macro_cancel.is_set() or self.shutdown_event.is_set():
+            if cancel_event.is_set() or self.shutdown_event.is_set():
                 return
             if step.action is not None:
                 self._tap_action(step.action)
-            elif self._macro_cancel.wait(step.delay_ms / 1000):
+            elif cancel_event.wait(step.delay_ms / 1000):
                 return
 
-    def _macro_worker(self) -> None:
+    def _macro_worker(
+        self,
+        requests: queue.Queue[tuple[MacroStep, ...] | None],
+        cancel_event: threading.Event,
+    ) -> None:
         while not self.shutdown_event.is_set():
-            steps = self._macro_queue.get()
+            steps = requests.get()
             if steps is None:
                 return
             try:
-                self._play_macro(steps)
+                self._play_macro(steps, cancel_event)
             except Exception as exc:
                 LOG.warning("Macro playback failed: %s", exc)
                 self._release_pressed_keys()
 
     def _start_macro_worker(self) -> None:
         if self._macro_thread is None or not self._macro_thread.is_alive():
-            self._macro_cancel.clear()
+            self._macro_cancel = threading.Event()
             self._macro_queue = queue.Queue()
             self._macro_thread = threading.Thread(
-                target=self._macro_worker, name="omus-macros", daemon=True
+                target=self._macro_worker,
+                args=(self._macro_queue, self._macro_cancel),
+                name="omus-macros", daemon=True,
             )
             self._macro_thread.start()
 
@@ -354,6 +368,48 @@ class MouseRemapper:
         if self._macro_thread is not None and self._macro_thread is not threading.current_thread():
             self._macro_thread.join(timeout=1)
         self._macro_thread = None
+
+    def _dpi_worker(
+        self,
+        requests: queue.Queue[bool | None],
+        cancel_event: threading.Event,
+    ) -> None:
+        while not self.shutdown_event.is_set():
+            request = requests.get()
+            if request is None or cancel_event.is_set():
+                return
+            try:
+                if self.dpi_cycler is not None:
+                    self.dpi_cycler.cycle()
+            except Exception as exc:
+                LOG.warning("DPI cycle worker failed: %s", exc)
+
+    def _start_dpi_worker(self) -> None:
+        if self.dpi_cycler is None:
+            return
+        if self._dpi_thread is None or not self._dpi_thread.is_alive():
+            self._dpi_cancel = threading.Event()
+            self._dpi_queue = queue.Queue()
+            self._dpi_thread = threading.Thread(
+                target=self._dpi_worker,
+                args=(self._dpi_queue, self._dpi_cancel),
+                name="omus-dpi-cycle", daemon=True,
+            )
+            self._dpi_thread.start()
+
+    def _schedule_dpi_cycle(self) -> None:
+        self._start_dpi_worker()
+        if self.dpi_cycler is None:
+            return
+        self._dpi_queue.put(True)
+
+    def _stop_dpi_worker(self, *, wait: bool = True) -> None:
+        self._dpi_cancel.set()
+        self._dpi_queue.put(None)
+        if (wait and self._dpi_thread is not None
+                and self._dpi_thread is not threading.current_thread()):
+            self._dpi_thread.join(timeout=1)
+        self._dpi_thread = None
 
     @staticmethod
     def _is_disconnect(exc: OSError) -> bool:
@@ -483,8 +539,8 @@ class MouseRemapper:
         if action.kind == "disable":
             return
         if action.kind == "dpi-cycle":
-            if value == 1 and self.dpi_cycler is not None:
-                self.dpi_cycler.cycle()
+            if value == 1:
+                self._schedule_dpi_cycle()
             return
         if action.kind == "macro":
             if value == 1:
@@ -521,7 +577,10 @@ class MouseRemapper:
             if self.motion_diagnostic is not None:
                 self.motion_diagnostic.dropped()
             self._invalidate_observer_continuity()
+            if self.wake_coordinator is not None:
+                self.wake_coordinator.reconnecting()
             self._stop_macros()
+            self._stop_dpi_worker(wait=False)
             self._release_pressed_keys()
             LOG.warning("Input events dropped; discarding through the next SYN_REPORT")
             return False
@@ -592,6 +651,7 @@ class MouseRemapper:
                     if self.ui is None:
                         self.ui = UInput(self._capabilities(),
                                         name=f"omus: {self.device.name}")
+                    self._start_dpi_worker()
                     if disconnected:
                         LOG.info("Mouse reconnected at %s", self.device.path)
                         if self.wake_coordinator is not None:
@@ -625,6 +685,7 @@ class MouseRemapper:
                     if not self._is_disconnect(exc):
                         raise
                     self._stop_macros()
+                    self._stop_dpi_worker(wait=False)
                     self._pending_frame.clear()
                     self._discard_until_syn_report = False
                     self._release_pressed_keys()
@@ -636,6 +697,7 @@ class MouseRemapper:
                     LOG.warning("Mouse disconnected; waiting for reconnect")
         finally:
             self._stop_macros()
+            self._stop_dpi_worker()
             self._pending_frame.clear()
             self._discard_until_syn_report = False
             self._release_pressed_keys()

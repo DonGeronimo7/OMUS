@@ -330,7 +330,6 @@ class BatteryMonitorSupervisor:
                     LOG.debug("Battery monitoring unavailable (failure %d/%d): %s",
                               self._consecutive_failures, 3, exc)
             if self.wake_coordinator is not None:
-                self.wake_coordinator.reconnecting()
                 self.wake_coordinator.wait(
                     wake_generation, self.retry_interval, self.shutdown_event)
                 stopped = (self.shutdown_event.is_set()

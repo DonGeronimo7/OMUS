@@ -53,6 +53,12 @@ class HardwareSupervisor(HardwareBackend):
         self._preferred_adapter = self._adapter_affinity(backend)
         self._discovery_pending = bool(discovery_pending and not self._has_preferred_backend)
         self._lock = threading.RLock()
+        # Evdev observation is part of the pointer hot path.  It must never
+        # wait for slow backend discovery, readback, or desired-state writes
+        # protected by the management lock above.
+        self._observer_lock = threading.Lock()
+        self._evdev_observer = getattr(backend, "observe_evdev_event", None)
+        self._evdev_invalidator = getattr(backend, "invalidate_observer_continuity", None)
         self._generation = 0
         self._closed = False
         self._wake_coordinator = wake_coordinator
@@ -332,7 +338,14 @@ class HardwareSupervisor(HardwareBackend):
                 return False
 
             self.device = resolved_device
-            self._backend = replacement
+            with self._observer_lock:
+                self._backend = replacement
+                self._evdev_observer = getattr(
+                    replacement, "observe_evdev_event", None
+                )
+                self._evdev_invalidator = getattr(
+                    replacement, "invalidate_observer_continuity", None
+                )
             replacement_preferred = self._backend_has_proven_adapter(replacement)
             if replacement_preferred:
                 self._has_preferred_backend = True
@@ -379,28 +392,16 @@ class HardwareSupervisor(HardwareBackend):
     def set_lighting_state(self, device, state): return self._call("set_lighting_state", device, state)
 
     def observe_evdev_event(self, event_type, code, value) -> None:
-        if self._wake_coordinator is not None:
-            self._wake_coordinator.activity("evdev-input")
-        with self._lock:
-            if self._closed:
-                return
-            backend = self._backend
-        observe = getattr(backend, "observe_evdev_event", None)
-        if callable(observe):
-            observe(event_type, code, value)
-        if self._wake_coordinator is not None:
-            self._wake_coordinator.backend_usable()
+        with self._observer_lock:
+            observe = self._evdev_observer
+            if callable(observe):
+                observe(event_type, code, value)
 
     def invalidate_observer_continuity(self) -> None:
-        if self._wake_coordinator is not None:
-            self._wake_coordinator.reconnecting()
-        with self._lock:
-            if self._closed:
-                return
-            backend = self._backend
-        invalidate = getattr(backend, "invalidate_observer_continuity", None)
-        if callable(invalidate):
-            invalidate()
+        with self._observer_lock:
+            invalidate = self._evdev_invalidator
+            if callable(invalidate):
+                invalidate()
 
     def watch_dpi_events(self, device, callback, shutdown_event,
                          ready_callback=None) -> None:
@@ -434,6 +435,9 @@ class HardwareSupervisor(HardwareBackend):
             if self._closed:
                 return
             self._closed = True
+            with self._observer_lock:
+                self._evdev_observer = None
+                self._evdev_invalidator = None
             close = getattr(self._backend, "close", None)
             if close:
                 close()

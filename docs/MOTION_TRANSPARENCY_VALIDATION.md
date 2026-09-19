@@ -37,3 +37,38 @@ The measurement boundary is the instant a complete physical frame reaches
 `MouseRemapper` through the instant its corresponding virtual frame is
 submitted to uinput. This measures OMUS forwarding latency; it does not claim
 to include downstream compositor/application scheduling latency.
+
+## G305 sleep/wake soak
+
+One diagnostic run may remain active across repeated genuine sleep cycles. A
+wake after at least 30 seconds without input creates a `wake_cycles` record in
+the JSON report. Each completed record keeps separate
+`first_virtual_input_ms` and `full_omus_ready_ms` values; neither is substituted
+for the other. The latency summaries logged at shutdown include
+minimum/median/p95/p99/maximum.
+
+Before the soak, confirm motion, configured remaps, DPI cycling and
+notifications, and the configured 1000 Hz report rate. Then perform at least
+ten natural hardware sleep/wake cycles without stopping OMUS or touching the
+receiver. For each cycle retain the JSON timestamps and fill the operator-only
+observations that software cannot infer:
+
+| Cycle | Wake detected | Pointer | Mappings | DPI control | Notification | Service running | Manual intervention | First input | Full ready |
+|---:|---|---|---|---|---|---|---|---|---|---|
+| 1 |  |  |  |  |  |  |  |  |  |
+| 2 |  |  |  |  |  |  |  |  |  |
+| 3 |  |  |  |  |  |  |  |  |  |
+| 4 |  |  |  |  |  |  |  |  |  |
+| 5 |  |  |  |  |  |  |  |  |  |
+| 6 |  |  |  |  |  |  |  |  |  |
+| 7 |  |  |  |  |  |  |  |  |  |
+| 8 |  |  |  |  |  |  |  |  |  |
+| 9 |  |  |  |  |  |  |  |  |  |
+| 10 |  |  |  |  |  |  |  |  |  |
+
+After ordinary wake succeeds, repeat with immediate rapid motion, ordinary and
+remapped button presses, and DPI-cycle presses. Preserve the journal and JSON
+report on any failure; do not restart the service before capturing the failed
+state. The first physical event may be called lost by OMUS only if kernel evdev
+evidence shows it reached the selected physical stream but is absent from the
+virtual trace.

@@ -210,12 +210,26 @@ class MotionTransparencyDiagnostic:
         with self._lock:
             self._syn_dropped += 1
 
-    def write_report(self) -> dict[str, object]:
+    def write_report(self, *, wake_samples: Iterable[object] = ()) -> dict[str, object]:
         with self._lock:
             physical = tuple(self._physical)
             virtual = tuple(self._virtual)
             dropped = self._syn_dropped
         summary = analyze_motion_transparency(physical, virtual, syn_dropped=dropped)
+        wake_cycles = []
+        for index, sample in enumerate(wake_samples, 1):
+            recognized_ms, full_ready_ms, first_input_ms = sample.durations_ms()
+            wake_cycles.append({
+                "cycle": index,
+                "source": sample.source,
+                "wake_detected": recognized_ms is not None,
+                "first_virtual_input_ms": first_input_ms,
+                "full_omus_ready_ms": full_ready_ms,
+                "t0_ns": sample.t0_ns,
+                "t1_ns": sample.t1_ns,
+                "t2_ns": sample.t2_ns,
+                "t3_ns": sample.t3_ns,
+            })
         report = {
             "diagnostic": "OMUS motion transparency",
             "workload": self.workload,
@@ -224,6 +238,7 @@ class MotionTransparencyDiagnostic:
                 "frame submitted by MouseRemapper"
             ),
             "summary": summary,
+            "wake_cycles": wake_cycles,
             "physical_frames": [asdict(frame) for frame in physical],
             "virtual_frames": [asdict(frame) for frame in virtual],
         }

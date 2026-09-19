@@ -1,5 +1,33 @@
 # AI handoff log
 
+## 2026-09-19 — Final pre-Rust input-path stabilization
+
+- Investigation found that the event-driven wake work in `f52a9e2` used one
+  global state for evdev availability and optional DPI/battery management.
+  A sleeping/unavailable management backend could therefore let ordinary input
+  repeatedly cancel management backoff. Slow backend selection/reconciliation
+  also shared the lock acquired by the remapper-owned evdev observer, and a
+  synchronous mapped DPI cycle could delay its entire physical frame.
+- Input and management readiness are now separate. Evdev observation switches
+  through a dedicated short-held lock and never waits for discovery/readback/
+  desired-state writes. DPI cycles retain ordered `DpiCycler` semantics on a
+  generation-isolated worker; disconnect cancellation cannot consume requests
+  belonging to a later generation.
+- Wake timing now retains physical evidence to first virtual input separately
+  from physical evidence to full management readiness and reports p99. The
+  motion JSON includes completed wake-cycle records and the physical protocol
+  includes a ten-cycle operator table.
+- The later hardening correction `b655c1a` did not cause the wake defect: its
+  terminal `STOPPING` and shutdown-order changes are retained and covered. The
+  problematic shared wake state came from `f52a9e2`; existing exact identity,
+  ambiguity rejection, permissions, backend affinity, and hardware write gates
+  remain unchanged.
+- Focused discovery/HID++/service/security/lifecycle coverage passed 171 tests;
+  the complete suite passed 1,178 with the existing GLib warning. Compileall
+  and whitespace checks passed; Ruff was unavailable. Physical G305 validation
+  remains pending because this environment has no input or USB device access.
+  No merge, tag, release, push, or main-branch change occurred.
+
 ## 2026-09-19 — Production evdev motion-frame transparency
 
 - Root cause: `MouseRemapper` discarded every `EV_SYN` event and called

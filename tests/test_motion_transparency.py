@@ -1,5 +1,7 @@
 """Deterministic physical-to-virtual evdev frame transparency tests."""
 
+import threading
+
 from evdev import ecodes
 
 from mouse_control.remapper import MouseRemapper
@@ -179,3 +181,71 @@ def test_shutdown_discards_unterminated_frame_without_stuck_synthetic_key() -> N
     assert ui.frames == []
     assert ui._pending == []
     assert not target._pressed_keys
+
+
+def test_slow_dpi_management_does_not_block_motion_frame_forwarding() -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowCycler:
+        def cycle(self) -> bool:
+            started.set()
+            assert release.wait(1)
+            return True
+
+    target = MouseRemapper(
+        "/dev/input/test", {"BTN_TASK": "dpi-cycle"}, dpi_cycler=SlowCycler()
+    )
+    ui = TraceUInput()
+    target.ui = ui
+    forwarded = threading.Event()
+
+    def process_frame() -> None:
+        send(
+            target,
+            rel(ecodes.REL_X, 7), rel(ecodes.REL_Y, -3),
+            key(ecodes.BTN_TASK, 1), REPORT,
+        )
+        forwarded.set()
+
+    input_thread = threading.Thread(target=process_frame)
+    input_thread.start()
+    assert started.wait(1)
+    assert forwarded.wait(.1), "motion waited for DPI hardware management"
+    assert ui.frames == [[rel(ecodes.REL_X, 7), rel(ecodes.REL_Y, -3)]]
+
+    release.set()
+    input_thread.join(1)
+    target._stop_dpi_worker()
+
+
+def test_cancelled_dpi_worker_cannot_consume_post_reconnect_requests() -> None:
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_finished = threading.Event()
+    calls = 0
+    call_lock = threading.Lock()
+
+    class Cycler:
+        def cycle(self) -> bool:
+            nonlocal calls
+            with call_lock:
+                calls += 1
+                current = calls
+            if current == 1:
+                first_started.set()
+                assert release_first.wait(1)
+            else:
+                second_finished.set()
+            return True
+
+    target = MouseRemapper("/dev/input/test", {}, dpi_cycler=Cycler())
+    target._schedule_dpi_cycle()
+    assert first_started.wait(1)
+    target._stop_dpi_worker(wait=False)
+
+    target._schedule_dpi_cycle()
+    assert second_finished.wait(.1)
+    release_first.set()
+    target._stop_dpi_worker()
+    assert calls == 2

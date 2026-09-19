@@ -52,6 +52,11 @@ def _percentile95(values: list[float]) -> float:
     return ordered[max(0, math.ceil(len(ordered) * .95) - 1)]
 
 
+def _percentile99(values: list[float]) -> float:
+    ordered = sorted(values)
+    return ordered[max(0, math.ceil(len(ordered) * .99) - 1)]
+
+
 class WakeLatencyRecorder:
     """Retain bounded T0→T1/T2/T3 samples for repeated wake trials."""
 
@@ -72,7 +77,7 @@ class WakeLatencyRecorder:
             values = current.__dict__ | {field: timestamp_ns}
             current = WakeLatencySample(**values)
             self._current = current
-            if field == "t3_ns":
+            if current.t2_ns is not None and current.t3_ns is not None:
                 self._samples.append(current)
                 self._current = None
                 t1, t2, t3 = current.durations_ms()
@@ -108,7 +113,9 @@ class WakeLatencyRecorder:
                           (ordered[middle - 1] + ordered[middle]) / 2)
                 result[name] = {
                     "minimum_ms": ordered[0], "median_ms": median,
-                    "p95_ms": _percentile95(ordered), "maximum_ms": ordered[-1],
+                    "p95_ms": _percentile95(ordered),
+                    "p99_ms": _percentile99(ordered),
+                    "maximum_ms": ordered[-1],
                 }
         return result
 
@@ -126,6 +133,7 @@ class RuntimeWakeCoordinator:
         self._state = RuntimeWakeState.ACTIVE
         self._last_activity_ns = clock_ns()
         self._pending_t0_ns: int | None = None
+        self._management_ready = True
 
     @property
     def state(self) -> RuntimeWakeState:
@@ -177,13 +185,26 @@ class RuntimeWakeCoordinator:
             self._state = RuntimeWakeState.ACTIVE
             self._pending_t0_ns = None
             self.recorder.recognized(timestamp_ns)
+            if self._management_ready:
+                self.recorder.backend_usable(timestamp_ns)
             self._signal()
 
     def recognized(self, timestamp_ns: int | None = None) -> None:
         self.recorder.recognized(self._clock_ns() if timestamp_ns is None else timestamp_ns)
 
     def backend_usable(self, timestamp_ns: int | None = None) -> None:
-        self.recorder.backend_usable(self._clock_ns() if timestamp_ns is None else timestamp_ns)
+        timestamp_ns = self._clock_ns() if timestamp_ns is None else timestamp_ns
+        with self._condition:
+            if self._state is RuntimeWakeState.STOPPING:
+                return
+            self._management_ready = True
+        self.recorder.backend_usable(timestamp_ns)
+
+    def management_unavailable(self) -> None:
+        """Mark optional hardware management stale without blocking input recovery."""
+        with self._condition:
+            if self._state is not RuntimeWakeState.STOPPING:
+                self._management_ready = False
 
     def runtime_usable(self, timestamp_ns: int | None = None) -> None:
         self.recorder.runtime_usable(self._clock_ns() if timestamp_ns is None else timestamp_ns)
@@ -192,11 +213,13 @@ class RuntimeWakeCoordinator:
         with self._condition:
             if self._state is not RuntimeWakeState.STOPPING:
                 self._state = RuntimeWakeState.RECONNECTING
+                self._management_ready = False
 
     def unavailable(self) -> None:
         with self._condition:
             if self._state is not RuntimeWakeState.STOPPING:
                 self._state = RuntimeWakeState.UNAVAILABLE
+                self._management_ready = False
 
     def wait(self, after_generation: int, timeout: float,
              shutdown_event: threading.Event) -> bool:

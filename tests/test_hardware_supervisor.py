@@ -1,7 +1,8 @@
 """Shared hardware lifecycle and reconnect reconciliation regressions."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+import threading
+from unittest.mock import MagicMock, Mock
 
 from mouse_control.discovery import MouseDevice
 from mouse_control.hardware import (DesiredHardwareState, HardwareBackend,
@@ -64,6 +65,59 @@ def test_stale_rebind_request_cannot_replace_new_backend_twice():
     assert not supervisor.rebind(expected_generation=0)
     assert supervisor.current_backend is second
     third.close.assert_not_called()
+
+
+def test_many_stale_wake_requests_select_and_reconcile_backend_only_once():
+    first, second = backend(), backend()
+    factory = Mock(return_value=second)
+    supervisor = HardwareSupervisor(first, G305, factory)
+
+    results = [supervisor.rebind(expected_generation=0) for _ in range(10)]
+
+    assert results == [True] + [False] * 9
+    factory.assert_called_once_with(G305)
+    first.close.assert_called_once()
+
+
+def test_evdev_observer_never_waits_for_slow_management_rebind() -> None:
+    first_observe = Mock()
+    second_observe = Mock()
+    first = SimpleNamespace(
+        name="first", observe_evdev_event=first_observe,
+        invalidate_observer_continuity=Mock(), close=Mock(),
+    )
+    second = SimpleNamespace(
+        name="second", observe_evdev_event=second_observe,
+        invalidate_observer_continuity=Mock(), close=Mock(),
+    )
+    discovery_started = threading.Event()
+    release_discovery = threading.Event()
+
+    def slow_factory(_device):
+        discovery_started.set()
+        assert release_discovery.wait(1)
+        return second
+
+    supervisor = HardwareSupervisor(first, G305, slow_factory)
+    rebind = threading.Thread(target=lambda: supervisor.rebind(0))
+    rebind.start()
+    assert discovery_started.wait(1)
+
+    input_forwarded = threading.Event()
+    input_thread = threading.Thread(target=lambda: (
+        supervisor.observe_evdev_event(2, 0, 7), input_forwarded.set()
+    ))
+    input_thread.start()
+    assert input_forwarded.wait(.1), "evdev observer blocked on management discovery"
+    first_observe.assert_called_once_with(2, 0, 7)
+
+    release_discovery.set()
+    rebind.join(1)
+    input_thread.join(1)
+    assert not rebind.is_alive()
+    supervisor.observe_evdev_event(2, 1, -3)
+    second_observe.assert_called_once_with(2, 1, -3)
+    first.close.assert_called_once()
 
 
 def test_old_watcher_callback_is_ignored_after_generation_change():

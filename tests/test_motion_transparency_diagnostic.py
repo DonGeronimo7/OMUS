@@ -9,6 +9,7 @@ from mouse_control.motion_transparency import (
     MotionTransparencyDiagnostic,
     analyze_motion_transparency,
 )
+from mouse_control.runtime_wake import WakeLatencySample
 
 
 def frame(events, timestamp, arrival=None):
@@ -106,12 +107,16 @@ def test_collector_writes_json_report_with_workload_label(tmp_path: Path) -> Non
         diagnostic.virtual_event(*event)
     diagnostic.virtual_frame(6_000_000)
 
-    summary = diagnostic.write_report()
+    summary = diagnostic.write_report(wake_samples=(
+        WakeLatencySample("evdev-input", 10, 11, 15, 12),
+    ))
 
     content = output.read_text()
     assert summary["pass"] is True
     assert '"workload": "C"' in content
     assert '"measurement_boundary"' in content
+    assert '"first_virtual_input_ms": 2e-06' in content
+    assert '"full_omus_ready_ms": 5e-06' in content
 
 
 def test_run_motion_diagnostic_dispatches_production_remapper_path(tmp_path: Path) -> None:

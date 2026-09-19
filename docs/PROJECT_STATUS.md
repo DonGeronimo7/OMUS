@@ -8,12 +8,18 @@
 - `SYN_DROPPED` discards the incomplete frame and all input through the recovery
   `SYN_REPORT`, invalidates observer continuity, cancels macros, and releases
   tracked synthetic keys/buttons before normal framed forwarding resumes.
-- A production-path, read-only motion diagnostic records exact physical and
-  virtual motion frames, loss/duplication/modification/order/framing metrics,
-  effective rates, and forwarding latency without changing hardware authority.
-- Automated validation passes 1,171 tests. Physical G305 workloads A/B/C remain
-  pending because the implementation environment exposes no `/dev/input` or USB
-  device access.
+- Input recovery and optional hardware-management readiness are now independent.
+  DPI/battery retry state cannot mark healthy evdev input unavailable or wake a
+  management retry on every rapid motion event. Slow backend discovery,
+  reconciliation, and DPI cycling no longer hold the ordinary pointer path.
+- A production-path, read-only diagnostic records exact physical and virtual
+  motion frames, loss/duplication/modification/order/framing metrics, effective
+  rates, separate first-input/full-ready wake times, and latency distributions
+  without changing hardware authority.
+- Automated validation passes 1,178 tests, including a deterministic ten-cycle
+  ENODEV/node-renumbering soak with immediate XY and remapped-button input.
+  Physical G305 workloads and ten natural sleep/wake cycles remain pending
+  because the environment exposes no `/dev/input` or USB device access.
 
 ## 2026-09-19 — OMUS v1.0.0 rebrand candidate
 

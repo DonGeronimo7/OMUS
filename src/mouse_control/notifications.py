@@ -188,6 +188,8 @@ class DpiMonitorSupervisor:
         # resync is not a physical transition and must not create a duplicate
         # desktop notification.
         with self._state_lock: self._watcher_bound = True; self._state = MonitorState.READY
+        if self.wake_coordinator is not None:
+            self.wake_coordinator.backend_usable()
         LOG.info("DPI event watcher ready; DPI monitor ready")
     def _run(self):
         backend, unavailable = self.backend, False
@@ -198,6 +200,8 @@ class DpiMonitorSupervisor:
             unsupported = False
             force_rebind = False
             try:
+                if self.wake_coordinator is not None:
+                    self.wake_coordinator.management_unavailable()
                 if start := getattr(self.notifier, "start", None): start()
                 with self._state_lock: self._watcher_bound = False; self._state = MonitorState.BINDING
                 monitor = create_dpi_monitor(backend, self.device, shutdown_event=self.shutdown_event, stages=self.stages, notifier=self, log_failure=False, dpi_cycler=self.dpi_cycler)
@@ -212,18 +216,20 @@ class DpiMonitorSupervisor:
                         with self._state_lock: self._state = MonitorState.DISCONNECTED
                         if not unavailable: LOG.warning("DPI monitor stopped; retrying")
                         unavailable = True
-                        if self.wake_coordinator is not None: self.wake_coordinator.reconnecting()
+                        if self.wake_coordinator is not None:
+                            self.wake_coordinator.management_unavailable()
             except Exception as exc:
                 if not unavailable: LOG.warning("DPI monitoring unavailable; retrying: %s", exc)
                 unavailable = True
-                if self.wake_coordinator is not None: self.wake_coordinator.reconnecting()
+                if self.wake_coordinator is not None:
+                    self.wake_coordinator.management_unavailable()
             if self.shutdown_event.is_set():
                 break
             if unsupported:
                 if self.wake_coordinator is None:
                     stopped = self.shutdown_event.wait(max(30., self.retry_interval))
                 else:
-                    self.wake_coordinator.unavailable()
+                    self.wake_coordinator.backend_usable()
                     self.wake_coordinator.wait(
                         wake_generation, max(30., self.retry_interval), self.shutdown_event)
                     stopped = (self.shutdown_event.is_set()

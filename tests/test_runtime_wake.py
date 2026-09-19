@@ -145,14 +145,49 @@ def test_latency_instrumentation_reports_repeated_min_median_p95_and_max():
 
     summary = recorder.summary()
     assert summary["t0_to_t1"] == {
-        "minimum_ms": .1, "median_ms": .1, "p95_ms": .1, "maximum_ms": .1,
+        "minimum_ms": .1, "median_ms": .1, "p95_ms": .1,
+        "p99_ms": .1, "maximum_ms": .1,
     }
     assert summary["t0_to_t2"] == {
-        "minimum_ms": .5, "median_ms": .5, "p95_ms": .5, "maximum_ms": .5,
+        "minimum_ms": .5, "median_ms": .5, "p95_ms": .5,
+        "p99_ms": .5, "maximum_ms": .5,
     }
     assert summary["t0_to_t3"] == {
-        "minimum_ms": 1., "median_ms": 2.5, "p95_ms": 20., "maximum_ms": 20.,
+        "minimum_ms": 1., "median_ms": 2.5, "p95_ms": 20.,
+        "p99_ms": 20., "maximum_ms": 20.,
     }
+
+
+def test_first_input_and_full_management_ready_are_recorded_independently():
+    recorder = WakeLatencyRecorder()
+    wake = RuntimeWakeCoordinator(clock_ns=lambda: 0, recorder=recorder)
+
+    wake.management_unavailable()
+    wake.activity("evdev-input", 31_000_000_000)
+    wake.runtime_usable(31_001_000_000)
+
+    assert recorder.samples == ()
+    wake.backend_usable(31_020_000_000)
+
+    sample = recorder.samples[0]
+    assert sample.durations_ms() == (0.0, 20.0, 1.0)
+
+
+def test_management_unavailability_does_not_turn_input_unavailable_or_storm_retries():
+    wake = RuntimeWakeCoordinator(clock_ns=lambda: 0)
+
+    wake.management_unavailable()
+    assert wake.state is RuntimeWakeState.ACTIVE
+    generation = wake.generation
+
+    wake.activity("first-wake-input", 31_000_000_000)
+    assert wake.generation == generation + 1
+    for offset in range(1, 101):
+        wake.management_unavailable()
+        wake.activity("rapid-input", 31_000_000_000 + offset * 1_000_000)
+
+    assert wake.state is RuntimeWakeState.ACTIVE
+    assert wake.generation == generation + 1
 
 
 def test_shutdown_interrupts_event_driven_wait_without_polling():
