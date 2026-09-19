@@ -23,7 +23,12 @@ VERSION_COMMENT = re.compile(r"v\d+(?:\.\d+){0,2}\b")
 
 ALLOWED_JOB_WRITES: dict[tuple[str, str], set[str]] = {
     ("codeql.yml", "analyze"): {"security-events"},
-    ("release-artifacts.yml", "publish"): {"contents"},
+    ("release-artifacts.yml", "publish"): {
+        "artifact-metadata",
+        "attestations",
+        "contents",
+        "id-token",
+    },
     ("release-trigger.yml", "create-tag"): {"contents"},
     ("release-trigger.yml", "dispatch"): {"actions"},
     ("scorecard.yml", "analysis"): {"id-token", "security-events"},
@@ -45,6 +50,13 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "publish_results: true",
         "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4",
         "github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0",
+    ),
+    "release-artifacts.yml": (
+        "mouse-control-${version}.cdx.json",
+        "sha256sum --check --strict SHA256SUMS",
+        "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2",
+        "subject-checksums: release-assets/SHA256SUMS",
+        "sbom-path: ${{ steps.sbom.outputs.path }}",
     ),
 }
 

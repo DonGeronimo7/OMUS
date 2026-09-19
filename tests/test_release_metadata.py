@@ -135,5 +135,7 @@ def test_ci_and_release_workflow_are_version_independent():
     assert "'%{RELEASE}'" in ci and '"$package_release"' in ci
     assert "permissions: read-all" in release
     assert "needs: [test, python, deb, rpm, appimage]" in release
-    assert "permissions:\n      contents: write" in release
+    assert "      contents: write" in release
+    assert "      attestations: write" in release
+    assert "      id-token: write" in release
     assert 'test "$GITHUB_REF_NAME" = "v${version}"' in release
