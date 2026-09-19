@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.10.0 — OMUS
+## 1.0.0 — OMUS
 
+- Establish the first public OMUS release and the v0.9.9 → v1.0.0 upgrade path.
 - Rebrand the public product as OMUS — One Mouse Universal System.
 - Add canonical `omus` command, desktop metadata, icons, packages, and service.
 - Preserve v0.9.9 configuration, state, commands, service behavior, and updater compatibility.

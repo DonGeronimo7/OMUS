@@ -37,7 +37,7 @@ body:
     attributes: {label: Desktop environment or compositor, placeholder: "Example: GNOME on Wayland"}
   - type: input
     id: version
-    attributes: {label: OMUS version, placeholder: "Example: 0.10.0"}
+    attributes: {label: OMUS version, placeholder: "Example: 1.0.0"}
     validations: {required: true}
   - type: dropdown
     id: install

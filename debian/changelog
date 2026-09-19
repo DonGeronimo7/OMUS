@@ -1,4 +1,4 @@
-omus (0.10.0) unstable; urgency=medium
+omus (1.0.0) unstable; urgency=medium
 
   * Rebrand as OMUS with lossless legacy configuration and command compatibility.
 

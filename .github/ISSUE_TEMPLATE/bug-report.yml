@@ -25,7 +25,7 @@ body:
     id: version
     attributes:
       label: OMUS version and installation method
-      placeholder: "Example: 0.10.0 RPM"
+      placeholder: "Example: 1.0.0 RPM"
     validations:
       required: true
   - type: input

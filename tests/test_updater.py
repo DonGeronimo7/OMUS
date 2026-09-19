@@ -157,7 +157,7 @@ def test_inspect_update_requires_compatible_appimage_asset(monkeypatch):
     assert "identify one .appimage" in state.unavailable_reason
 
 @pytest.mark.parametrize(("installed", "latest", "expected"), [
-    ("0.7.4", "0.8.0", True), ("0.9.9", "0.10.0", True),
+    ("0.7.4", "0.8.0", True), ("0.9.9", "1.0.0", True),
     ("v0.7.4", "v0.7.4", False), ("0.7.4", "0.8rc1", True),
 ])
 def test_version_comparison_uses_pep440(installed, latest, expected):

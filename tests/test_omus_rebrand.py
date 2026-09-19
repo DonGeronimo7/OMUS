@@ -74,14 +74,14 @@ def test_updater_accepts_canonical_and_v099_artifact_names(monkeypatch):
 
     monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
     for name in (
-        "omus-0.10.0-1.fc44.noarch.rpm",
-        "omus_0.10.0_all.deb",
-        "OMUS-0.10.0-x86_64.AppImage",
+        "omus-1.0.0-1.fc44.noarch.rpm",
+        "omus_1.0.0_all.deb",
+        "OMUS-1.0.0-x86_64.AppImage",
     ):
         suffix = ".appimage" if name.endswith("AppImage") else Path(name).suffix
-        release = updater.Release("0.10.0", ({
+        release = updater.Release("1.0.0", ({
             "name": name,
-            "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/{name}",
+            "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.0/{name}",
         },))
         assert updater.select_asset(release, suffix)["name"] == name
 

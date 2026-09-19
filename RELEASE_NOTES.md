@@ -1,6 +1,8 @@
-# OMUS v0.10.0 — Every mouse. One system.
+# OMUS v1.0.0 — Every mouse. One system.
 
 OMUS is One Mouse Universal System: the public successor to Mouse Control.
+This is the first public OMUS release; the supported transition is Mouse
+Control v0.9.9 → OMUS v1.0.0.
 This release introduces the `omus` command, OMUS desktop identity and canonical
 artwork, lossless/idempotent migration from legacy configuration, data, and
 cache paths, and package transitions that preserve upgrades from v0.9.9. The
@@ -13,9 +15,9 @@ unit before enabling OMUS so only one remapper owns evdev/HID resources.
 Hardware write authority, discovery gates, remapping, reconnect behavior,
 DPI/polling, and independent notification replacement IDs are unchanged.
 
-Primary artifacts are `omus-0.10.0-1.fc44.noarch.rpm`,
-`omus_0.10.0_all.deb`, `OMUS-0.10.0-x86_64.AppImage`,
-`omus-0.10.0-py3-none-any.whl`, and `omus-0.10.0.tar.gz`.
+Primary artifacts are `omus-1.0.0-1.fc44.noarch.rpm`,
+`omus_1.0.0_all.deb`, `OMUS-1.0.0-x86_64.AppImage`,
+`omus-1.0.0-py3-none-any.whl`, and `omus-1.0.0.tar.gz`.
 
 # Mouse Control v0.9.9
 
