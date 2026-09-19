@@ -1,5 +1,15 @@
 # AI handoff log
 
+## 2026-09-19 — v0.9.9 VirusTotal checksum-set correction
+
+- The first post-publication VirusTotal run stopped before submission because
+  strict `SHA256SUMS` verification correctly required the published SBOM while
+  the scan download set contained only the five primary artifacts and manifest.
+- The scan now downloads the SBOM only to verify the complete published checksum
+  set, then explicitly excludes both `*.cdx.json` and `SHA256SUMS` from the
+  VirusTotal file globs. The scan set remains exactly RPM, DEB, AppImage, wheel,
+  and source archive; the published v0.9.9 artifacts are unchanged.
+
 ## 2026-09-19 — v0.9.9 SBOM publication environment correction
 
 - The first v0.9.9 artifact run built and tested Python 3.12/3.13/3.14, wheel,
