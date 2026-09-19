@@ -1,0 +1,2 @@
+# Local fuzz-target smoke testing. ClusterFuzzLite's Python image also provides Atheris.
+atheris==3.0.0

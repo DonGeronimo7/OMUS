@@ -42,6 +42,12 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0",
         "github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0",
     ),
+    "clusterfuzzlite.yml": (
+        "google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1.0.0",
+        "google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1.0.0",
+        "language: python",
+        "sanitizer: address",
+    ),
     "dependency-audit.yml": (
         "schedule:",
         "python -m pip_audit --local --strict --progress-spinner off",
@@ -58,6 +64,9 @@ REQUIRED_WORKFLOW_MARKERS: dict[str, tuple[str, ...]] = {
         "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2",
         "subject-checksums: release-assets/SHA256SUMS",
         "sbom-path: ${{ steps.sbom.outputs.path }}",
+        "gh attestation download",
+        "gh attestation verify",
+        "mouse-control-v${version}.intoto.jsonl",
     ),
 }
 
@@ -185,6 +194,15 @@ def validate_repository() -> list[str]:
     for path in paths:
         errors.extend(validate_workflow(path))
     errors.extend(validate_dependabot())
+    fuzz_dockerfile = ROOT / ".clusterfuzzlite" / "Dockerfile"
+    if not fuzz_dockerfile.is_file():
+        errors.append(".clusterfuzzlite/Dockerfile: required fuzzing build is missing")
+    elif not re.search(
+        r"^FROM\s+[^\s]+@sha256:[0-9a-f]{64}$",
+        fuzz_dockerfile.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    ):
+        errors.append(".clusterfuzzlite/Dockerfile: builder image must be SHA-256 pinned")
     return errors
 
 

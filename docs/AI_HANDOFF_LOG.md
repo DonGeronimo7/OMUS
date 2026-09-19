@@ -1,5 +1,33 @@
 # AI handoff log
 
+## 2026-09-19 — OpenSSF Scorecard maximum hardening
+
+- Created `codex/openssf-scorecard-hardening` from current `origin/main`
+  `4146562`. Recorded the public Scorecard 5.5.0 baseline (5.5 aggregate), then
+  addressed the actionable fuzzing, dependency-pinning, security-policy, and
+  signed-release evidence gaps without weakening established runtime behavior.
+- Added seven environment-specific, exact-version, SHA-256-checked pip locks,
+  deterministic regeneration/verification, and hash-enforced CI/audit/release/
+  AppImage installs. Added bounded ClusterFuzzLite HID descriptor/report and
+  offline vendor-capture parser targets with immutable builder/action pins.
+- Future releases export the genuine GitHub/Sigstore SLSA bundle and verify all
+  checksum-listed artifacts against the repository, workflow, commit, ref, and
+  predicate before publishing. Independently verified v0.9.8's original bundle
+  and all artifact digests, uploaded it to the release, downloaded it again,
+  and confirmed byte identity. Four older releases had no original attestation
+  records and were left untouched.
+- Added direct private-report guidance, response/disclosure expectations,
+  change control, mandatory feature/regression tests, dependency policy, and an
+  honest Best Practices evidence/gap map. PyPI publishing remains unwired
+  because the public name has no verified project ownership or Trusted
+  Publisher configuration.
+- Validation: locked CI suite `1101 passed`; Fedora RPM `%check` `1101 passed,
+  1 warning` plus packaged CLI smokes; Ruff, workflow policy, lock policy,
+  compileall, whitespace, clean wheel/sdist, wheel reproducibility, and locked
+  dependency audit passed. Both real Atheris targets completed 100 libFuzzer
+  runs without crashes. No hardware access, physical validation, runtime or
+  write-authority change, merge, tag, or release occurred.
+
 ## 2026-09-18 — PR #6 cloud CI remediation
 
 - Continued `codex/openssf-pre-v1-hardening` from pushed checkpoint `1c25ffc`.

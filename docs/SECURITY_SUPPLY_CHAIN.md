@@ -25,6 +25,12 @@ artifact is absent, an unexpected file appears, or checksum verification fails.
 GitHub's keyless attestation service binds provenance to the final downloaded
 artifact bytes, not to intermediate build outputs.
 
+The release also publishes `mouse-control-VERSION.intoto.jsonl`, an offline copy
+of the genuine GitHub/Sigstore SLSA provenance bundle. The workflow downloads
+that bundle from GitHub's attestation service and verifies every exact checksum
+entry against the expected repository, workflow, source commit, source ref, and
+SLSA predicate before release publication. It never synthesizes provenance.
+
 The published `mouse-control-VERSION.cdx.json` is a reproducible CycloneDX 1.6
 inventory of the installed Mouse Control wheel and its resolved Python runtime
 dependencies. The same SBOM is bound to the wheel, sdist, RPM, DEB, and AppImage
@@ -53,6 +59,24 @@ gh attestation verify Mouse-Control-VERSION-x86_64.AppImage \
 The same command applies to the wheel, source archive, RPM, DEB, and SBOM.
 Checksums and attestations complement one another: checksums detect byte changes,
 while attestations bind those bytes to the repository workflow identity.
+
+For offline verification, download the matching
+`mouse-control-VERSION.intoto.jsonl` release asset and pass it explicitly:
+
+```bash
+gh attestation verify Mouse-Control-VERSION-x86_64.AppImage \
+  --repo DonGeronimo7/mouse-control \
+  --bundle mouse-control-VERSION.intoto.jsonl
+```
+
+## Locked dependency environments
+
+Runtime, CI, security audit, build, SBOM, fuzzing, and lock-tool environments
+have separate reviewed inputs and exact, SHA-256-checked lock files under
+`requirements/`. Workflows install them with `--require-hashes`; local project
+installs use `--no-deps` after the applicable locked environment is present.
+See [`DEVELOPMENT_POLICY.md`](DEVELOPMENT_POLICY.md) for the auditable
+regeneration procedure.
 
 ## Reproducibility scope
 

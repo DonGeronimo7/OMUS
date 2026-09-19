@@ -25,7 +25,6 @@ jobs:
       - name: Create resolved audit environment
         run: |
           python -m venv .audit-venv
-          .audit-venv/bin/python -m pip install . -r requirements/security.txt
-          .audit-venv/bin/python -m pip uninstall --yes mouse-control
+          .audit-venv/bin/python -m pip install --require-hashes --requirement requirements/security.lock.txt
       - name: Audit runtime, build, test, and security dependencies
         run: .audit-venv/bin/python -m pip_audit --local --strict --progress-spinner off

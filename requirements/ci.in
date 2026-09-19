@@ -1,0 +1,9 @@
+-r runtime.in
+
+# Test, lint, workflow-validation, and no-isolation build tooling.
+PyYAML==6.0.3
+build==1.6.1
+pytest==9.1.1
+ruff==0.16.8
+setuptools==83.0.0
+wheel==0.48.0

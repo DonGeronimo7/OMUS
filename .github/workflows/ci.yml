@@ -23,10 +23,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install . -r requirements/dev.txt
+      - run: python -m pip install --require-hashes --requirement requirements/ci.lock.txt
       - run: python -m pytest -q
-      - run: python -m compileall -q src tests
+      - run: python -m compileall -q src tests scripts fuzz
 
   repository-security:
     runs-on: ubuntu-latest
@@ -38,11 +37,13 @@ jobs:
         with:
           python-version: '3.14'
           cache: pip
-      - run: python -m pip install -r requirements/dev.txt
+      - run: python -m pip install --require-hashes --requirement requirements/ci.lock.txt
       - name: Validate workflow security policy
         run: python scripts/validate_workflows.py
+      - name: Validate dependency hash locks
+        run: python scripts/verify_dependency_locks.py
       - name: Lint high-confidence correctness rules
-        run: python -m ruff check src tests scripts
+        run: python -m ruff check src tests scripts fuzz
       - name: Verify reproducible wheel build
         run: scripts/check-wheel-reproducibility.sh
 
