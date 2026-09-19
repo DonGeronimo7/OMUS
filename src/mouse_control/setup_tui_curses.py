@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import curses
+from dataclasses import dataclass
 import errno
 from pathlib import Path
 import queue
@@ -41,7 +42,7 @@ from .hardware import HardwareError
 from .keyboard_capture import capture_keyboard_chord, capture_keyboard_key
 from .remapper import parse_action
 from .research_probe import ResearchProbeError, run_reversible_research_probes
-from .setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
+from .setup_tui import ActionKind, DisplayRow, SECTIONS, SetupController, SetupSection
 from .tui_presentation import (
     LayoutMode,
     footer_hint,
@@ -62,6 +63,17 @@ def _dpi_number(value: Any) -> int | None:
     if isinstance(value, tuple):
         value = value[0]
     return int(value)
+
+
+@dataclass
+class _LabView:
+    """One in-place Discovery Lab content view with retained local state."""
+
+    kind: str
+    group: str | None = None
+    tool: ExpertTool | None = None
+    cursor: int = 0
+    offset: int = 0
 
 
 class DpiEditSession:
@@ -190,6 +202,7 @@ class CursesSetupApp:
         self._initialization_target = getattr(controller, "selected_index", 0)
         self._pending_device_activation = False
         self._content_offsets: dict[SetupSection, int] = {}
+        self._lab_views: list[_LabView] = []
 
     def _start_initialization(self, index: int) -> None:
         """Initialize one backend after the first frame, with one owned worker."""
@@ -330,6 +343,18 @@ class CursesSetupApp:
 
         section = self.controller.section
         cursor = self.controller.row_cursor
+        if section is SetupSection.LAB and self._lab_views:
+            view = self._lab_views[-1]
+            if view.kind in {"groups", "tools"}:
+                return "open"
+            if view.kind == "vendor":
+                return "select file"
+            if view.tool is not None:
+                if view.tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN:
+                    return "run"
+                if view.tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+                    return "open importer"
+            return "open"
         if section is SetupSection.DEVICE:
             return "open"
         if section is SetupSection.HARDWARE:
@@ -347,6 +372,101 @@ class CursesSetupApp:
         if section is SetupSection.SERVICE:
             return "set"
         return "save" if cursor == 0 else "edit"
+
+    def _lab_view_enter_enabled(self) -> bool:
+        if not self._lab_views or self.controller.section is not SetupSection.LAB:
+            return True
+        view = self._lab_views[-1]
+        if view.kind in {"groups", "tools", "vendor"}:
+            return True
+        if view.tool is None or view.tool.action is ExpertToolAction.INSPECT:
+            return False
+        return "DISABLED" not in tool_status(self.controller, view.tool)
+
+    def _lab_view_is_inspection(self) -> bool:
+        return bool(
+            self._lab_views
+            and self.controller.section is SetupSection.LAB
+            and self._lab_views[-1].kind == "detail"
+            and self._lab_view_row_count() == 0
+        )
+
+    def _lab_breadcrumb(self) -> str:
+        parts = ["Discovery Lab"]
+        for view in self._lab_views:
+            if view.kind == "groups":
+                parts.append("Advanced Tools")
+            elif view.kind == "tools" and view.group:
+                parts.append(view.group)
+            elif view.kind == "detail" and view.tool:
+                parts.append(view.tool.title)
+            elif view.kind == "vendor":
+                parts.append("Vendor Capture")
+        return " › ".join(parts)
+
+    def _lab_view_rows(self) -> list[DisplayRow]:
+        view = self._lab_views[-1]
+        if view.kind == "groups":
+            return [
+                *[
+                    self._display_row(group, index, role="action")
+                    for index, group in enumerate(EXPERT_TOOL_GROUPS)
+                ],
+                self._display_row(
+                    "Expert tools inspect existing evidence; they do not bypass write authority.",
+                    dim=True,
+                ),
+            ]
+        if view.kind == "tools" and view.group:
+            return [
+                *[
+                    self._display_row(tool_row(self.controller, tool), index, role="action")
+                    for index, tool in enumerate(tools_for_group(view.group))
+                ],
+                self._display_row("Select a tool to inspect its description and current context.", dim=True),
+            ]
+        if view.kind == "vendor":
+            return [
+                self._display_row("Vendor Capture Importer", role="heading"),
+                self._display_row(
+                    "Stage a bounded local JSON/JSONL capture as untrusted offline evidence.",
+                    role="primary",
+                ),
+                self._display_row("Packets are never replayed or transmitted.", dim=True),
+                self._display_row("Imported observations cannot enable writes or become PROVEN.", dim=True),
+                self._display_row("Select capture file", 0, role="action"),
+            ]
+        assert view.tool is not None
+        statuses = tool_status(self.controller, view.tool)
+        rows = [
+            self._display_row(view.tool.description, role="primary"),
+            self._display_row("Status: " + " · ".join(statuses), role="heading"),
+            self._display_row(""),
+            *[self._display_row(line) for line in tool_context(self.controller, view.tool)],
+            self._display_row(""),
+            self._display_row(f"Existing implementation: {view.tool.implementation}", dim=True),
+            self._display_row(
+                "No raw HID transmission or write-authority bypass is available here.", dim=True,
+            ),
+        ]
+        if view.tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN and "DISABLED" not in statuses:
+            rows.append(self._display_row("Run authorized plan", 0, role="action"))
+        elif view.tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+            rows.append(self._display_row("Open Vendor Capture Importer", 0, role="action"))
+        return rows
+
+    @staticmethod
+    def _display_row(
+        text: str,
+        cursor_index: int | None = None,
+        *,
+        dim: bool = False,
+        role: str = "normal",
+    ) -> DisplayRow:
+        return DisplayRow(text, cursor_index, dim, role)
+
+    def _lab_view_row_count(self) -> int:
+        return sum(row.cursor_index is not None for row in self._lab_view_rows())
 
     def _draw(self) -> None:
         assert self.stdscr is not None
@@ -435,7 +555,11 @@ class CursesSetupApp:
         x = layout.content_x
         content_width = layout.content_width
         title_y = 2 if layout.mode is LayoutMode.FULL else layout.content_y
-        self._put(stdscr, title_y, x, self.controller.section.value.upper(), content_width, self._accent)
+        lab_view_active = bool(
+            self._lab_views and self.controller.section is SetupSection.LAB
+        )
+        title = self._lab_breadcrumb() if lab_view_active else self.controller.section.value.upper()
+        self._put(stdscr, title_y, x, title, content_width, self._accent)
         y = layout.content_y
         if layout.mode is LayoutMode.COMPACT:
             y += 2
@@ -497,17 +621,26 @@ class CursesSetupApp:
                     content_width, self._muted,
                 )
         else:
-            rows = self.controller.detail_rows()
+            rows = self._lab_view_rows() if lab_view_active else self.controller.detail_rows()
+            active_cursor = self._lab_views[-1].cursor if lab_view_active else self.controller.row_cursor
             selected_position = next(
                 (index for index, row in enumerate(rows)
-                 if row.cursor_index == self.controller.row_cursor),
-                min(self.controller.row_cursor, max(0, len(rows) - 1)),
+                 if row.cursor_index == active_cursor),
+                None,
             )
             capacity = max(1, height - 4 - y)
             maximum_start = max(0, len(rows) - capacity)
-            start = min(self._content_offsets.get(self.controller.section, 0), maximum_start)
+            saved_offset = (
+                self._lab_views[-1].offset if lab_view_active
+                else self._content_offsets.get(self.controller.section, 0)
+            )
+            start = min(saved_offset, maximum_start)
             end = min(len(rows), start + capacity)
-            if not (start <= selected_position < end) and rows and y < height - 4:
+            if (
+                selected_position is not None
+                and not (start <= selected_position < end)
+                and rows and y < height - 4
+            ):
                 selected_row = rows[selected_position]
                 self._put(
                     stdscr, y, x, "↳ Selected: " + selected_row.text,
@@ -527,7 +660,7 @@ class CursesSetupApp:
                     break
                 selected = (
                     row.cursor_index is not None
-                    and row.cursor_index == self.controller.row_cursor
+                    and row.cursor_index == active_cursor
                 )
                 self._put(
                     stdscr,
@@ -567,9 +700,13 @@ class CursesSetupApp:
             backend_ready=self.controller.backend_ready,
             compact=layout.mode is LayoutMode.COMPACT or width < 110,
             action=self._footer_action(),
+            enter_enabled=self._lab_view_enter_enabled(),
+            movement="scroll" if self._lab_view_is_inspection() else "move",
+            endpoints="top/bottom" if self._lab_view_is_inspection() else "first/last",
         )
         if self.controller.section is not SetupSection.DEVICE:
-            if len(self.controller.detail_rows()) > layout.content_height:
+            visible_rows = self._lab_view_rows() if lab_view_active else self.controller.detail_rows()
+            if len(visible_rows) > layout.content_height:
                 footer += "  PgUp/PgDn scroll"
         self._put(stdscr, layout.footer_y, 0, " " + footer + " ", width, self._highlight)
         stdscr.noutrefresh()
@@ -650,8 +787,8 @@ class CursesSetupApp:
             return None
         return text or None
 
-    def _run_vendor_capture_import(self) -> None:
-        if not self._confirm(
+    def _run_vendor_capture_import(self, *, show_intro: bool = True) -> None:
+        if show_intro and not self._confirm(
             "Import vendor capture",
             [
                 "The file is parsed locally as untrusted offline evidence.",
@@ -734,98 +871,74 @@ class CursesSetupApp:
             no="Esc Close",
         )
 
-    def _expert_menu(self, title: str, lines: list[str]) -> int | None:
-        """Select one bounded expert-dashboard row with the standard keys."""
-
-        cursor = 0
-        while True:
-            rendered = [
-                ("▶ " if index == cursor else "  ") + line
-                for index, line in enumerate(lines)
-            ]
-            self._modal(
-                title,
-                rendered,
-                prompt="↑↓/jk Move   g/G First/Last   Enter Open   b Back",
-            )
-            key = self.stdscr.getch()
-            if key == curses.KEY_RESIZE:
-                continue
-            moved = self._move_menu(key, cursor, len(lines))
-            if moved is not None:
-                cursor = moved
-                continue
-            if key in (27, ord("b"), ord("B")):
-                return None
-            if key in (10, 13, curses.KEY_ENTER):
-                return cursor
-
-    def _show_expert_tool_details(self, tool: ExpertTool) -> None:
-        lines = [
-            *tool_context(self.controller, tool),
-            "",
-            f"Existing implementation: {tool.implementation}",
-            "Advanced Tools cannot grant or bypass hardware write authority.",
-        ]
-        self._confirm(
-            tool.title + " — Details", lines,
-            yes="Enter Close", no="Esc Close",
-        )
-
-    def _activate_expert_tool(self, tool: ExpertTool) -> None:
-        """Preview one real tool, then inspect or use its existing safe route."""
-
-        statuses = tool_status(self.controller, tool)
-        context = tool_context(self.controller, tool)
-        preview = [
-            tool.description,
-            "Status: " + " · ".join(statuses),
-            "",
-            *context[:3],
-            "",
-            "No raw HID transmission or write-authority bypass is available here.",
-        ]
-        executable = tool.action is not ExpertToolAction.INSPECT and "DISABLED" not in statuses
-        if tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN:
-            verb = "Run authorized plan"
-        elif tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
-            verb = "Open importer"
-        else:
-            verb = "Open details"
-        if not self._confirm(
-            tool.title,
-            preview,
-            yes=f"Enter {verb}",
-            no="b Back",
-        ):
-            return
-        if not executable:
-            self._show_expert_tool_details(tool)
-        elif tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN:
-            self._run_discovery_lab()
-        elif tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
-            self._run_vendor_capture_import()
-
     def _open_advanced_tools(self) -> None:
-        """Open the grouped expert dashboard without changing Lab authority."""
+        """Replace Lab content with the first expert-dashboard level."""
 
-        while True:
-            group_index = self._expert_menu(
-                "Discovery Lab — Advanced Tools",
-                list(EXPERT_TOOL_GROUPS),
-            )
-            if group_index is None:
-                return
-            group = EXPERT_TOOL_GROUPS[group_index]
-            tools = tools_for_group(group)
-            while True:
-                tool_index = self._expert_menu(
-                    group,
-                    [tool_row(self.controller, tool) for tool in tools],
-                )
-                if tool_index is None:
-                    break
-                self._activate_expert_tool(tools[tool_index])
+        self._lab_views.append(_LabView("groups"))
+
+    def _open_vendor_capture_view(self) -> None:
+        """Replace Lab content with importer context before the file prompt."""
+
+        self._lab_views.append(_LabView("vendor"))
+
+    def _handle_lab_view_key(self, symbolic: str) -> bool:
+        """Handle one in-place Lab view key; return whether it was consumed."""
+
+        if not self._lab_views or self.controller.section is not SetupSection.LAB:
+            return False
+        view = self._lab_views[-1]
+        if symbolic == "HELP":
+            self._show_help()
+            return True
+        if symbolic in {"LEFT", "RIGHT"}:
+            self._lab_views.clear()
+            return False
+        if symbolic in {"BACK", "ESC"}:
+            self._lab_views.pop()
+            return True
+        if symbolic == "QUIT":
+            return False
+        count = self._lab_view_row_count()
+        if symbolic == "FIRST":
+            if count:
+                view.cursor = 0
+            else:
+                view.offset = 0
+            return True
+        if symbolic == "LAST":
+            if count:
+                view.cursor = count - 1
+            else:
+                view.offset = max(0, len(self._lab_view_rows()) - 1)
+            return True
+        if symbolic == "UP":
+            if count:
+                view.cursor = (view.cursor - 1) % count
+            else:
+                view.offset = max(0, view.offset - 1)
+            return True
+        if symbolic == "DOWN":
+            if count:
+                view.cursor = (view.cursor + 1) % count
+            else:
+                view.offset = min(max(0, len(self._lab_view_rows()) - 1), view.offset + 1)
+            return True
+        if symbolic != "ENTER":
+            return True
+        if view.kind == "groups":
+            self._lab_views.append(_LabView("tools", group=EXPERT_TOOL_GROUPS[view.cursor]))
+        elif view.kind == "tools" and view.group:
+            tools = tools_for_group(view.group)
+            self._lab_views.append(_LabView("detail", group=view.group, tool=tools[view.cursor]))
+        elif view.kind == "vendor":
+            self._run_vendor_capture_import(show_intro=False)
+        elif view.tool is not None:
+            statuses = tool_status(self.controller, view.tool)
+            if view.tool.action is ExpertToolAction.RUN_AUTHORIZED_PLAN and "DISABLED" not in statuses:
+                self._run_discovery_lab()
+            elif view.tool.action is ExpertToolAction.IMPORT_VENDOR_CAPTURE:
+                self._open_vendor_capture_view()
+        return True
 
     def _guided_prompt(self, step: GuidedStep) -> bool:
         return self._confirm(
@@ -1629,15 +1742,23 @@ class CursesSetupApp:
 
         if self.controller.section is SetupSection.DEVICE or self.stdscr is None:
             return
-        rows = self.controller.detail_rows()
+        lab_view_active = bool(
+            self._lab_views and self.controller.section is SetupSection.LAB
+        )
+        rows = self._lab_view_rows() if lab_view_active else self.controller.detail_rows()
         height, width = self.stdscr.getmaxyx()
         layout = frame_layout(height, width)
         page = max(1, layout.content_height - 2)
-        current = self._content_offsets.get(self.controller.section, 0)
-        target = current + direction * page
-        self._content_offsets[self.controller.section] = min(
-            max(0, target), max(0, len(rows) - 1)
+        current = (
+            self._lab_views[-1].offset if lab_view_active
+            else self._content_offsets.get(self.controller.section, 0)
         )
+        target = current + direction * page
+        target = min(max(0, target), max(0, len(rows) - 1))
+        if lab_view_active:
+            self._lab_views[-1].offset = target
+        else:
+            self._content_offsets[self.controller.section] = target
 
     def run(self, stdscr) -> bool:
         self.stdscr = stdscr
@@ -1694,6 +1815,8 @@ class CursesSetupApp:
                 symbolic = self._symbolic_key(key)
                 if symbolic is None:
                     continue
+                if self._handle_lab_view_key(symbolic):
+                    continue
                 if (
                     not self.controller.backend_ready
                     and self.controller.section is SetupSection.DEVICE
@@ -1723,7 +1846,7 @@ class CursesSetupApp:
                 elif action.kind is ActionKind.OPEN_ADVANCED_TOOLS:
                     self._open_advanced_tools()
                 elif action.kind is ActionKind.IMPORT_VENDOR_CAPTURE:
-                    self._run_vendor_capture_import()
+                    self._open_vendor_capture_view()
                 elif action.kind is ActionKind.MEASURE_POLLING:
                     self._run_polling_measurement()
                 elif action.kind is ActionKind.EDIT_DPI:

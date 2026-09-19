@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from mouse_control.setup_tui import ActionKind, ControllerAction, DisplayRow, SetupSection
+from mouse_control.setup_tui import ActionKind, ControllerAction, DisplayRow, SECTIONS, SetupSection
 from mouse_control.setup_tui import SetupController
 from mouse_control.setup_flow import SetupChoices
 from mouse_control.hardware.capabilities import BatteryState
@@ -13,6 +13,7 @@ from mouse_control.tui_presentation import (
     visible_window,
     wrap_text,
 )
+from test_setup_tui import controller as make_controller
 
 
 def test_layout_uses_rail_compact_mode_and_clean_minimum_message():
@@ -175,6 +176,10 @@ class _RecordingScreen:
     def noutrefresh(self):
         pass
 
+    def box(self):
+        self.hline(0, 0, "-", self.width)
+        self.hline(self.height - 1, 0, "-", self.width)
+
     def text(self):
         return "\n".join("".join(row).rstrip() for row in self.cells)
 
@@ -250,3 +255,58 @@ def test_dense_screen_page_scroll_does_not_change_selected_action():
     assert controller.row_cursor == 1
     app._scroll_content(-1)
     assert app._content_offsets[SetupSection.LAB] == 0
+
+
+def test_deep_lab_navigation_renders_in_main_content_plane(monkeypatch):
+    controller, _backends = make_controller()
+    controller.section_index = SECTIONS.index(SetupSection.LAB)
+    screen = _RecordingScreen(height=28, width=120)
+    app = CursesSetupApp(controller)
+    app.stdscr = screen
+    app._open_advanced_tools()
+    app._lab_views[-1].cursor = 1  # Protocol Analysis
+    app._handle_lab_view_key("ENTER")
+    app._lab_views[-1].cursor = 4  # Protocol Timing Profiler
+    app._handle_lab_view_key("ENTER")
+
+    for name, character in {
+        "ACS_VLINE": "│", "ACS_HLINE": "─", "ACS_ULCORNER": "┌",
+        "ACS_URCORNER": "┐", "ACS_LLCORNER": "└", "ACS_LRCORNER": "┘",
+    }.items():
+        monkeypatch.setattr("mouse_control.setup_tui_curses.curses." + name, character, raising=False)
+    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.doupdate", lambda: None)
+    monkeypatch.setattr(
+        "mouse_control.setup_tui_curses.curses.newwin",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("ordinary navigation created a nested window")
+        ),
+    )
+
+    app._draw()
+
+    rendered = screen.text()
+    assert "Discovery Lab › Advanced Tools › Protocol Analysis" in rendered
+    assert "Protocol Timing Profiler" in rendered
+    assert "j/k scroll" in rendered
+    assert "g/G top/bottom" in rendered
+    assert "Enter open" not in rendered
+
+
+def test_true_modal_dialog_still_creates_a_focused_overlay(monkeypatch):
+    controller, _backends = make_controller()
+    parent = _RecordingScreen(height=24, width=100)
+    overlay = _RecordingScreen(height=8, width=48)
+    app = CursesSetupApp(controller)
+    app.stdscr = parent
+    created = []
+    monkeypatch.setattr(
+        "mouse_control.setup_tui_curses.curses.newwin",
+        lambda height, width, y, x: created.append((height, width, y, x)) or overlay,
+    )
+    monkeypatch.setattr("mouse_control.setup_tui_curses.curses.doupdate", lambda: None)
+
+    app._modal("Warning", ["This action needs confirmation."], prompt="Enter Confirm   b Back")
+
+    assert created
+    assert "Warning" in overlay.text()
+    assert "Enter Confirm" in overlay.text()

@@ -104,7 +104,9 @@ def wrap_text(text: str, width: int) -> tuple[str, ...]:
 
 
 def footer_hint(
-    section_name: str, *, backend_ready: bool, compact: bool, action: str | None = None
+    section_name: str, *, backend_ready: bool, compact: bool,
+    action: str | None = None, enter_enabled: bool = True,
+    movement: str = "move", endpoints: str = "first/last",
 ) -> str:
     """Show only commands relevant to the current screen and readiness state."""
 
@@ -120,7 +122,8 @@ def footer_hint(
         default_action = "open"
     action = action or default_action
     back = "  b back" if section_name != "Device" else ""
-    base = f"j/k move  h/l page  g/G first/last  Enter {action}  ? help{back}  q quit"
+    enter = f"  Enter {action}" if enter_enabled else ""
+    base = f"j/k {movement}  h/l page  g/G {endpoints}{enter}  ? help{back}  q quit"
     if not compact:
         return base.replace("j/k", "↑↓/j/k").replace("h/l", "←→/h/l")
     return base

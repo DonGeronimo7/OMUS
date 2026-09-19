@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-18 — Discovery Lab replacement-view navigation cleanup
+
+- Continued `codex/discovery-90-corpus` from clean Advanced Tools checkpoint
+  `550457f`. Replaced the modal menu chain for Advanced Tools, all six expert
+  groups, all tool details, and the Vendor Capture introduction with an
+  in-place Lab content-view stack under the unchanged boxed navigation rail.
+- Added compact Discovery Lab breadcrumbs. `b` pops exactly one Lab view and
+  restores the parent view's cursor and scroll state; `h/l` returns to
+  top-level page navigation, and `q` retains the setup application's existing
+  quit-confirmation semantics.
+- Read-only detail screens use `j/k scroll` and `g/G top/bottom` without
+  advertising an invalid Enter action. Confirmation, warning, error, Help,
+  and short input interactions remain focused overlays.
+- Preserved all 28 Advanced Tools routes and their existing status/context
+  presentation. Vendor import still uses the same bounded local importer and
+  existing review/staging confirmation; only its normal navigation preface is
+  now a content page.
+- Safety: no Discovery, protocol, wake, service, persistence, remapper,
+  backend, hardware, or write-authority behavior changed. No hardware access
+  or physical validation was performed.
+- Validation: focused TUI/Lab/importer coverage passed 181 tests before the
+  final expanded per-inspector/modal checks; the final focused navigation set
+  passed 102 tests. The complete suite passed 1075 tests with the existing
+  GLib warning; compileall and `git diff --check` passed. One first full run
+  exposed the previously documented DPI-monitor retry timing assertion; that
+  test passed immediately alone and the clean complete rerun passed.
+
 ## 2026-09-18 — Discovery Lab Advanced Tools dashboard
 
 - Continued `codex/discovery-90-corpus` from clean TUI polish checkpoint

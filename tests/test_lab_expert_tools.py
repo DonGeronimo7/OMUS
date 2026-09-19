@@ -97,73 +97,139 @@ def test_every_expert_tool_has_bounded_status_and_context(tool):
         assert "READ ONLY" in statuses
 
 
-@pytest.mark.parametrize(
-    ("tool_id", "expected_method"),
-    (("authorized", "_run_discovery_lab"), ("vendor_import", "_run_vendor_capture_import")),
-)
-def test_executable_expert_routes_delegate_to_existing_safe_tui_actions(
-    monkeypatch, tool_id, expected_method,
-):
-    app_state = empty_controller()
-    if tool_id == "authorized":
-        app_state.discovery_result = SimpleNamespace(device=SimpleNamespace(ambiguous=False))
-        app_state.discovery_engine = SimpleNamespace()
-    curses_app = CursesSetupApp(app_state)
-    selected = next(tool for tool in TOOLS if tool.tool_id == tool_id)
-    called = []
-    previews = []
+def lab_app():
+    app_state, _backend = controller()
+    app_state.section_index = SECTIONS.index(SetupSection.LAB)
+    return CursesSetupApp(app_state)
+
+
+def _open_tool(curses_app, tool):
+    curses_app._open_advanced_tools()
+    curses_app._lab_views[-1].cursor = GROUPS.index(tool.group)
+    assert curses_app._handle_lab_view_key("ENTER") is True
+    curses_app._lab_views[-1].cursor = tools_for_group(tool.group).index(tool)
+    assert curses_app._handle_lab_view_key("ENTER") is True
+
+
+def test_drill_down_replaces_content_without_opening_a_modal(monkeypatch):
+    curses_app = lab_app()
+    timing = next(tool for tool in TOOLS if tool.tool_id == "timing")
     monkeypatch.setattr(
-        curses_app, "_confirm",
-        lambda title, lines, **_kwargs: previews.append((title, lines)) or True,
+        curses_app, "_modal",
+        lambda *_args, **_kwargs: pytest.fail("ordinary navigation opened a modal"),
     )
-    monkeypatch.setattr(curses_app, expected_method, lambda: called.append(expected_method))
 
-    curses_app._activate_expert_tool(selected)
+    _open_tool(curses_app, timing)
 
-    assert called == [expected_method]
-    assert previews[0][0] == selected.title
-    assert selected.description in previews[0][1]
-    assert any(line.startswith("Status: ") for line in previews[0][1])
-    assert previews[0][1][-1].startswith("No raw HID transmission")
-
-
-@pytest.mark.parametrize("tool", [tool for tool in TOOLS if tool.action is ExpertToolAction.INSPECT])
-def test_inspection_routes_preview_then_open_existing_state(monkeypatch, tool):
-    curses_app = CursesSetupApp(empty_controller())
-    opened = []
-    monkeypatch.setattr(curses_app, "_confirm", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(curses_app, "_show_expert_tool_details", opened.append)
-
-    curses_app._activate_expert_tool(tool)
-
-    assert opened == [tool]
+    assert len(curses_app._lab_views) == 3
+    assert curses_app._lab_views[-1].tool is timing
+    assert curses_app._lab_breadcrumb() == (
+        "Discovery Lab › Advanced Tools › Protocol Analysis › Protocol Timing Profiler"
+    )
 
 
-def test_disabled_authorized_experiment_opens_context_without_running(monkeypatch):
-    curses_app = CursesSetupApp(empty_controller())
-    selected = next(tool for tool in TOOLS if tool.tool_id == "authorized")
-    opened = []
-    run = []
-    monkeypatch.setattr(curses_app, "_confirm", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(curses_app, "_show_expert_tool_details", opened.append)
-    monkeypatch.setattr(curses_app, "_run_discovery_lab", lambda: run.append(True))
+def test_back_restores_parent_view_and_its_selection_state():
+    curses_app = lab_app()
+    timing = next(tool for tool in TOOLS if tool.tool_id == "timing")
+    group_cursor = GROUPS.index(timing.group)
+    tool_cursor = tools_for_group(timing.group).index(timing)
 
-    curses_app._activate_expert_tool(selected)
-
-    assert opened == [selected]
-    assert run == []
+    _open_tool(curses_app, timing)
+    assert curses_app._handle_lab_view_key("BACK") is True
+    assert curses_app._lab_views[-1].kind == "tools"
+    assert curses_app._lab_views[-1].cursor == tool_cursor
+    assert curses_app._handle_lab_view_key("BACK") is True
+    assert curses_app._lab_views[-1].kind == "groups"
+    assert curses_app._lab_views[-1].cursor == group_cursor
+    assert curses_app._handle_lab_view_key("BACK") is True
+    assert curses_app._lab_views == []
 
 
 @pytest.mark.parametrize("tool", TOOLS, ids=lambda tool: "dashboard-" + tool.tool_id)
-def test_every_tool_is_reachable_through_grouped_dashboard(monkeypatch, tool):
-    curses_app = CursesSetupApp(empty_controller())
-    group_index = GROUPS.index(tool.group)
-    tool_index = tools_for_group(tool.group).index(tool)
-    selections = iter((group_index, tool_index, None, None))
-    opened = []
-    monkeypatch.setattr(curses_app, "_expert_menu", lambda *_args, **_kwargs: next(selections))
-    monkeypatch.setattr(curses_app, "_activate_expert_tool", opened.append)
+def test_every_tool_is_reachable_through_replacement_view_stack(monkeypatch, tool):
+    curses_app = lab_app()
+    monkeypatch.setattr(
+        curses_app, "_modal",
+        lambda *_args, **_kwargs: pytest.fail("ordinary navigation opened a modal"),
+    )
 
+    _open_tool(curses_app, tool)
+
+    assert curses_app._lab_views[-1].kind == "detail"
+    assert curses_app._lab_views[-1].tool is tool
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [tool for tool in TOOLS if tool.action is ExpertToolAction.INSPECT],
+    ids=lambda tool: "inspection-" + tool.tool_id,
+)
+def test_inspection_detail_is_read_only_and_scrollable_without_enter_action(tool):
+    curses_app = lab_app()
+    _open_tool(curses_app, tool)
+
+    rows = curses_app._lab_view_rows()
+    assert rows[0].text == tool.description
+    assert any(row.text.startswith("Status: ") for row in rows)
+    assert all(row.cursor_index is None for row in rows)
+    assert curses_app._lab_view_enter_enabled() is False
+    assert curses_app._lab_view_is_inspection() is True
+    curses_app._handle_lab_view_key("LAST")
+    assert curses_app._lab_views[-1].offset == len(rows) - 1
+    curses_app._handle_lab_view_key("FIRST")
+    assert curses_app._lab_views[-1].offset == 0
+
+
+def test_authorized_route_delegates_only_when_existing_gates_enable_it(monkeypatch):
+    curses_app = lab_app()
+    tool = next(tool for tool in TOOLS if tool.tool_id == "authorized")
+    ran = []
+    monkeypatch.setattr(curses_app, "_run_discovery_lab", lambda: ran.append(True))
+
+    _open_tool(curses_app, tool)
+    curses_app._handle_lab_view_key("ENTER")
+    assert ran == []
+
+    curses_app.controller.discovery_result = SimpleNamespace(
+        device=SimpleNamespace(ambiguous=False),
+    )
+    curses_app.controller.discovery_engine = SimpleNamespace()
+    assert curses_app._lab_view_enter_enabled() is True
+    curses_app._handle_lab_view_key("ENTER")
+    assert ran == [True]
+
+
+def test_vendor_capture_uses_pages_until_the_short_file_prompt(monkeypatch):
+    curses_app = lab_app()
+    tool = next(tool for tool in TOOLS if tool.tool_id == "vendor_import")
+    calls = []
+    monkeypatch.setattr(
+        curses_app, "_run_vendor_capture_import",
+        lambda *, show_intro=True: calls.append(show_intro),
+    )
+
+    _open_tool(curses_app, tool)
+    curses_app._handle_lab_view_key("ENTER")
+    assert curses_app._lab_views[-1].kind == "vendor"
+    assert calls == []
+    curses_app._handle_lab_view_key("ENTER")
+    assert calls == [False]
+
+
+def test_help_remains_a_true_modal_interaction(monkeypatch):
+    curses_app = lab_app()
+    curses_app._open_advanced_tools()
+    shown = []
+    monkeypatch.setattr(curses_app, "_show_help", lambda: shown.append(True))
+
+    assert curses_app._handle_lab_view_key("HELP") is True
+    assert shown == [True]
+    assert curses_app._lab_views[-1].kind == "groups"
+
+
+def test_page_navigation_closes_lab_drilldown_before_controller_handles_it():
+    curses_app = lab_app()
     curses_app._open_advanced_tools()
 
-    assert opened == [tool]
+    assert curses_app._handle_lab_view_key("RIGHT") is False
+    assert curses_app._lab_views == []
