@@ -1,7 +1,7 @@
 name: OpenSSF Scorecard
 
 on:
-  branch_protection:
+  branch_protection_rule:
   push:
     branches: [main]
   schedule:
