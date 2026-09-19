@@ -20,9 +20,9 @@ package version before testing. Then complete this exact sequence:
 5. Unplug/reinsert the receiver twice. After each cycle, verify remapping and
    Native HID return, with no reconnect-created popup, stale-generation event,
    or duplicate mouse identity in the TUI/tray.
-6. Run `mouse-control restart`; verify remapping, DPI, polling, and notifications
+6. Run `omus restart`; verify remapping, DPI, polling, and notifications
    all recover.
-7. Review `journalctl --user -u mouse-control.service --since "10 minutes ago"`
+7. Review `journalctl --user -u omus.service --since "10 minutes ago"`
    for repeated reconnect loops, stale-generation delivery, ambiguity, rollback,
    or readback failures.
 
@@ -31,21 +31,21 @@ or protocol reasoning. Record the operator's observed result for each step.
 
 ## Preparation
 
-1. Back up `~/.config/mouse-control/config.toml`.
-2. Run `mouse-control doctor` and confirm the selected mouse is the G305.
-3. Run `mouse-control setup`, retain stages `800, 1500, 2000, 2500, 3000`,
+1. Back up `~/.config/omus/config.toml`.
+2. Run `omus doctor` and confirm the selected mouse is the G305.
+3. Run `omus setup`, retain stages `800, 1500, 2000, 2500, 3000`,
    select a polling rate, enable DPI notifications, and retain at least one
    mouse-to-key or keyboard-chord mapping.
-4. Start the service with `mouse-control restart`.
+4. Start the service with `omus restart`.
 5. Follow service logs in a second terminal with
-   `journalctl --user -u mouse-control.service -f`.
+   `journalctl --user -u omus.service -f`.
 
 Do not use tools that write onboard profile sectors. OMUS should make
 only live mode, report-rate, and adjustable-DPI changes.
 
 ## Polling transaction
 
-Use `mouse-control setup` to apply each transition in order:
+Use `omus setup` to apply each transition in order:
 
 1. `1000 -> 500 Hz`
 2. `500 -> 250 Hz`
@@ -97,7 +97,7 @@ With the service running:
    resume without duplicate monitors or duplicate popups.
 5. Unplug the receiver, wait several seconds, and reinsert it.
 6. Repeat the same remapping, polling, DPI, notification, and battery checks.
-7. During a reconnect retry, run `mouse-control stop` and confirm shutdown is
+7. During a reconnect retry, run `omus stop` and confirm shutdown is
    prompt and leaves no stuck virtual key/button output.
 
 ## Service lifecycle
@@ -105,10 +105,10 @@ With the service running:
 Run each command and verify its reported state and behavior:
 
 ```text
-mouse-control stop
-mouse-control start
-mouse-control restart
-mouse-control status
+omus stop
+omus start
+omus restart
+omus status
 ```
 
 After `restart`, confirm configured polling, active DPI, physical/software DPI

@@ -37,7 +37,7 @@ def test_inspect_update_is_presentation_free_and_reuses_canonical_detection(monk
 def asset(name, version="0.8.0"):
     return {
         "name": name,
-        "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v{version}/{name}",
+        "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v{version}/{name}",
     }
 
 
@@ -266,7 +266,7 @@ def test_native_package_update_uses_manager_not_file_replacement(monkeypatch, ki
 
 def test_package_manager_failure_uses_only_matching_official_asset(monkeypatch, tmp_path):
     install = updater.Installation("deb", Path("/usr/bin/mouse-control"), "mouse-control")
-    asset = {"name": "mouse-control_0.8.0_all.deb", "browser_download_url": "https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/mouse-control_0.8.0_all.deb"}
+    asset = {"name": "mouse-control_0.8.0_all.deb", "browser_download_url": "https://github.com/DonGeronimo7/OMUS/releases/download/v0.8.0/mouse-control_0.8.0_all.deb"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
     def download(_release, _asset, path, *_args):
         path.write_bytes(b"deb")
@@ -288,7 +288,7 @@ def test_package_manager_failure_uses_only_matching_official_asset(monkeypatch, 
 ])
 def test_package_manager_false_success_falls_back_and_verifies(monkeypatch, kind, asset_name, query):
     install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
-    asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{asset_name}"}
+    asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v0.8.0/{asset_name}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
     monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     calls, installed = [], ["0.7.6"]
@@ -342,7 +342,7 @@ def test_rpm_fallback_preserves_version_check_and_dnf_confirmation(monkeypatch, 
     installation = updater.Installation("rpm", Path("/usr/bin/mouse-control"), "mouse-control")
     package = "mouse-control-0.8.0-1.noarch.rpm"
     artifact = {"name": package, "browser_download_url":
-                f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{package}"}
+                f"https://github.com/DonGeronimo7/OMUS/releases/download/v0.8.0/{package}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
     monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     calls, installed = [], ["0.7.9"]
@@ -367,7 +367,7 @@ def test_rpm_fallback_preserves_version_check_and_dnf_confirmation(monkeypatch, 
 def test_dnf_error_continues_to_verified_github_rpm(monkeypatch):
     install = updater.Installation("rpm", Path("/usr/bin/mouse-control"), "mouse-control")
     package = "mouse-control-0.8.0-1.noarch.rpm"
-    artifact = {"name": package, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{package}"}
+    artifact = {"name": package, "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v0.8.0/{package}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
     monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     installed, calls = ["0.7.6"], []
@@ -432,7 +432,7 @@ def test_096_updater_path_installs_published_096_2_rpm_via_verified_dnf_fallback
 ])
 def test_package_fallback_requires_final_version_verification(monkeypatch, kind, asset_name, query):
     install = updater.Installation(kind, Path("/usr/bin/mouse-control"), "mouse-control")
-    asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/{asset_name}"}
+    asset = {"name": asset_name, "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v0.8.0/{asset_name}"}
     monkeypatch.setattr(updater.shutil, "which", lambda command: f"/usr/bin/{command}")
     monkeypatch.setattr(updater, "_download_verified", lambda _release, _asset, path, *_: (path.write_bytes(b"package"), path)[1])
     def runner(args):
@@ -450,7 +450,7 @@ def test_appimage_replaces_atomically(monkeypatch, tmp_path):
     target = tmp_path / "Mouse-Control.AppImage"
     target.write_bytes(b"old")
     target.chmod(0o755)
-    asset = {"name": "Mouse-Control-0.8.0-x86_64.AppImage", "browser_download_url": "https://github.com/DonGeronimo7/mouse-control/releases/download/v0.8.0/Mouse-Control-0.8.0-x86_64.AppImage"}
+    asset = {"name": "Mouse-Control-0.8.0-x86_64.AppImage", "browser_download_url": "https://github.com/DonGeronimo7/OMUS/releases/download/v0.8.0/Mouse-Control-0.8.0-x86_64.AppImage"}
     monkeypatch.setattr(updater, "_architecture", lambda: "x86_64")
     monkeypatch.setattr(updater, "_download_verified", lambda _release, a, path, o: path.write_bytes(b"new") or path)
     updater._appimage_update(updater.Installation("appimage", target), release(assets=(asset,)))
@@ -598,7 +598,7 @@ def _verified_release(name, payload, manifest=None):
     checksums = {
         "name": updater.CHECKSUMS_NAME,
         "browser_download_url": (
-            "https://github.com/DonGeronimo7/mouse-control/releases/download/"
+            "https://github.com/DonGeronimo7/OMUS/releases/download/"
             f"v0.8.0/{updater.CHECKSUMS_NAME}"
         ),
     }

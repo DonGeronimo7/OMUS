@@ -60,7 +60,7 @@ Its root object and every raw mapping carry `write_authorized: false`.
 
 ## Physical semantic calibration
 
-The packaged user entry point is `mouse-control cpi`. It delegates to the same
+The packaged user entry point is `omus cpi`. It delegates to the same
 `mouse_control.sensor_calibration` API consumed directly by discovery and
 qualification code, so installed packages do not depend on a repository helper
 or shelling out to another command. The measurement path is observational: it

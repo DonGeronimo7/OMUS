@@ -81,6 +81,49 @@ def test_updater_accepts_canonical_and_v099_artifact_names(monkeypatch):
         suffix = ".appimage" if name.endswith("AppImage") else Path(name).suffix
         release = updater.Release("0.10.0", ({
             "name": name,
-            "browser_download_url": f"https://github.com/DonGeronimo7/mouse-control/releases/download/v0.10.0/{name}",
+            "browser_download_url": f"https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/{name}",
         },))
         assert updater.select_asset(release, suffix)["name"] == name
+
+
+def test_current_repository_identity_is_canonical():
+    from mouse_control import updater
+
+    assert updater.REPOSITORY == "DonGeronimo7/OMUS"
+    assert updater.RELEASE_URL == (
+        "https://api.github.com/repos/DonGeronimo7/OMUS/releases/latest"
+    )
+    canonical_files = (
+        "README.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "PKGBUILD",
+        "pyproject.toml",
+        "omus.spec",
+        "packaging/omus.metainfo.xml",
+        "docs/SECURITY_SUPPLY_CHAIN.md",
+    )
+    for relative in canonical_files:
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert "DonGeronimo7/mouse-control" not in text, relative
+        assert "DonGeronimo7/OMUS" in text, relative
+
+
+def test_release_workflows_use_canonical_artifact_names():
+    ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    virustotal = (
+        ROOT / ".github/workflows/virustotal-release.yml"
+    ).read_text(encoding="utf-8")
+    assert "rpmbuild -ba omus.spec" in ci
+    assert "name 'omus-*.noarch.rpm'" in ci
+    for name in (
+        "omus-${base_version}-${package_release}.fc44.noarch.rpm",
+        "omus_${version}_all.deb",
+        "OMUS-${version}-x86_64.AppImage",
+        "omus-${python_version}-py3-none-any.whl",
+        "omus-${python_version}.tar.gz",
+        "omus-${version}.cdx.json",
+    ):
+        assert name in virustotal
+    assert '"mouse-control-${base_version}' not in virustotal
+    assert '"mouse_control-${python_version}' not in virustotal

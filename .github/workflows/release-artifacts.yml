@@ -251,7 +251,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OMUS $GITHUB_REF_NAME" \
+            --title "OMUS $GITHUB_REF_NAME — Every mouse. One system." \
             --notes-file release-body.md \
             --verify-tag
 

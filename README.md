@@ -32,11 +32,11 @@ OMUS has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v0.10.0](https://img.shields.io/badge/release-v0.10.0-6f42c1)](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.10.0)
-[![CI](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/ci.yml)
-[![VirusTotal release scan](https://github.com/DonGeronimo7/mouse-control/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/virustotal-release.yml)
-[![CodeQL](https://github.com/DonGeronimo7/mouse-control/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/mouse-control/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/mouse-control/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/mouse-control)
+[![Current release: v0.10.0](https://img.shields.io/badge/release-v0.10.0-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v0.10.0)
+[![CI](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml)
+[![VirusTotal release scan](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml)
+[![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
@@ -45,17 +45,17 @@ privacy-conscious report that helps expand support.
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v0.10.0](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.10.0).
+The current release is [v0.10.0](https://github.com/DonGeronimo7/OMUS/releases/tag/v0.10.0).
 
 ## Install and run
 
 Download the package for your system from the
-[v0.10.0 release](https://github.com/DonGeronimo7/mouse-control/releases/tag/v0.10.0),
+[v0.10.0 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v0.10.0),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.10.0/omus-0.10.0-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/omus-0.10.0-1.fc44.noarch.rpm), then run:
 
 ```bash
 sudo dnf install ./omus-0.10.0-1.fc44.noarch.rpm
@@ -63,7 +63,7 @@ sudo dnf install ./omus-0.10.0-1.fc44.noarch.rpm
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.10.0/omus_0.10.0_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/omus_0.10.0_all.deb), then run:
 
 ```bash
 sudo apt install ./omus_0.10.0_all.deb
@@ -71,7 +71,7 @@ sudo apt install ./omus_0.10.0_all.deb
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.10.0/OMUS-0.10.0-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/OMUS-0.10.0-x86_64.AppImage), then run:
 
 ```bash
 chmod +x OMUS-0.10.0-x86_64.AppImage
@@ -82,8 +82,8 @@ Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.10.0/omus-0.10.0-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/mouse-control/releases/download/v0.10.0/omus-0.10.0.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/omus-0.10.0-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v0.10.0/omus-0.10.0.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:
@@ -134,13 +134,13 @@ that normally require Windows software or are not supported by Piper/libratbag.
 The shortest testing flow is:
 
 1. Install OMUS and connect the mouse.
-2. Run `mouse-control`.
+2. Run `omus`.
 3. Select the mouse under **Device**.
 4. Open **Hardware / Discovery** and choose **Run Guided Discovery** if offered.
 5. Follow the on-screen actions. You can skip discovery and still save normal
    button mappings.
 6. Generate the reports below and attach them to a
-   [New mouse / discovery result issue](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml).
+   [New mouse / discovery result issue](https://github.com/DonGeronimo7/OMUS/issues/new?template=hardware-compatibility.yml).
 
 Guided Discovery begins read-only. For DPI-button learning it collects quiet,
 normal-use, and repeated button samples so ordinary movement can be separated
@@ -348,8 +348,8 @@ omus check-permissions
 Source development belongs here rather than in the beginner install path:
 
 ```bash
-git clone https://github.com/DonGeronimo7/mouse-control.git
-cd mouse-control
+git clone https://github.com/DonGeronimo7/OMUS.git
+cd OMUS
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .

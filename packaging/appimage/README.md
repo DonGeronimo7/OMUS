@@ -5,4 +5,4 @@ but it cannot safely bundle host udev rules, systemd user services, kernel input
 support or hidraw permissions. Build it on an
 x86_64 Linux host using an external `appimagetool`, then name the result
 `OMUS-0.10.0-x86_64.AppImage`. Users still need host input permissions
-and `mouse-control doctor` reports missing pieces.
+and `omus doctor` reports missing pieces.

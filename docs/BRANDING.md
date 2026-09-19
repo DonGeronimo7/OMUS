@@ -1,40 +1,24 @@
 # OMUS visual identity
 
-OMUS is terminal-native, CLI-first, Linux gaming hardware software
-with an ASCII/monospace visual language. Its personality is technical, open
-source, Linux-native, understated, developer-friendly, and gaming-oriented.
+OMUS means **One Mouse Universal System**.
 
-## Visual system
+**Every mouse. One system.**
 
-- **Primary typeface:** Meslo Nerd Font / MesloLGS NF. Do not add or distribute
-  font binaries in this repository.
-- **Typography:** terminal prompts, large headings, and graphical typography
-  share the same monospace/Nerd Font aesthetic.
-- **Base:** near-black or charcoal terminal background.
-- **Accents:** cyan, blue, and purple, used like terminal syntax highlighting
-  rather than generic RGB gaming lighting.
-- **Neutrals:** white, cool gray, and muted slate.
-- **Motifs:** ASCII gaming mouse, terminal output, syntax highlighting, and
-  hardware/HID concepts.
-- **Terminal identity:** `DonGeronimo@linux:~$ mouse-control`.
-- **Hardware identity shown in the approved artwork:** Logitech (HID++).
+The public identity is sleek, elegant, sophisticated, powerful, technically
+serious, vendor-neutral, and Linux-native. Product interfaces remain clean,
+terminal-friendly, and readable; the purple logo is the primary visual accent,
+not a reason to add decorative gradients or gamer-RGB clutter to the TUI.
 
-The interactive terminal application uses the same Meslo Nerd Font aesthetic,
-canonical ASCII mouse mark, and cyan/blue/purple syntax-highlighting palette.
-It ships no font binaries.
+## Canonical artwork
 
-Avoid generic RGB gamer graphics, glossy mouse renders, Tux as the primary
-logo, distro-logo collages, fake GUI screenshots, corporate SaaS aesthetics,
-unrelated palettes, and excessive glow effects.
+[`assets/omus-icon.png`](../assets/omus-icon.png) is the approved canonical
+transparent PNG: a monochromatic purple-gradient Omega with a centered mouse
+glyph. Do not redraw, recolor, frame, tile, or add text to it.
 
-## Canonical asset
+Installed icons use the `omus` identifier and are generated at 16, 24, 32, 48,
+64, 128, 256, and 512 pixels under `assets/icons/hicolor/`. Resizing must
+preserve aspect ratio and real alpha transparency.
 
-[`assets/mouse-control-social-preview.png`](../assets/mouse-control-social-preview.png)
-is the canonical social-preview artwork. It is a 1280×640 PNG derived only by
-proportionally resizing the approved source artwork.
-
-The canonical social-preview artwork must not be redesigned or regenerated
-without an intentional project branding decision. Do not derive a secondary
-icon, favicon, square mark, alternate ASCII mouse, color variant,
-distro-specific variant, or animated version from it without a separate,
-intentional task.
+The normal visible application name is **OMUS**. Use the expansion and tagline
+where they add context, not as repetitive decoration. “Mouse Control” is
+retained only for migration history and compatibility surfaces.

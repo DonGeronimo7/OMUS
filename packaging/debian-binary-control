@@ -4,6 +4,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: Marc-A. Geronimo
+Homepage: https://github.com/DonGeronimo7/OMUS
 Depends: python3-evdev, python3-dbus-next, python3-packaging, udev
 Provides: mouse-control
 Replaces: mouse-control (<< 0.10.0)

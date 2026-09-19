@@ -1,4 +1,4 @@
-include LICENSE CREDITS.md SECURITY.md README.md CHANGELOG.md RELEASE_NOTES.md omus.spec
+include LICENSE CREDITS.md SECURITY.md CONTRIBUTING.md README.md CHANGELOG.md RELEASE_NOTES.md omus.spec
 include PKGBUILD
 recursive-include .github *.yml *.yaml
 recursive-include .clusterfuzzlite *

@@ -21,7 +21,7 @@ def test_workflow_verifies_sbom_checksum_but_excludes_it_from_scanning():
     workflow = (ROOT / ".github/workflows/virustotal-release.yml").read_text(
         encoding="utf-8"
     )
-    assert '--pattern "mouse-control-${version}.cdx.json"' in workflow
+    assert '--pattern "omus-${version}.cdx.json"' in workflow
     assert "! -name '*.cdx.json'" in workflow
     assert "!scan-assets/*.cdx.json" in workflow
     assert "!scan-assets/SHA256SUMS" in workflow

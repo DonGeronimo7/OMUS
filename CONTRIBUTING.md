@@ -6,14 +6,14 @@ failures: together they build an evidence-based compatibility database.
 
 ## Test a mouse
 
-Use the [New mouse / discovery result template](https://github.com/DonGeronimo7/mouse-control/issues/new?template=hardware-compatibility.yml)
+Use the [New mouse / discovery result template](https://github.com/DonGeronimo7/OMUS/issues/new?template=hardware-compatibility.yml)
 for any mouse result, including a fully working setup. Unknown, obscure, OEM,
 rebrand, wireless, older, and unusual devices are especially useful.
 
 Run the normal guided flow first:
 
 ```bash
-mouse-control
+omus
 ```
 
 Select the mouse and open **Hardware / Discovery**. If guided discovery is
@@ -22,8 +22,8 @@ offered, follow it; you do not need to understand HID or mouse protocols.
 Then create both shareable reports when possible:
 
 ```bash
-mouse-control support --guided
-mouse-control discover --output mouse-control-discovery.json
+omus support --guided
+omus discover --output omus-discovery.json
 ```
 
 The support command saves a text report in your home directory. The discovery

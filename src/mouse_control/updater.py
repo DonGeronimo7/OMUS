@@ -27,8 +27,8 @@ from . import __version__
 from .release_version import ReleaseVersion
 from .service import is_service_active, restart_service
 
-RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/mouse-control/releases/latest"
-REPOSITORY = "DonGeronimo7/mouse-control"
+RELEASE_URL = "https://api.github.com/repos/DonGeronimo7/OMUS/releases/latest"
+REPOSITORY = "DonGeronimo7/OMUS"
 CHECKSUMS_NAME = "SHA256SUMS"
 _DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com"})
 
@@ -161,7 +161,7 @@ def fetch_latest(url: str = RELEASE_URL, opener: Callable = urlopen) -> Release:
     if url != RELEASE_URL:
         raise UpdateError("Release information URL is not the official OMUS endpoint.")
     try:
-        request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "mouse-control-updater"})
+        request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "omus-updater"})
         with opener(request, timeout=10) as response:
             _validate_response_url(response, expected_host="api.github.com")
             data = json.loads(response.read().decode("utf-8"))
@@ -327,7 +327,7 @@ def _parse_checksums(data: bytes) -> dict[str, str]:
 def _download_bytes(asset: dict, *, opener: Callable = urlopen, limit: int = 1024 * 1024) -> bytes:
     url = asset["browser_download_url"]
     try:
-        with opener(Request(url, headers={"User-Agent": "mouse-control-updater"}), timeout=30) as response:
+        with opener(Request(url, headers={"User-Agent": "omus-updater"}), timeout=30) as response:
             _validate_response_url(response)
             data = response.read(limit + 1)
     except (URLError, OSError, ValueError) as exc:
@@ -353,7 +353,7 @@ def _expected_checksum(release: Release, filename: str, *, opener: Callable = ur
 def _download(asset: dict, destination: Path, opener: Callable = urlopen) -> Path:
     url = asset["browser_download_url"]
     try:
-        with opener(Request(url, headers={"User-Agent": "mouse-control-updater"}), timeout=60) as response:
+        with opener(Request(url, headers={"User-Agent": "omus-updater"}), timeout=60) as response:
             _validate_response_url(response)
             with destination.open("wb") as output:
                 shutil.copyfileobj(response, output)
@@ -464,7 +464,7 @@ def _package_update(installation: Installation, release: Release,
     # A direct GitHub package can be upgraded safely through the same manager.
     suffix = ".rpm" if installation.kind == "rpm" else ".deb"
     asset = select_asset(release, suffix)
-    with tempfile.TemporaryDirectory(prefix="mouse-control-update-") as directory:
+    with tempfile.TemporaryDirectory(prefix="omus-update-") as directory:
         filename = _safe_asset_filename(asset["name"])
         destination = (Path(directory) / filename).resolve()
         if destination.parent != Path(directory).resolve():

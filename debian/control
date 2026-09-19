@@ -5,6 +5,7 @@ Maintainer: Marc-A. Geronimo
 Build-Depends: debhelper-compat (= 13), dh-python, pybuild-plugin-pyproject, python3-all, python3-setuptools, python3-packaging
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
+Homepage: https://github.com/DonGeronimo7/OMUS
 
 Package: omus
 Architecture: all

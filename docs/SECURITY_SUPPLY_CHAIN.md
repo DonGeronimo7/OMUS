@@ -25,13 +25,13 @@ artifact is absent, an unexpected file appears, or checksum verification fails.
 GitHub's keyless attestation service binds provenance to the final downloaded
 artifact bytes, not to intermediate build outputs.
 
-The release also publishes `mouse-control-VERSION.intoto.jsonl`, an offline copy
+The release also publishes `omus-vVERSION.intoto.jsonl`, an offline copy
 of the genuine GitHub/Sigstore SLSA provenance bundle. The workflow downloads
 that bundle from GitHub's attestation service and verifies every exact checksum
 entry against the expected repository, workflow, source commit, source ref, and
 SLSA predicate before release publication. It never synthesizes provenance.
 
-The published `mouse-control-VERSION.cdx.json` is a reproducible CycloneDX 1.6
+The published `omus-VERSION.cdx.json` is a reproducible CycloneDX 1.6
 inventory of the installed OMUS wheel and its resolved Python runtime
 dependencies. The same SBOM is bound to the wheel, sdist, RPM, DEB, and AppImage
 digests through an SBOM attestation.
@@ -52,8 +52,8 @@ sha256sum --check --strict SHA256SUMS
 Verify a downloaded artifact's GitHub attestation against this repository:
 
 ```bash
-gh attestation verify Mouse-Control-VERSION-x86_64.AppImage \
-  --repo DonGeronimo7/mouse-control
+gh attestation verify OMUS-VERSION-x86_64.AppImage \
+  --repo DonGeronimo7/OMUS
 ```
 
 The same command applies to the wheel, source archive, RPM, DEB, and SBOM.
@@ -61,12 +61,12 @@ Checksums and attestations complement one another: checksums detect byte changes
 while attestations bind those bytes to the repository workflow identity.
 
 For offline verification, download the matching
-`mouse-control-VERSION.intoto.jsonl` release asset and pass it explicitly:
+`omus-vVERSION.intoto.jsonl` release asset and pass it explicitly:
 
 ```bash
-gh attestation verify Mouse-Control-VERSION-x86_64.AppImage \
-  --repo DonGeronimo7/mouse-control \
-  --bundle mouse-control-VERSION.intoto.jsonl
+gh attestation verify OMUS-VERSION-x86_64.AppImage \
+  --repo DonGeronimo7/OMUS \
+  --bundle omus-vVERSION.intoto.jsonl
 ```
 
 ## Locked dependency environments

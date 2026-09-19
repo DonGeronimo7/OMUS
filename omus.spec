@@ -3,6 +3,7 @@ Version:        0.10.0
 Release:        1%{?dist}
 Summary:        One Mouse Universal System for Linux
 License:        GPL-3.0-or-later
+URL:            https://github.com/DonGeronimo7/OMUS
 %global python_version 0.10.0
 Source0:        omus-%{python_version}.tar.gz
 BuildArch:      noarch

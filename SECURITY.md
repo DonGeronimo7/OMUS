@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report suspected vulnerabilities privately through the repository's
-[GitHub Security Advisory form](https://github.com/DonGeronimo7/mouse-control/security/advisories/new).
+[GitHub Security Advisory form](https://github.com/DonGeronimo7/OMUS/security/advisories/new).
 Include the affected version, installation method, impact, reproduction steps,
 and any minimal logs or proof of concept that are safe to share. If the private
 form is unavailable, open a minimal public issue asking the maintainer to
@@ -53,7 +53,7 @@ atomically replaced. This model relies on GitHub HTTPS/release-account
 integrity. Releases beginning with v0.9.8 have GitHub/Sigstore build provenance
 and SBOM attestations for the exact published artifact digests. Downloaded
 artifacts can be verified as described in
-[the release supply-chain guide](https://github.com/DonGeronimo7/mouse-control/blob/main/docs/SECURITY_SUPPLY_CHAIN.md#consumer-verification).
+[the release supply-chain guide](https://github.com/DonGeronimo7/OMUS/blob/main/docs/SECURITY_SUPPLY_CHAIN.md#consumer-verification).
 Older releases without original provenance remain intentionally unattested.
 
 Release CI pins third-party actions and the AppImage runtime/tool inputs to
@@ -99,7 +99,7 @@ sensitive.
 
 ## Service and persistence
 
-`mouse-control install-service` creates only a per-user systemd service under
+`omus install-service` creates only a per-user systemd service under
 the user's configuration directory and enables it explicitly. It does not
 install a root daemon or hidden persistence. The unit pins the resolved,
 non-group/world-writable executable path, invokes no shell, injects no

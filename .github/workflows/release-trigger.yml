@@ -53,7 +53,7 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$RELEASE_TAG" -m "Mouse Control ${RELEASE_TAG}"
+            git tag -a "$RELEASE_TAG" -m "OMUS ${RELEASE_TAG} — Every mouse. One system."
             git push origin "$RELEASE_TAG"
           fi
 

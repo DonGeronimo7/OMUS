@@ -3,23 +3,23 @@ pkgver=0.10.0
 pkgrel=1
 pkgdesc='One Mouse Universal System for Linux'
 arch=('any')
-url='https://github.com/DonGeronimo7/mouse-control'
+url='https://github.com/DonGeronimo7/OMUS'
 license=('GPL-3.0-or-later')
 depends=('python' 'python-evdev' 'python-dbus-next' 'python-packaging' 'systemd')
 makedepends=('git' 'python-build' 'python-installer' 'python-setuptools')
 # Stable source is pinned to the exact upstream release tag.
-source=("mouse-control::git+https://github.com/DonGeronimo7/mouse-control.git#tag=v${pkgver}")
+source=("omus::git+https://github.com/DonGeronimo7/OMUS.git#tag=v${pkgver}")
 provides=('mouse-control')
 conflicts=('mouse-control')
 sha256sums=('SKIP')
 
 build() {
-  cd "$srcdir/mouse-control"
+  cd "$srcdir/omus"
   python -m build --wheel --no-isolation --outdir dist
 }
 
 package() {
-  cd "$srcdir/mouse-control"
+  cd "$srcdir/omus"
   python -m installer --destdir="$pkgdir" dist/*.whl
   install -Dm644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
     "$pkgdir/usr/lib/udev/rules.d/71-mouse-control-uaccess.rules"

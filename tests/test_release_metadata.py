@@ -91,6 +91,7 @@ def test_provenance_record_is_shipped_with_each_release_format():
         setuptools = tomllib.load(handle)["tool"]["setuptools"]
     assert setuptools["license-files"] == ["LICENSE", "CREDITS.md"]
     assert "CREDITS.md" in _text("MANIFEST.in")
+    assert "CONTRIBUTING.md" in _text("MANIFEST.in")
     assert "%doc README.md CHANGELOG.md CREDITS.md" in _text("omus.spec")
     assert "CREDITS.md" in _text("PKGBUILD")
     assert "CREDITS.md" in _text("debian/omus.docs")
@@ -140,6 +141,7 @@ def test_release_finalizes_reproducible_cyclonedx_for_attestation():
     assert workflow.index("cyclonedx-py environment") < workflow.index(
         "scripts/finalize_cyclonedx_sbom.py"
     ) < workflow.index("Finalize and verify release checksums")
+    assert "omus-${version}.cdx.json" in workflow
 
 
 def test_release_exports_and_verifies_genuine_slsa_bundle_without_checksum_cycle():

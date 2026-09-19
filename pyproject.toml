@@ -18,6 +18,12 @@ dependencies = [
     "packaging>=23.0"
 ]
 
+[project.urls]
+Homepage = "https://github.com/DonGeronimo7/OMUS"
+Repository = "https://github.com/DonGeronimo7/OMUS"
+Issues = "https://github.com/DonGeronimo7/OMUS/issues"
+Releases = "https://github.com/DonGeronimo7/OMUS/releases"
+
 [project.scripts]
 omus = "mouse_control.app:main"
 mouse-control = "mouse_control.app:main"

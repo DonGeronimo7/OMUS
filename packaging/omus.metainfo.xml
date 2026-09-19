@@ -12,5 +12,5 @@
   <provides><binary>omus</binary></provides>
   <developer id="io.github.dongeronimo7.omus"><name>OMUS contributors</name></developer>
   <content_rating type="oars-1.1"/>
-  <url type="homepage">https://github.com/DonGeronimo7/mouse-control</url>
+  <url type="homepage">https://github.com/DonGeronimo7/OMUS</url>
 </component>
