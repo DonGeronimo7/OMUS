@@ -221,3 +221,12 @@ command was provided.
 
 This final test closes the previously failed boot-equivalent software gate.
 It does not substitute for an actual reboot or operator-observed mouse testing.
+
+Final follow-through: Native HID event monitoring reported ready at 01:00:28.
+A further DMS restart at 01:01:32–33 restored one item with the same OMUS PID.
+A transient sample during management activity saw nine threads/19 descriptors;
+subsequent inspection settled at eight threads/18 descriptors, with exactly one
+`hid-session`, battery monitor, tray worker, notifier, DPI supervisor, and DPI-cycle
+worker. Only one hidraw descriptor remained. No competing OMUS process remained.
+Implementation commit: `f963d2a`; this final evidence is recorded in its follow-up
+documentation commit. User-observed physical acceptance remains pending.
