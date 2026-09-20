@@ -1,3 +1,52 @@
+# OMUS v1.0.4 — Reliable runtime recovery and safe fast proof
+
+## Reliability
+
+- OMUS now restores enabled runtime features automatically after reboot/login,
+  service restart, process failure, delayed tray availability, desktop-shell
+  restart, temporary D-Bus loss, and device reconnect.
+- The purple OMUS battery tray recovers automatically when the graphical
+  environment becomes ready. A real cold-boot acceptance test required no
+  manual intervention.
+
+## DPI correctness
+
+- Fixed startup and reconnect synchronization when saved software state differed
+  from the mouse's actual native DPI.
+- Hardware now determines current DPI while configuration determines the
+  available DPI choices. Notifications reflect confirmed hardware state, and
+  startup reconciliation does not produce a false DPI-change notification.
+
+## Performance
+
+- On the tested Logitech G305/Fedora environment, observed startup improved from
+  about 6,170 ms to 2,428 ms and USB DPI-management recovery from about 16,042 ms
+  to 5,074 ms. Corrected reconnect acceptance measured about 86.9 ms for
+  remapping and 5,001 ms for DPI management.
+- Normal DPI cycling remained about 20 ms and two HID requests. Warm proof from
+  a current known owner measured a 73.474 microsecond median and added zero HID
+  requests. These observations are specific to the tested system and are not
+  guarantees for every mouse or host.
+
+## Discovery and safety
+
+- Capability proof is now explicit and capability-specific: `UNKNOWN`,
+  `READ_PROVEN`, `WRITE_SEMANTICS_KNOWN`, `WRITE_BOUNDED`, `WRITE_VERIFIED`, and
+  `PERSISTENCE_PROVEN`.
+- Known protocol implementations reuse established immutable knowledge instead
+  of treating known hardware as a blank slate. Write permission still depends
+  on concrete identity, bounds, packet isolation, routing, confirmation, failure,
+  compatibility, and runtime-policy evidence.
+- Persistent writes, unresolved shared-packet writes, generic HID writes,
+  ambiguous targets, unsupported report-rate ownership, and insufficiently
+  proven storage operations remain blocked.
+
+Primary artifacts are `omus-1.0.4-1.fc44.noarch.rpm`,
+`omus_1.0.4_all.deb`, `OMUS-1.0.4-x86_64.AppImage`,
+`omus-1.0.4-py3-none-any.whl`, and `omus-1.0.4.tar.gz`.
+
+---
+
 # OMUS v1.0.3 — Battery tray visual refresh
 
 OMUS v1.0.3 introduces the new OMUS-branded rounded purple-gradient battery
