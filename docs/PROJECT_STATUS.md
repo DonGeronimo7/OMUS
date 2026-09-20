@@ -1,5 +1,20 @@
 # OMUS Project Status
 
+## 2026-09-20 — v1.0.4 runtime recovery and proof-acceleration candidate
+
+- The accepted runtime-persistence, hardware-truth DPI, bounded receiver-probe,
+  and capability-proof acceleration work is prepared as a backwards-compatible
+  v1.0.4 patch release over integrated main `f757cbc`.
+- Runtime recovery covers reboot/login, service/process failure, tray or D-Bus
+  availability changes, and device reconnect while retaining optional-backend
+  isolation and the accepted purple battery presentation.
+- Current DPI comes from confirmed hardware state; configured stages remain
+  choices. Known-owner capability proof reuses immutable protocol knowledge
+  without extra HID traffic or broader write authority.
+- Physical performance evidence remains scoped to the exact tested G305/Fedora
+  environment. Publication still requires protected review and the complete
+  artifact, checksum, provenance, and VirusTotal release gates.
+
 ## 2026-09-20 — installed Discovery proof acceptance
 
 - Main baseline is protected PR #20 at `9b93b4a`; Discovery implementation is

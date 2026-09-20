@@ -1,5 +1,19 @@
 # AI handoff log
 
+## 2026-09-20 — v1.0.4 release preparation
+
+Prepared the accepted `f757cbc` main baseline as the backwards-compatible
+v1.0.4 production candidate. Versioned Python, RPM, Debian, Arch, AppImage,
+README, changelog, release-note, status and handoff surfaces are synchronized.
+The release notes preserve the G305-specific measurement boundary and the
+capability-specific proof restrictions. Focused release/security coverage passed
+132 tests; source and Fedora RPM `%check` each passed 1,281 with the private
+D-Bus test skipped by the sandbox and the existing GLib warning. Compileall,
+Ruff, workflow policy, dependency locks, whitespace, wheel/sdist and packaged
+CLI smokes passed. Protected review, hosted release gates, tagging, artifact
+publication, provenance and VirusTotal verification follow this commit; no
+unrelated feature work or hardware authority is included.
+
 ## 2026-09-20 — installed Discovery acceptance and same-node recovery correction
 
 Starting candidate `4640054` over main `9b93b4a`; branch

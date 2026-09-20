@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.4 — Runtime persistence and safe capability proof
+
+### Reliability and DPI correctness
+
+- Restore enabled runtime features automatically after reboot/login, service or
+  process failure, delayed tray availability, desktop-shell restart, temporary
+  D-Bus loss, and device reconnect.
+- Recover the OMUS battery tray when the graphical environment becomes ready.
+- Synchronize current DPI from confirmed live hardware after startup and
+  reconnect; configuration continues to define the available DPI choices.
+- Keep startup reconciliation silent while preserving one notification for each
+  confirmed physical DPI transition.
+
+### Performance and Discovery
+
+- Reduce measured G305 startup and reconnect time while preserving the
+  approximately 20 ms, two-request normal DPI cycle.
+- Reuse immutable capability-specific protocol knowledge from the current native
+  owner without adding HID proof traffic.
+- Add explicit capability proof stages from `UNKNOWN` through
+  `PERSISTENCE_PROVEN`, with concrete blockers and cache invalidation.
+- Continue to block ambiguous routing, unresolved shared packets, generic HID
+  writes, unsupported ownership, and unproven persistent/storage operations.
+
 ## 1.0.3 — OMUS battery tray visual refresh
 
 - Add the new OMUS-branded rounded purple-gradient battery tray indicator.

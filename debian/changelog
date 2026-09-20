@@ -1,3 +1,11 @@
+omus (1.0.4) unstable; urgency=medium
+
+  * Restore runtime features after reboot, session loss, and reconnect.
+  * Synchronize current DPI from confirmed live hardware state.
+  * Reuse capability-specific protocol proof while retaining write safeguards.
+
+ -- Marc-A. Geronimo <noreply@example.com>  Sun, 20 Sep 2026 04:30:00 -0400
+
 omus (1.0.3) unstable; urgency=medium
 
   * Add the OMUS-branded rounded purple-gradient battery tray indicator.
