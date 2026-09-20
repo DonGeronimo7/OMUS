@@ -90,9 +90,11 @@ def decode_supported_dpi(parameters: bytes) -> tuple[tuple[int, ...], tuple[DpiR
 class Hidpp20Driver:
     protocol_name = "Logitech HID++ 2"
 
-    def __init__(self, session: HidSession, device_index: int) -> None:
+    def __init__(self, session: HidSession, device_index: int, *,
+                 _probed_version: tuple[int, int] | None = None) -> None:
         self.session, self.device_index = session, device_index
-        protocol = get_protocol_version(session, device_index)
+        protocol = (_probed_version if _probed_version is not None
+                    else get_protocol_version(session, device_index))
         if protocol is None:
             raise HidppError("device is not HID++ 2")
         self.protocol_version = protocol
@@ -308,9 +310,18 @@ class Hidpp20Driver:
 def connect_hidpp20(session: HidSession) -> Hidpp20Driver:
     last_error: Exception | None = None
     found: list[Hidpp20Driver] = []
-    for candidate in (*range(1, 7), 0xFF):
+    candidates = (*range(1, 7), 0xFF)
+    probe = getattr(type(session), "probe_protocol_versions", None)
+    versions = probe(session, candidates) if callable(probe) else None
+    # A single-reader native session can overlap independent read-only probes.
+    # Compatibility transports retain their existing serial API.
+    for candidate in candidates:
+        if versions is not None and candidate not in versions:
+            continue
         try:
-            found.append(Hidpp20Driver(session, candidate))
+            found.append(Hidpp20Driver(
+                session, candidate,
+                _probed_version=versions[candidate] if versions is not None else None))
         except HidppError as exc:
             last_error = exc
     if len(found) == 1:

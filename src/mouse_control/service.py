@@ -46,12 +46,16 @@ def build_service_text(executable: str) -> str:
     return f"""[Unit]
 Description=OMUS mouse remapping service
 Conflicts=mouse-control.service
+After=graphical-session-pre.target
+PartOf=graphical-session.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart={_quote_exec_argument(executable)} run
 Restart=on-failure
-RestartSec=2
+RestartSec=3
+TimeoutStopSec=15
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -62,7 +66,7 @@ RestrictSUIDSGID=true
 LockPersonality=true
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 """
 
 
@@ -74,7 +78,7 @@ def is_service_active() -> bool:
 
 
 def install_service(*, start: bool = True) -> None:
-    exe = shutil.which("omus")
+    exe = os.environ.get("APPIMAGE") or os.environ.get("OMUS_APPIMAGE") or shutil.which("omus")
     if not exe:
         raise RuntimeError("omus executable not found")
     executable = Path(exe).resolve(strict=True)
@@ -114,6 +118,8 @@ def install_service(*, start: bool = True) -> None:
     if legacy_service_path().is_file():
         subprocess.run([SYSTEMCTL, "--user", "disable", "--now", LEGACY_SERVICE_NAME], check=False)
 
+    # Remove obsolete default.target links when migrating the generated unit.
+    subprocess.run([SYSTEMCTL, "--user", "disable", SERVICE_NAME], check=True)
     command = [SYSTEMCTL, "--user", "enable"]
     if start:
         command.append("--now")

@@ -100,9 +100,8 @@ def battery_pixmap(percentage: int, height: int) -> list[int | bytes]:
 
 def battery_tooltip(device_name: str, state: BatteryState) -> list[object]:
     """Return the SNI ToolTip ``(sa(iiay)ss)`` value for one battery state."""
-    if state.percentage is None:
-        raise ValueError("battery percentage is required for a tooltip")
-    description = f"Battery: {state.percentage}%"
+    description = ("Battery: Unknown" if state.percentage is None else
+                   f"Battery: {state.percentage}%")
     if state.status:
         description += f"\nStatus: {state.status.capitalize()}"
     # A D-Bus STRUCT is represented by a list in dbus-next.  The empty icon
@@ -118,10 +117,8 @@ def battery_menu_properties(device_name: str, state: BatteryState):
     """
     from dbus_next import Variant
 
-    if state.percentage is None:
-        raise ValueError("battery percentage is required for a menu")
     rows = {
-        1: {"label": Variant("s", f"Battery: {state.percentage}%"),
+        1: {"label": Variant("s", "Battery: Unknown" if state.percentage is None else f"Battery: {state.percentage}%"),
             "enabled": Variant("b", False)},
     }
     if state.status:
@@ -148,22 +145,33 @@ class StatusNotifierTray:
         self.visible_percentage: int | None = None
         self._queue: AsyncWakeQueue[tuple[str, BatteryState] | None] = AsyncWakeQueue()
         self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._closed = False
+        self._last_update = None
 
     def update(self, state: BatteryState, device_name: str) -> None:
-        if state.percentage is None or not 0 <= state.percentage <= 100:
+        if state.percentage is not None and not 0 <= state.percentage <= 100:
             raise ValueError("battery percentage must be 0..100")
-        self.visible_percentage = state.percentage
-        if self._thread is None or not self._thread.is_alive():
-            self._thread = threading.Thread(target=lambda: asyncio.run(self._run()),
-                                            name="battery-tray", daemon=True)
-            self._thread.start()
-        self._queue.put((device_name, state))
+        with self._lock:
+            if self._closed:
+                return
+            update = (device_name, state)
+            if update == self._last_update:
+                return
+            self._last_update = update
+            self.visible_percentage = state.percentage
+            self._queue.put((device_name, state))
+            if self._thread is None:
+                LOG.info("Battery tray subsystem starting")
+                self._thread = threading.Thread(target=lambda: asyncio.run(self._run()),
+                                                name="battery-tray", daemon=True)
+                self._thread.start()
 
     async def _run(self) -> None:
-        bus = service = None
+        session_task = None
         try:
-            from dbus_next import BusType, Variant
-            from dbus_next.aio import MessageBus
+            from dbus_next import Variant
+            from .tray_session import TraySession
             from dbus_next.service import ServiceInterface, dbus_property, method, signal
             from dbus_next.constants import PropertyAccess
 
@@ -172,6 +180,8 @@ class StatusNotifierTray:
                     super().__init__("org.kde.StatusNotifierItem")
                     self.device_name = device_name
                     self.state = initial_state
+                    self._pixmap_percentage = None
+                    self._pixmaps = None
                 @dbus_property(access=PropertyAccess.READ)
                 def Category(self) -> "s": return "Hardware"
                 @dbus_property(access=PropertyAccess.READ)
@@ -184,14 +194,19 @@ class StatusNotifierTray:
                 def IconName(self) -> "s": return ""
                 @dbus_property(access=PropertyAccess.READ)
                 def IconPixmap(self) -> "a(iiay)":
-                    return [battery_pixmap(self.state.percentage, size) for size in (16, 20, 22, 24, 32)]
+                    percentage = self.state.percentage or 0
+                    if self._pixmaps is None or percentage != self._pixmap_percentage:
+                        self._pixmaps = [battery_pixmap(percentage, size)
+                                         for size in (16, 20, 22, 24, 32)]
+                        self._pixmap_percentage = percentage
+                    return self._pixmaps
                 @dbus_property(access=PropertyAccess.READ)
                 def ToolTip(self) -> "(sa(iiay)ss)":
                     return battery_tooltip(self.device_name, self.state)
                 @dbus_property(access=PropertyAccess.READ)
                 def Menu(self) -> "o": return SNI_MENU_PATH
                 @dbus_property(access=PropertyAccess.READ)
-                def XAyatanaLabel(self) -> "s": return f"{self.state.percentage}%"
+                def XAyatanaLabel(self) -> "s": return "?" if self.state.percentage is None else f"{self.state.percentage}%"
                 @dbus_property(access=PropertyAccess.READ)
                 def XAyatanaLabelGuide(self) -> "s": return "100%"
                 @signal()
@@ -267,20 +282,9 @@ class StatusNotifierTray:
             if initial is None:
                 return
             initial_device_name, initial_state = initial
-            bus = await MessageBus(bus_type=BusType.SESSION).connect()
             service = Item(initial_device_name, initial_state)
             menu = Menu(initial_device_name, initial_state)
-            bus.export("/StatusNotifierItem", service)
-            bus.export(SNI_MENU_PATH, menu)
-            await bus.request_name("org.kde.StatusNotifierItem-omus")
-            # Registering is best effort: a missing watcher must not kill remapping.
-            try:
-                from dbus_next import Message
-                await bus.call(Message(destination="org.kde.StatusNotifierWatcher", path="/StatusNotifierWatcher",
-                    interface="org.kde.StatusNotifierWatcher", member="RegisterStatusNotifierItem",
-                    signature="s", body=["org.kde.StatusNotifierItem-omus"]))
-            except Exception as exc:
-                LOG.info("Battery tray watcher unavailable: %s", exc)
+            session_task = asyncio.create_task(TraySession().run(service, menu, SNI_MENU_PATH))
             while True:
                 value = await self._queue.get()
                 try:
@@ -292,20 +296,22 @@ class StatusNotifierTray:
         except Exception as exc:
             LOG.warning("Battery tray unavailable: %s", exc)
         finally:
-            if bus:
-                try: bus.disconnect()
-                except Exception: pass
+            if session_task:
+                session_task.cancel()
+                await asyncio.gather(session_task, return_exceptions=True)
 
     def close(self) -> None:
-        self.visible_percentage = None
-        if self._thread and self._thread.is_alive():
-            self._queue.put(None)
-            self._thread.join(timeout=1)
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self.visible_percentage = None
+            thread = self._thread
+            if thread:
+                self._queue.put(None)
+        if thread:
+            thread.join(timeout=6)
         self._queue.close()
-        # A temporarily unavailable battery removes the tray and may later
-        # recover.  Leave the object restartable with a fresh queue.
-        self._queue = AsyncWakeQueue()
-        self._thread = None
 
 
 class BatteryMonitorSupervisor:
@@ -340,13 +346,22 @@ class BatteryMonitorSupervisor:
                         if stopped:
                             break
                         continue
+                    if not shown and getattr(backend, "discovery_pending", False):
+                        self.tray.update(BatteryState(percentage=None, status="unavailable"), self.device.name)
+                        shown = True
                     raise RuntimeError("battery unavailable")
+                if not shown:
+                    self.tray.update(BatteryState(percentage=None, status="unknown"), self.device.name)
+                    shown = True
                 state = backend.get_battery_state(self.device)
                 if state is None or state.percentage is None:
                     raise RuntimeError("battery percentage unavailable")
                 LOG.debug("BatteryState delivered to monitor: %s; tray percentage: %s",
                           state, state.percentage)
-                self.tray.update(state, self.device.name); shown = True
+                if self._consecutive_failures:
+                    LOG.info("Battery device recovered")
+                if not self.shutdown_event.is_set():
+                    self.tray.update(state, self.device.name); shown = True
                 self._consecutive_failures = 0
                 if self.wake_coordinator is None:
                     stopped = self.shutdown_event.wait(self.interval)
@@ -359,20 +374,21 @@ class BatteryMonitorSupervisor:
                 continue
             except Exception as exc:
                 self._consecutive_failures += 1
-                if shown and self._consecutive_failures >= 3:
-                    LOG.info("Battery state unavailable after %d consecutive failures; removing tray item: %s",
+                if shown and self._consecutive_failures == 3:
+                    LOG.info("Battery state unavailable after %d consecutive failures; showing unknown battery: %s",
                              self._consecutive_failures, exc)
-                    self.tray.close(); shown = False
+                    self.tray.update(BatteryState(percentage=None, status="unavailable"), self.device.name)
                 elif not self.shutdown_event.is_set():
                     LOG.debug("Battery monitoring unavailable (failure %d/%d): %s",
                               self._consecutive_failures, 3, exc)
+            retry_delay = min(30., self.retry_interval * 2 ** min(self._consecutive_failures - 1, 5))
             if self.wake_coordinator is not None:
                 self.wake_coordinator.wait(
-                    wake_generation, self.retry_interval, self.shutdown_event)
+                    wake_generation, retry_delay, self.shutdown_event)
                 stopped = (self.shutdown_event.is_set()
                            or self.wake_coordinator.stopping)
             else:
-                stopped = self.shutdown_event.wait(self.retry_interval)
+                stopped = self.shutdown_event.wait(retry_delay)
             if stopped: break
             try:
                 rebind = getattr(type(backend), "rebind", None)
@@ -387,6 +403,8 @@ class BatteryMonitorSupervisor:
         self.tray.close()
 
     def start(self) -> None:
+        if self.shutdown_event.is_set() or (self._thread and self._thread.is_alive()):
+            return
         self._thread = threading.Thread(target=self._run, name="battery-monitor", daemon=True)
         self._thread.start()
     def stop(self) -> None:

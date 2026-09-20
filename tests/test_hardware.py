@@ -262,4 +262,5 @@ def test_startup_remaps_despite_hardware_failure(caplog):
             assert cli.run_from_config() == 0
         backend.set_polling_rate.assert_called_once_with(RAZER, 1000)
         remapper.return_value.run.assert_called_once()
-    assert "disconnected" in caplog.text
+    backend.set_dpi.assert_not_called()
+    assert "Could not reconcile Test polling state" in caplog.text

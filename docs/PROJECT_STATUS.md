@@ -1306,3 +1306,56 @@ The journal showed bounded provisional rebinds followed by Native HID recovery,
 not repeated reconnect loops or stale-generation delivery. One first-cycle
 learned-adapter candidate refused an undemonstrated 1000-DPI write as designed;
 the supervisor then promoted Native HID and reconciled 1000 successfully.
+
+## 2026-09-20 — runtime persistence stabilization candidate
+
+The battery tray now owns a recoverable session-bus/watcher lifecycle, subscribes
+to owner changes before initial registration, checks replies, and retains unknown
+battery presentation during transient absence. No artwork or asset dependency
+changed. Closed tray instances cannot be resurrected by late updates.
+
+Initial native protocol failures remain pending even when a PROVEN learned
+fallback is usable. The battery worker retries with capped backoff; equivalent
+candidates are discarded before reconciliation, and matching live DPI/rate state
+avoids redundant writes. Polling DPI fallback accepts readiness and returns on a
+backend generation change so event monitoring can recover after promotion.
+
+RPM/DEB ship graphical-session systemd integration and a configuration-aware XDG
+login bootstrap. A kernel lock prevents duplicate `run` instances. The installed
+RPM has been exercised on Fedora/niri/DMS; the exact evidence and remaining
+reboot/physical acceptance gate are in `RUNTIME_PERSISTENCE_HANDOFF.md`.
+Automated source and RPM gates pass 1,217 tests. No new write authority, generic
+HID write, udev scope, updater policy, or physical hardware support is claimed.
+
+
+## 2026-09-20 — hardware-authoritative DPI correctness checkpoint
+
+Runtime now reads live DPI silently instead of restoring/assuming persisted
+active DPI. Native stage reports observe hardware without a second software
+cycle. Confirmed setter results are reused; failed/unchanged writes cannot report
+requested DPI as success. Learned read errors no longer promote stale cached
+state. Generation/wake changes invalidate the cursor, and unchanged tray
+snapshots reuse artwork. Source and RPM gates pass 1,234 tests.
+
+The corrected local RPM is installed; G305 transaction median remains 19.99 ms
+with two HID transactions, and service restart preserves 3000 DPI. The user
+reported notification absence/delay during initial reconnect/startup; subsequent
+notifications resume. The observed 16-second management recovery remains a
+performance acceptance issue under investigation. See `DPI_TRUTH_HANDOFF.md`.
+
+
+## 2026-09-20 — DPI recovery performance acceptance
+
+Read-only receiver version probes now share one existing timeout window through
+the sole HID reader, instead of waiting sequentially per slot. Every candidate
+is still checked, ambiguous responders rejected, and feature IDs resolved through
+ROOT; normal writes remain serialized and verified. Source and RPM: 1,244 passed
+each. The updated local RPM is installed, without publication.
+
+Installed startup reached remapping in 2,428 ms versus roughly 6,170 ms;
+USB management recovery improved from 16,042 to 5,074 ms, with remapping at
+109 ms. Synchronized cycles remain approximately 20 ms and two HID transactions.
+The user confirmed timing/sensitivity agreement, and final USB testing showed two
+matching five-stage sequences. Initial readiness still takes time; this is not
+a guarantee of immediate notifications before hardware observation is ready.
+Full evidence, validation limits, and Git checkpoints: `DPI_TRUTH_HANDOFF.md`.

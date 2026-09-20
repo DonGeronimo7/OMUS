@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OMUS runtime
+Comment=Restore configured mouse behavior through the OMUS user service
+Exec=/usr/bin/python3 -I -m mouse_control.session_start
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

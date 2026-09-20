@@ -137,6 +137,7 @@ class DiscoveryBackend(HardwareBackend):
         self._physical: PhysicalDevice | None = None
         self._binding: _LearnedDpiBinding | None = None
         self._protocol_backend: HardwareBackend | None = None
+        self.discovery_pending = False
         self._learned_operation: LearnedOperation | None = None
         self._learned_write_node: DeviceNode | None = None
         self._learned_polling_operation: LearnedPollingOperation | None = None
@@ -188,17 +189,20 @@ class DiscoveryBackend(HardwareBackend):
     def _bind_protocol_adapter(self, device: MouseDevice) -> None:
         """Bind the first ordered, proven protocol implementation internally."""
         self._protocol_backend = None
+        self.discovery_pending = False
         for factory in self._protocol_factories:
             backend: HardwareBackend | None = None
             try:
                 backend = factory()
                 if backend.supports_device(device):
                     self._protocol_backend = backend
+                    self.discovery_pending = False
                     return
             except (HardwareError, OSError) as exc:
                 if self._log_protocol_failures:
                     LOG.warning("Hardware protocol adapter discovery failed: %s", exc)
             if backend is not None:
+                self.discovery_pending |= getattr(backend, "discovery_pending", False) is True
                 backend.close()
 
     def _profiles(self) -> tuple[dict[str, Any], ...]:
@@ -812,10 +816,10 @@ class DiscoveryBackend(HardwareBackend):
                 value = int(context.values["raw_readback"])
             except (OSError, LearnedOperationError, TransactionError) as exc:
                 self._reset_learned_runtime()
-                if self._last_dpi is None:
-                    raise HardwareError(
-                        f"Automatic Discovery learned DPI read failed: {exc}"
-                    ) from exc
+                self._last_dpi = None
+                raise HardwareError(
+                    f"Automatic Discovery learned DPI read failed: {exc}"
+                ) from exc
             else:
                 self._last_dpi = value
         if self._last_dpi is None:

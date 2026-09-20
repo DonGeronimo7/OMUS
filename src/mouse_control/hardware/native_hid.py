@@ -33,12 +33,14 @@ class NativeHidBackend(HardwareBackend):
         self._session_factory = session_factory
         self._connectors = connectors
         self._bound: dict[MouseDevice, tuple[HidSession, Hidpp20Driver]] = {}
+        self.discovery_pending = False
 
     def supports_device(self, device: MouseDevice) -> bool:
         if device in self._bound:
             return True
         if device.vendor != LOGITECH_VENDOR_ID or device.product is None:
             return False
+        self.discovery_pending = True
         candidates: list[tuple[HidSession, Hidpp20Driver]] = []
         for interface in self._discovery(device):
             try:
@@ -64,6 +66,7 @@ class NativeHidBackend(HardwareBackend):
         if not candidates:
             return False
         self._bound[device] = candidates[0]
+        self.discovery_pending = False
         return True
 
     def _driver(self, device: MouseDevice) -> Hidpp20Driver:

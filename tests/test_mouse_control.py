@@ -60,7 +60,7 @@ def test_explicit_empty_dpi_stage_list_is_not_replaced_by_defaults():
 def test_service_quotes_the_resolved_executable_path():
     text = build_service_text('/opt/Mouse Control/bin/mouse-control')
     assert 'ExecStart="/opt/Mouse Control/bin/mouse-control" run' in text
-    assert 'WantedBy=default.target' in text
+    assert 'WantedBy=graphical-session.target' in text
 
 
 def test_permission_report_requires_mouse_and_uinput_access(capsys):

@@ -55,6 +55,10 @@ done
 desktop-file-validate %{buildroot}%{_datadir}/applications/omus.desktop
 install -Dpm 0644 packaging/omus.metainfo.xml \
   %{buildroot}%{_datadir}/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
+install -Dpm 0644 packaging/omus-autostart.desktop \
+  %{buildroot}%{_sysconfdir}/xdg/autostart/omus.desktop
+install -Dpm 0644 packaging/omus.service \
+  %{buildroot}%{_userunitdir}/omus.service
 %pyproject_save_files mouse_control
 # pip records bytecode even when it is not a distributable source file.  Remove
 # it only after the generated file manifest has been created, then omit it from
@@ -72,7 +76,18 @@ done
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
   %{buildroot}%{_bindir}/mouse-control cpi --help >/dev/null
 
+%post
+%systemd_user_post omus.service
+
+%preun
+%systemd_user_preun omus.service
+
+%postun
+%systemd_user_postun_with_restart omus.service
+
 %files -f %{pyproject_files}
+%{_userunitdir}/omus.service
+%config(noreplace) %{_sysconfdir}/xdg/autostart/omus.desktop
 %license LICENSE
 %doc README.md CHANGELOG.md CREDITS.md SECURITY.md
 %doc docs/COMPATIBILITY.md

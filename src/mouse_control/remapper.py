@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import nullcontext
 import errno
 import queue
 import select
@@ -119,71 +120,107 @@ class DpiCycler:
         self.backend = backend
         self.device = device
         self.stages = stages
-        self.current_dpi = current_dpi
+        # Persisted active DPI is a preference, never evidence of live state.
+        self.current_dpi = None
         self.current_dpi_confirmed = False
-        # An off-list starting DPI advances to the first configured stage.
-        self._stage_index = stages.index(current_dpi) if current_dpi in stages else -1
-        self._cycle_lock = threading.Lock()
+        self._stage_index = -1
+        self._state_epoch = None
+        self._cycle_lock = threading.RLock()
         self.notifications_enabled = notifications_enabled
         self.notifier = notifier if notifier is not None else FreedesktopNotifier()
+        self.synchronize()
+
+    def _epoch(self):
+        return getattr(self.backend, "dpi_epoch", getattr(self.backend, "generation", None))
+
+    @staticmethod
+    def _valid_dpi(dpi):
+        return (type(dpi) is int and dpi > 0) or (
+            isinstance(dpi, tuple) and len(dpi) == 2 and
+            all(type(value) is int and value > 0 for value in dpi))
+
+    def invalidate(self) -> None:
+        with self._cycle_lock:
+            self.current_dpi_confirmed = False
+            self._stage_index = -1
+
+    def synchronize(self) -> bool:
+        """Read once per hardware/wake epoch; ordinary presses reuse confirmation."""
+        with self._cycle_lock:
+            epoch = self._epoch()
+            if self.current_dpi_confirmed and self._state_epoch == epoch:
+                return True
+            self.invalidate()
+            started = time.perf_counter_ns()
+            try:
+                dpi = self.backend.get_dpi(self.device)
+                if not self._valid_dpi(dpi):
+                    return False
+                self.observe_dpi(dpi)
+            except Exception as exc:
+                LOG.debug("DPI synchronization waiting for hardware: %s", exc)
+                return False
+            LOG.info("DPI synchronized: confirmed=%s elapsed_ms=%.3f", dpi,
+                     (time.perf_counter_ns() - started) / 1e6)
+            return True
 
     def cycle(self) -> bool:
         with self._cycle_lock:
-            return self._cycle()
+            transaction = getattr(type(self.backend), "dpi_transaction", None)
+            with (transaction(self.backend) if callable(transaction) else nullcontext()):
+                return self._cycle()
 
     def observe_dpi(self, dpi: int | tuple[int, int]) -> None:
-        """Use a confirmed external DPI change to place the software cursor."""
+        """Synchronize from hardware without changing desired configuration."""
+        if not self._valid_dpi(dpi):
+            return
         with self._cycle_lock:
             self.current_dpi = dpi
             self.current_dpi_confirmed = True
-            self._stage_index = self.stages.index(dpi) if dpi in self.stages else -1
-            self._record_desired_dpi(dpi)
+            scalar = dpi[0] if isinstance(dpi, tuple) and dpi[0] == dpi[1] else dpi
+            # Preserve established off-list behavior: next press selects stage 0.
+            self._stage_index = self.stages.index(scalar) if scalar in self.stages else -1
+            self._state_epoch = self._epoch()
 
     def _cycle(self) -> bool:
         if not self.stages:
             LOG.warning("DPI cycle ignored: no configured stages")
             return False
-        next_index = (self._stage_index + 1) % len(self.stages)
-        next_dpi = self.stages[next_index]
+        started = time.perf_counter_ns()
+        if not self.synchronize():
+            LOG.warning("DPI cycle deferred: hardware DPI is unknown")
+            return False
+        previous = self.current_dpi
+        next_dpi = self.stages[(self._stage_index + 1) % len(self.stages)]
         try:
             if not self.backend.supports_dpi(self.device):
-                LOG.warning("DPI cycle ignored: %s does not support DPI control", self.backend.name)
                 return False
-            confirmed = self.backend.set_dpi(self.device, next_dpi)
+            result = self.backend.set_dpi(self.device, next_dpi)
+            # Native and PROVEN learned writers already perform their canonical
+            # readback. Reuse it instead of adding a second HID query.
+            actual = (result.display_value if isinstance(result, DpiState) and result.confirmed
+                      else self.backend.get_dpi(self.device))
+            if not self._valid_dpi(actual):
+                raise RuntimeError("hardware did not confirm the requested change")
+            self.observe_dpi(actual)
+            if actual == previous and not self._dpi_matches(actual, next_dpi):
+                LOG.warning("DPI cycle unchanged: requested=%s confirmed=%s", next_dpi, actual)
+                return False
         except Exception as exc:
-            LOG.warning("Could not set DPI to %s through %s: %s",
-                        next_dpi, self.backend.name, exc)
+            self.invalidate()
+            self.synchronize()
+            LOG.warning("DPI cycle failed: requested=%s confirmed=%s: %s",
+                        next_dpi, self.current_dpi if self.current_dpi_confirmed else None, exc)
             return False
-        state_confirmed = isinstance(confirmed, DpiState) and confirmed.confirmed
-        actual_dpi = confirmed.display_value if state_confirmed else None
-        if actual_dpi is None:
-            try:
-                readback = self.backend.get_dpi(self.device)
-            except Exception as exc:
-                LOG.warning("Could not read DPI after cycle through %s: %s",
-                            self.backend.name, exc)
-                readback = None
-            if isinstance(readback, (int, tuple)):
-                actual_dpi = readback
-                state_confirmed = True
-        if actual_dpi is None:
-            # Legacy setters without readback remain usable, but are explicitly
-            # represented as requested/unconfirmed state.
-            actual_dpi = next_dpi
-        if state_confirmed and not self._dpi_matches(actual_dpi, next_dpi):
-            LOG.warning("DPI cycle verification failed: requested %s, read %s",
-                        next_dpi, actual_dpi)
-            return False
-        self.current_dpi = actual_dpi
-        self.current_dpi_confirmed = state_confirmed
-        self._stage_index = next_index
-        self._record_desired_dpi(actual_dpi)
+        self._record_desired_dpi(actual)
+        LOG.info("DPI cycle: requested=%s confirmed=%s elapsed_ms=%.3f", next_dpi, actual,
+                 (time.perf_counter_ns() - started) / 1e6)
         if self.notifications_enabled:
             try:
                 deliberate = (self.notifier.notify_deliberate_dpi
                               if callable(getattr(type(self.notifier), "notify_deliberate_dpi", None))
                               else None)
-                (deliberate or self.notifier.notify_dpi)(actual_dpi)
+                (deliberate or self.notifier.notify_dpi)(actual)
             except Exception as exc:
                 LOG.warning("Desktop DPI notification failed: %s", exc)
         return True
@@ -248,7 +285,7 @@ class MouseRemapper:
         self._macro_queue: queue.Queue[tuple[MacroStep, ...] | None] = queue.Queue()
         self._macro_cancel = threading.Event()
         self._macro_thread: threading.Thread | None = None
-        self._dpi_queue: queue.Queue[bool | None] = queue.Queue()
+        self._dpi_queue: queue.Queue[int | None] = queue.Queue()
         self._dpi_cancel = threading.Event()
         self._dpi_thread: threading.Thread | None = None
         self._pending_frame: list[tuple[int, int, int]] = []
@@ -371,7 +408,7 @@ class MouseRemapper:
 
     def _dpi_worker(
         self,
-        requests: queue.Queue[bool | None],
+        requests: queue.Queue[int | None],
         cancel_event: threading.Event,
     ) -> None:
         while not self.shutdown_event.is_set():
@@ -380,7 +417,10 @@ class MouseRemapper:
                 return
             try:
                 if self.dpi_cycler is not None:
-                    self.dpi_cycler.cycle()
+                    success = self.dpi_cycler.cycle()
+                    LOG.info("DPI input result: success=%s confirmed=%s input_to_result_ms=%.3f",
+                             success, self.dpi_cycler.current_dpi,
+                             (time.perf_counter_ns() - request) / 1e6)
             except Exception as exc:
                 LOG.warning("DPI cycle worker failed: %s", exc)
 
@@ -398,10 +438,11 @@ class MouseRemapper:
             self._dpi_thread.start()
 
     def _schedule_dpi_cycle(self) -> None:
+        received = time.perf_counter_ns()
         self._start_dpi_worker()
         if self.dpi_cycler is None:
             return
-        self._dpi_queue.put(True)
+        self._dpi_queue.put(received)
 
     def _stop_dpi_worker(self, *, wait: bool = True) -> None:
         self._dpi_cancel.set()
@@ -652,6 +693,7 @@ class MouseRemapper:
                         self.ui = UInput(self._capabilities(),
                                         name=f"omus: {self.device.name}")
                     self._start_dpi_worker()
+                    LOG.info("Mouse remapping operational")
                     if disconnected:
                         LOG.info("Mouse reconnected at %s", self.device.path)
                         if self.wake_coordinator is not None:

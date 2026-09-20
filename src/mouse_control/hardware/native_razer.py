@@ -32,6 +32,7 @@ class NativeRazerBackend(HardwareBackend):
         self._discovery = discovery
         self._session_factory = session_factory
         self._bound: dict[MouseDevice, tuple[HidrawRazerSession, RazerProductSpec]] = {}
+        self.discovery_pending = False
 
     def _spec(self, device: MouseDevice) -> RazerProductSpec | None:
         if device.vendor != RAZER_VENDOR_ID or device.product is None:
@@ -44,6 +45,7 @@ class NativeRazerBackend(HardwareBackend):
         spec = self._spec(device)
         if spec is None:
             return False
+        self.discovery_pending = True
         opened: list[HidrawRazerSession] = []
         responders: list[HidrawRazerSession] = []
         try:
@@ -64,6 +66,7 @@ class NativeRazerBackend(HardwareBackend):
                 return False
             selected = responders[0]
             self._bound[device] = (selected, spec)
+            self.discovery_pending = False
             opened.remove(selected)
             return True
         finally:

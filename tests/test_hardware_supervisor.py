@@ -50,8 +50,8 @@ def test_startup_and_reconnect_use_identical_desired_state_reconciliation():
     first.set_dpi.assert_called_once_with(G305, 1500)
 
     assert supervisor.rebind(expected_generation=0)
-    second.set_polling_rate.assert_called_once_with(G305, 500)
-    second.set_dpi.assert_called_once_with(G305, 1500)
+    second.set_polling_rate.assert_not_called()
+    second.set_dpi.assert_not_called()
     first.close.assert_called_once()
     assert supervisor.current_backend is second
     assert supervisor.generation == 1
@@ -145,8 +145,8 @@ def test_dpi_battery_and_events_all_follow_the_current_backend():
 
     supervisor.rebind(0)
     assert cycler.cycle()
-    assert supervisor.desired.active_dpi == 1500
-    second.set_dpi.assert_called_once_with(G305, 1500)
+    assert supervisor.desired.active_dpi == 800
+    second.set_dpi.assert_called_once_with(G305, 800)
     first.set_dpi.assert_not_called()
     assert supervisor.get_battery_state(G305) == BatteryState(percentage=90)
     second.get_battery_state.assert_called_once_with(G305)
@@ -239,7 +239,7 @@ def test_reconnect_waits_for_previous_native_during_asynchronous_member_arrival(
     assert supervisor.current_backend is native_after
     assert supervisor.generation == 1
     assert not supervisor.discovery_pending
-    native_after.set_dpi.assert_called_once_with(G305, 1000)
+    native_after.set_dpi.assert_not_called()
     native_before.close.assert_called_once()
 
 
@@ -262,3 +262,23 @@ def test_reconnect_preserves_proven_learned_affinity_until_learned_members_retur
     assert not supervisor.discovery_pending
     assert supervisor.generation == 1
     learned_before.close.assert_called_once()
+
+
+def test_cold_learned_fallback_keeps_failed_protocol_discovery_pending_without_rewrites():
+    first, repeated, native = (discovery_backend('learned'), discovery_backend('learned'),
+                               discovery_backend('native'))
+    first.discovery_pending = repeated.discovery_pending = True
+    repeated.set_dpi = MagicMock()
+    replacements = iter([repeated, native])
+    supervisor = HardwareSupervisor(first, G305, lambda _: next(replacements))
+    supervisor._reconcile_backend = MagicMock()
+    assert supervisor.discovery_pending
+    assert not supervisor.rebind(0)
+    assert supervisor.discovery_pending
+    assert supervisor.generation == 0
+    supervisor._reconcile_backend.assert_not_called()
+    repeated.close.assert_called_once()
+    assert supervisor.rebind(0)
+    assert supervisor.current_backend is native
+    assert not supervisor.discovery_pending
+    assert supervisor.generation == 1
