@@ -1,62 +1,89 @@
-# OMUS
+<p align="center">
+  <img src="assets/omus-icon.png" width="144" alt="OMUS logo">
+</p>
 
-## One Mouse Universal System
+<h1 align="center">OMUS</h1>
+<p align="center"><strong>One Mouse Universal System</strong></p>
+<p align="center"><strong>Every mouse. One system.</strong></p>
 
-**Every mouse. One system.**
+<p align="center">
+  Native Linux control for gaming mice&mdash;remapping, DPI, polling, lighting,<br>
+  and automatic hardware discovery.
+</p>
 
-OMUS is a Linux-native system for discovering, understanding, configuring, and
-controlling mice across vendors and protocols. It combines safe evdev/uinput
-remapping with exact-device hardware backends and evidence-driven Automatic
-Discovery. Proven operations remain distinct from inferred, learned, and
-experimental behavior.
+<p align="center">
+  <a href="#install">Install</a> &middot;
+  <a href="#hardware-support">Hardware Support</a> &middot;
+  <a href="#automatic-discovery">Automatic Discovery</a> &middot;
+  <a href="#security--trust">Security</a> &middot;
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.2"><img alt="Current release: v1.0.2" src="https://img.shields.io/badge/release-v1.0.2-6f42c1"></a>
+  <a href="https://www.bestpractices.dev/projects/14722"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/14722/badge"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge"></a>
+  <a href="https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml"><img alt="CodeQL status" src="https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg"></a>
+  <a href="https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml"><img alt="VirusTotal release scan status" src="https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg"></a>
+</p>
+<p align="center">
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639"></a>
+  <img alt="Linux supported" src="https://img.shields.io/badge/Linux-supported-6f42c1">
+  <img alt="Wayland supported" src="https://img.shields.io/badge/Wayland-supported-6f42c1">
+</p>
 
 OMUS was previously known as Mouse Control. The `mouse-control` command and
 legacy configuration remain supported for existing users and scripts.
 
-The full-screen TUI is the complete interactive OMUS application.
-The CLI remains available for scripting, diagnostics, and advanced workflows;
-ordinary product capabilities are reachable from the TUI.
+## What OMUS does
 
-Lighting is an optional per-device capability. OMUS models native
-Off, Static, Breathing, and Spectrum effects, full `#RRGGBB` color, zones,
-brightness, speed, and persistence only when the exact hardware reports them.
-It does not provide host-streamed animation or whole-PC RGB synchronization,
-and lack of lighting support never reduces DPI, polling, remapping, button, or
-battery support. Source-backed protocol knowledge improves recognition without
-granting hardware write authority.
+| Control | Discovery | Safety |
+| --- | --- | --- |
+| Button remapping | Unknown-device inspection | Read-only discovery first |
+| Keys, shortcuts, and sequential macros | HID structure and relationships | Exact-device binding |
+| DPI and polling where proven | Guided behavioral observation | Operation-specific proof |
+| Per-device lighting where proven | Protocol recognition and learning | Readback where available |
+| Notifications and reconnect recovery | Privacy-conscious support reports | Ambiguity means no write |
+| TUI, service, and updater | Reusable, path-independent evidence | No telemetry |
 
-**Native Linux mouse configuration backed by automatic hardware discovery.**
+Ordinary evdev/uinput remapping does not depend on optional hardware control.
+An unavailable or unproven DPI, polling, or lighting path does not stop OMUS
+from providing safe software remapping.
 
-Configure buttons, DPI, and polling where those controls are proven safe. If
-OMUS has never seen your exact mouse, its guided discovery workflow
-can inspect what the device exposes, learn from your actions, and produce a
-privacy-conscious report that helps expand support.
+## Why OMUS
 
-[![Current release: v1.0.2](https://img.shields.io/badge/release-v1.0.2-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.2)
-[![CI](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml)
-[![VirusTotal release scan](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml)
-[![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14722/badge)](https://www.bestpractices.dev/projects/14722)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
-![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
-![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
+Traditional mouse tools primarily begin with a known device or protocol. OMUS
+can also inspect unfamiliar hardware and gather evidence toward safe, reusable
+support:
 
-> **Your unsupported mouse is exactly what we need.** If OMUS already
-> recognizes it, great. If it does not, run discovery. Every unfamiliar device
-> can reveal a protocol pattern or hardware behavior shared by other mice.
+```text
+Unknown mouse
+     ↓
+HID structure
+     ↓
+Behavioral observation
+     ↓
+Protocol inference
+     ↓
+Evidence + validation
+     ↓
+Safe control, only when independently proven
+```
+
+Recognition is not write authority. Product names, USB IDs, descriptor shapes,
+and changing bytes can guide discovery, but OMUS refuses a hardware write when
+the physical device, interface, protocol, or operation remains ambiguous.
+
+## Install
 
 The current release is [v1.0.2](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.2).
-
-## Install and run
-
-Download the package for your system from the
-[v1.0.2 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.2),
-then install it as shown below.
+Native packages are preferred because they install the desktop launcher, user
+service integration, dependencies, and device-access rules.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/omus-1.0.2-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/omus-1.0.2-1.fc44.noarch.rpm), then install it:
 
 ```bash
 sudo dnf install ./omus-1.0.2-1.fc44.noarch.rpm
@@ -64,7 +91,7 @@ sudo dnf install ./omus-1.0.2-1.fc44.noarch.rpm
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/omus_1.0.2_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/omus_1.0.2_all.deb), then install it:
 
 ```bash
 sudo apt install ./omus_1.0.2_all.deb
@@ -79,219 +106,31 @@ chmod +x OMUS-1.0.2-x86_64.AppImage
 ./OMUS-1.0.2-x86_64.AppImage setup
 ```
 
-Native packages are preferred: they install the desktop launcher, service
-integration, dependencies, and device-access rules. The AppImage bundles the
-user-space application but cannot replace the host's systemd, udev, or kernel
-input support. An [Arch `PKGBUILD`](PKGBUILD),
+The AppImage bundles the user-space application but cannot replace the host's
+systemd, udev, or kernel input support. An [Arch `PKGBUILD`](PKGBUILD),
 [Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/omus-1.0.2-py3-none-any.whl),
 and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.2/omus-1.0.2.tar.gz)
-are also published.
+are also available.
 
-Launch the guided interface as your normal desktop user:
+Launch OMUS as your normal desktop user:
 
 ```bash
 omus
 ```
 
-`omus setup` and `omus tui` open the same interface. The former
-`mouse-control` command is a compatibility alias. Do not
-run normal setup or the background service as root.
+Do not run normal setup or the background service as root.
 
-## What to expect
+## Quick start
 
-The full-screen terminal interface guides you through device selection,
-hardware discovery, DPI, polling, button mappings, service setup, and a final
-review. Nothing is saved until you choose **Review / Save**.
+1. Launch `omus`.
+2. Choose a mouse under **Device**.
+3. Configure supported hardware and button mappings.
+4. Inspect **Review / Save** before writing the configuration.
+5. Enable the user service when you want mappings restored at sign-in.
 
-- Use arrow keys or `h/j/k/l` to move.
-- Use Enter to select and Escape to go back.
-- Use `g/G` to jump to the first or last item.
-- Unknown DPI or polling support never prevents ordinary button remapping.
-
-OMUS can:
-
-- remap mouse buttons to mouse actions, keys, shortcuts, DPI cycling, or simple
-  ordered macros;
-- configure and verify DPI and polling/report rate on proven hardware paths;
-- observe physical DPI-stage changes and send desktop notifications;
-- recover remapping and supported hardware features after reconnects;
-- inspect HID structure and behavior through Automatic Discovery;
-- retain exact-device, path-independent knowledge that has met its evidence
-  requirements; and
-- update supported installations without making users reinstall each release
-  by hand.
-
-OMUS also models native per-device lighting where an exact backend
-reports independently proven capability and write authority. Unqualified and
-source-backed-only lighting writes remain disabled.
-
-## Test an unsupported mouse
-
-Obscure hardware is useful here. We especially welcome inexpensive OEM and
-rebrand mice, smaller gaming brands, wireless and MMO mice, lightweight esports
-mice, older models, configurable office mice, unusual trackballs, and devices
-that normally require Windows software or are not supported by Piper/libratbag.
-
-The shortest testing flow is:
-
-1. Install OMUS and connect the mouse.
-2. Run `omus`.
-3. Select the mouse under **Device**.
-4. Open **Hardware / Discovery** and choose **Run Guided Discovery** if offered.
-5. Follow the on-screen actions. You can skip discovery and still save normal
-   button mappings.
-6. Generate the reports below and attach them to a
-   [New mouse / discovery result issue](https://github.com/DonGeronimo7/OMUS/issues/new?template=hardware-compatibility.yml).
-
-Guided Discovery begins read-only. For DPI-button learning it collects quiet,
-normal-use, and repeated button samples so ordinary movement can be separated
-from action-specific reports. Recognizing a button or state is useful evidence;
-it does not by itself authorize OMUS to write a DPI or polling value.
-
-### Create reports to attach
-
-Create the simple, human-readable hardware report:
-
-```bash
-omus support --guided
-```
-
-After you confirm, it saves `omus-<mouse-name>-report.txt` in your home
-directory. It includes selected-device and basic system information, not a dump
-of unrelated USB devices.
-
-Create the structured Automatic Discovery report in the current directory:
-
-```bash
-omus discover --output omus-discovery.json
-```
-
-This JSON report is allowlisted and designed for community sharing: it excludes
-device paths, serial numbers, usernames, and input history. **Review every file
-before posting it** and remove anything you do not want to share.
-
-In the issue, tell us the exact model and connection type, what OMUS
-recognized, what worked or did not, whether DPI buttons or polling changes were
-observed, and what happened after reconnecting. The generated reports already
-contain technical identifiers such as VID:PID when available; you do not need
-to gather them manually.
-
-Every new device can help distinguish a reusable protocol family from a
-one-model quirk. OEM and rebrand mice are particularly valuable because several
-brands may share controllers, firmware families, report layouts, or sensors.
-
-## Known hardware and discoverable hardware
-
-Not appearing in a compatibility table does **not** mean a mouse is useless to
-OMUS.
-
-- **Known / validated hardware** has model-specific evidence for the listed
-  operations. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
-- **Discoverable hardware** can still use evdev/uinput remapping and enter the
-  read-only learning pipeline even when no hardware write has been proven.
-
-| Hardware path | Current evidence |
-| --- | --- |
-| Logitech G305 | Physically tested reference for remapping, DPI, DPI notifications, and 1000/500/250/125 Hz polling. |
-| Other Logitech HID++ mice | Native dynamic protocol detection exists, but G305 evidence is not generalized to another model. |
-| Exact modeled Razer Viper V2/V3 variants | Native 90-byte RPC implementation with DPI/polling readback plus applicable firmware and battery reads; broader physical testing remains welcome. |
-| Other mice | Remapping plus safe discovery/diagnostics; hardware controls appear only when the exact operation reaches the required proof level. |
-
-## Update
-
-Open the normal OMUS application and choose **Updates** to see the
-installed version and installation type. Choose **Check for Updates** when you
-want to contact the official release endpoint; simply opening or redrawing the
-screen does not perform a network request. When a compatible stable release is
-available, the same verified updater used by the command line offers the Update
-action while preserving package-manager ownership and approval.
-
-The command-line form remains available:
-
-```bash
-omus update
-```
-
-The updater recognizes documented RPM, DEB, AppImage, Python, and source
-installations and respects the installation owner. It does not overwrite a
-package-managed install behind the package manager's back.
-
-```bash
-omus update --check   # check without changing anything
-omus update --yes     # update without a confirmation question
-```
-
-## Security and privacy
-
-Normal runtime is local-only: there is no telemetry, analytics, crash upload,
-or automatic hardware-report upload. The explicit updater contacts the official
-GitHub release endpoint and verifies direct-download artifacts against the
-release's SHA-256 manifest before installation or AppImage replacement.
-Generic HID discovery remains read-only, hardware writes require exact proven
-authority, and the shipped udev rules avoid blanket keyboard or hidraw access.
-
-See [SECURITY.md](SECURITY.md) for vulnerability reporting, updater trust,
-device-write, usbmon, service, and privacy boundaries.
-Release checksums, SBOMs, attestations, offline provenance, and dependency-lock
-policy are documented in
-[`docs/SECURITY_SUPPLY_CHAIN.md`](docs/SECURITY_SUPPLY_CHAIN.md). Contributors
-should also follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
-[`development policy`](docs/DEVELOPMENT_POLICY.md).
-
-## How discovery works
-
-Most mouse tools begin with a known model or protocol implementation. Mouse
-Control also has a protocol-neutral discovery pipeline, so an unknown mouse
-does not begin from zero. It combines five layers:
-
-1. **Native protocol knowledge** — implemented adapters and a growing repertoire
-   of known packet shapes, transactions, encodings, transport behavior, and
-   device-family semantics.
-2. **HID structural interpretation** — descriptors, collections, usages, report
-   IDs, fields, lengths, interface relationships, and exact physical binding.
-3. **Behavioral discovery** — reports are compared with quiet controls and with
-   actions the user deliberately performs.
-4. **Evidence and provenance** — observations, correlations, physical
-   validation, conflicts, and source provenance remain distinct.
-5. **Runtime promotion** — only an independently PROVEN operation on an
-   unambiguous exact device may become writable runtime behavior.
-
-This is a native multi-protocol mouse stack, not “HID++ plus a generic
-fallback.” Direct runtime protocol adapters currently include dynamically
-discovered Logitech HID++ 2 and an exact-model Razer RPC implementation.
-Separately, the discovery repertoire contains sourced structural or semantic
-knowledge for additional families, including ASUS ROG, SteelSeries,
-Sinowealth/ODM, Attack Shark X11, AJAZZ AJ-series, MCHOSE V3, and a
-BITMOUSE-style `0x72` grammar.
-
-Those categories matter. A family in the discovery repertoire is **not** a
-claim that every related device is supported, and a structural match never
-grants write access. Some entries guide passive recognition or the next useful
-observation only; some are deliberately write-disabled. See
-[`docs/discovery-architecture.md`](docs/discovery-architecture.md) and
-[`src/mouse_control/protocol_repertoire.py`](src/mouse_control/protocol_repertoire.py)
-for the auditable details and provenance.
-
-### Safety model
-
-- Observation comes first.
-- Product names or VID:PID alone never authorize a hardware write.
-- Descriptor shape and changing bytes are evidence, not semantics.
-- Generic HID inspection does not send feature, output, or raw hidraw writes.
-- Read-side DPI correlation cannot become write authority by implication.
-- Ambiguous physical devices, interfaces, or protocol responders are refused.
-- Writable DPI or polling requires operation-specific proof, safe ownership,
-  verification/readback where available, and exact-device binding.
-- A hardware backend failure must not stop ordinary evdev/uinput remapping.
-
-Internally, evidence progresses through `OBSERVED`, `CORRELATED`, `VALIDATED`,
-and `PROVEN`. Beginners do not need to understand those states; their practical
-meaning is that OMUS says “not yet learned” instead of guessing.
-
-## Everyday configuration
-
-After setup, install the user service once if you want mappings restored when
-you sign in:
+The full-screen TUI is the complete interactive application. `omus setup` and
+`omus tui` open the same interface; the CLI remains available for scripts and
+advanced diagnostics.
 
 ```bash
 omus install-service
@@ -299,54 +138,120 @@ omus start
 omus status
 ```
 
-Other service commands are `omus stop` and `omus restart`.
-`omus run` is the explicit foreground/debug command.
+Configuration is stored at `~/.config/omus/config.toml`. On first use, OMUS
+non-destructively copies a legacy `~/.config/mouse-control/` tree only when the
+canonical OMUS location is absent.
 
-Configuration is stored at:
+## Hardware support
 
-```text
-~/.config/omus/config.toml
-```
+OMUS describes support per operation, not merely per model. See the
+[hardware compatibility matrix](docs/COMPATIBILITY.md) for the evidence behind
+validated claims.
 
-On first use, if this location is absent, OMUS copies the complete legacy
-`~/.config/mouse-control/` tree and retains the original as a backup.
+- **Validated hardware** has physical evidence for the operations listed in
+  the matrix. The Logitech G305 is the current validated reference device.
+- **Native protocol families** have implemented adapters, but evidence from one
+  exact model is not generalized to every related mouse.
+- **Discoverable hardware** can use software remapping and the read-only
+  learning pipeline even when hardware controls are unknown.
+- **Unsupported or unproven writes** remain unavailable until the exact
+  operation meets OMUS's proof and binding requirements.
 
-The TUI can create button mappings and basic sequential macros without manual
-editing. Macros consist only of key, chord, mouse-button, and millisecond-delay
-steps: they cannot execute commands, Python, loops, or hardware operations.
+OMUS includes an exact-model Razer RPC implementation and dynamically discovers
+Logitech HID++ features. Availability still depends on the connected device's
+reported capabilities and exact evidence; neither protocol name is a blanket
+support claim.
 
-### Measure physical CPI
+## Test an unsupported mouse
 
-The installed, vendor-neutral ruler tool measures physical CPI and observed
-polling from Linux motion events without sending vendor-protocol commands:
+### Your unsupported mouse is useful.
+
+Unfamiliar hardware can reveal a protocol pattern or device behavior shared by
+other mice. OEM and rebrand models, smaller gaming brands, older devices,
+trackballs, and mice normally configured through Windows software are
+especially valuable.
+
+1. Install OMUS and connect the mouse.
+2. Run `omus` and select the device.
+3. Open **Hardware / Discovery** and choose **Run Guided Discovery** when
+   offered.
+4. Follow the requested actions; you can skip discovery and still save normal
+   button mappings.
+5. Generate a support report and submit a
+   [hardware compatibility issue](https://github.com/DonGeronimo7/OMUS/issues/new?template=hardware-compatibility.yml).
 
 ```bash
-omus cpi --help
+omus support --guided
+omus discover --output omus-discovery.json
+```
+
+Guided Discovery starts read-only. The structured report is allowlisted and
+excludes usernames, serial numbers, device paths, and input history. The human-
+readable report includes only selected-device and basic system information, not
+an unrelated USB inventory. Always review files before sharing them.
+
+## Security & trust
+
+OMUS makes its controls inspectable instead of asking users to trust a broad
+claim:
+
+- [OpenSSF Best Practices](https://www.bestpractices.dev/projects/14722) and a
+  continuously generated [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS);
+- CodeQL, dependency auditing, hash-locked dependencies, pinned GitHub Actions,
+  and ClusterFuzzLite coverage for bounded parsers;
+- point-in-time VirusTotal scanning of primary release artifacts;
+- release SHA-256 verification, CycloneDX SBOMs, and GitHub/Sigstore SLSA
+  provenance;
+- local-only normal runtime with no telemetry, analytics, crash upload, or
+  automatic hardware-report upload; and
+- exact-device write boundaries: generic inspection is read-only and ambiguous
+  matches are refused.
+
+The updater contacts the official GitHub release endpoint only after an
+explicit check or update action. It verifies direct-download artifacts against
+the release checksum manifest and respects the installation's package manager.
+
+Read [SECURITY.md](SECURITY.md) for vulnerability reporting and runtime trust
+boundaries, and the [supply-chain security guide](docs/SECURITY_SUPPLY_CHAIN.md)
+for release verification, SBOM, provenance, and dependency policy.
+
+## Automatic Discovery
+
+Automatic Discovery separates what OMUS has seen from what it may safely do:
+
+| Evidence | Meaning |
+| --- | --- |
+| `OBSERVED` | Raw structure or behavior was captured. |
+| `CORRELATED` | A repeatable relationship was found. |
+| `VALIDATED` | Independent evidence confirmed the interpretation. |
+| `PROVEN` | An exact operation met the requirements for its claimed authority. |
+
+Physical calibration may prove that a DPI transition occurred; it does not
+reveal how to write firmware state. A learned read-side source may report a
+state without becoming a writer. Writable behavior requires an independently
+proven implementation, an unambiguous physical binding, safe ownership, and
+verification or readback where the protocol permits it.
+
+For the identity model, learning stages, protocol repertoire, and promotion
+rules, read the [Automatic Discovery architecture](docs/discovery-architecture.md).
+
+## Everyday tools
+
+The TUI provides normal configuration, service, update, and support-report
+workflows. Useful command-line entry points include:
+
+```bash
+omus update --check
+omus check-permissions
 omus cpi --distance-mm 50.8
 ```
 
-Stop the OMUS service first if it owns the selected event device.
+The vendor-neutral CPI tool reads Linux motion events without sending vendor
+protocol commands. Stop the OMUS service first if it owns the selected event
+device. Source installs that lack device access can use the checked-in udev rule;
+native packages install it automatically.
 
-### Permissions
-
-Native packages install OMUS's udev rules. If a source installation
-cannot access the mouse or `/dev/uinput`, install the supplied rule:
-
-```bash
-sudo install -Dm644 src/mouse_control/udev/71-mouse-control-uaccess.rules \
-  /etc/udev/rules.d/71-mouse-control-uaccess.rules
-sudo udevadm control --reload-rules
-```
-
-Reconnect the mouse or log out and back in, then run:
-
-```bash
-omus check-permissions
-```
-
-## Developers and protocol researchers
-
-Source development belongs here rather than in the beginner install path:
+## Developers & researchers
 
 ```bash
 git clone https://github.com/DonGeronimo7/OMUS.git
@@ -357,44 +262,23 @@ pip install -e .
 PYTHONPATH=src pytest -q
 ```
 
-Technical starting points:
+Start with the [discovery architecture](docs/discovery-architecture.md),
+[compatibility matrix](docs/COMPATIBILITY.md), and
+[code health audit](docs/CODE_HEALTH_AUDIT.md). Release history lives in
+[RELEASE_NOTES.md](RELEASE_NOTES.md) and [CHANGELOG.md](CHANGELOG.md).
 
-- [`docs/discovery-architecture.md`](docs/discovery-architecture.md) — discovery,
-  identity, evidence, learning, and write-promotion boundaries.
-- [`docs/CODE_HEALTH_AUDIT.md`](docs/CODE_HEALTH_AUDIT.md) — current production
-  module and protocol inventory.
-- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) — evidence-backed hardware
-  results rather than a speculative support list.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — hardware reports and pull requests.
-- [`RELEASE_NOTES.md`](RELEASE_NOTES.md) and [`CHANGELOG.md`](CHANGELOG.md) —
-  current and historical release details.
+## Contributing
 
-The complete v0.8.2 behavior contract remains the compatibility baseline:
-remapping, uinput lifecycle, reconnect recovery, notifications, proven DPI and
-polling paths, persistent learned behavior, service operation, and
-configuration compatibility must not regress as discovery expands.
+Hardware reports, documentation, protocol evidence, tests, and focused code
+changes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting
+an issue or pull request, especially when work could affect hardware writes.
 
-## Maintainer: GitHub About settings
+## Credits & provenance
 
-Repository settings are not stored in Git. Recommended About description:
-
-> Native Linux mouse configuration with multi-protocol hardware discovery,
-> safe DPI/polling control, remapping, and guided device learning.
-
-Recommended topics: `linux`, `linux-gaming`, `mouse`, `gaming-mouse`, `hid`,
-`usb-hid`, `evdev`, `mouse-remapping`, `device-discovery`, `dpi`.
-
-## Credits and provenance
-
-OMUS builds on public Linux input and mouse-protocol research. Its
-contribution is bringing that knowledge together with evidence-driven discovery
-and strict write-safety boundaries—not claiming every protocol fact was
-independently discovered here. See [CREDITS.md](CREDITS.md) for the projects and
-sources represented in the repertoire, the distinction between cited research
-and imported code, package visibility, and attribution items that still need
-maintainer review.
+OMUS builds on public Linux input and mouse-protocol research while keeping
+cited knowledge distinct from imported code and independently demonstrated
+behavior. See [CREDITS.md](CREDITS.md) for projects, sources, and attribution.
 
 ## License
 
-OMUS is licensed under the GNU General Public License, version 3 or
-later. See [`LICENSE`](LICENSE).
+OMUS is licensed under the [GNU General Public License v3.0 or later](LICENSE).

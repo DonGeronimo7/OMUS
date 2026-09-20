@@ -1,5 +1,22 @@
 # AI handoff log
 
+## 2026-09-19 — Public README product landing page
+
+- Reorganized the public README around a centered OMUS hero, curated trust
+  badges, concise product capabilities, prominent installation, evidence-based
+  hardware support, an unsupported-device testing call to action, security,
+  Automatic Discovery, and short contributor/developer paths.
+- Removed the public maintainer settings note and corrected the remaining core
+  discovery explanation to use OMUS branding. Legacy `mouse-control` references
+  remain only where they document compatibility paths.
+- Confirmed every local link/image target and all 18 external release, artifact,
+  workflow, issue-form, trust, and badge endpoints. No suitable product
+  screenshot exists in the repository, so none was fabricated.
+- Documentation-only change: no application behavior, protocol authority, HID
+  write path, package metadata, repository setting, release, or hardware state
+  changed. Automated validation passed 1,195 tests with one existing GLib
+  deprecation warning; compileall and whitespace checks passed.
+
 ## 2026-09-19 — v1.0.2 secure updater patch candidate
 
 - Reproduced the published v1.0.1 RPM redirect: canonical OMUS `github.com`
