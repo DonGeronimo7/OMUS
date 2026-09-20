@@ -1306,3 +1306,23 @@ The journal showed bounded provisional rebinds followed by Native HID recovery,
 not repeated reconnect loops or stale-generation delivery. One first-cycle
 learned-adapter candidate refused an undemonstrated 1000-DPI write as designed;
 the supervisor then promoted Native HID and reconciled 1000 successfully.
+
+## 2026-09-20 — runtime persistence stabilization candidate
+
+The battery tray now owns a recoverable session-bus/watcher lifecycle, subscribes
+to owner changes before initial registration, checks replies, and retains unknown
+battery presentation during transient absence. No artwork or asset dependency
+changed. Closed tray instances cannot be resurrected by late updates.
+
+Initial native protocol failures remain pending even when a PROVEN learned
+fallback is usable. The battery worker retries with capped backoff; equivalent
+candidates are discarded before reconciliation, and matching live DPI/rate state
+avoids redundant writes. Polling DPI fallback accepts readiness and returns on a
+backend generation change so event monitoring can recover after promotion.
+
+RPM/DEB ship graphical-session systemd integration and a configuration-aware XDG
+login bootstrap. A kernel lock prevents duplicate `run` instances. The installed
+RPM has been exercised on Fedora/niri/DMS; the exact evidence and remaining
+reboot/physical acceptance gate are in `RUNTIME_PERSISTENCE_HANDOFF.md`.
+Automated source and RPM gates pass 1,217 tests. No new write authority, generic
+HID write, udev scope, updater policy, or physical hardware support is claimed.

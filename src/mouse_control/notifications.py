@@ -87,9 +87,15 @@ class DpiMonitor:
         try: self.notifier.notify_dpi(dpi); self._notify_failed = False
         except Exception as exc:
             if not self._notify_failed: LOG.warning("Desktop DPI notification failed; will retry: %s", exc); self._notify_failed = True
-    def _run(self):
+    def _run(self, ready_callback=None):
+        generation = getattr(self.backend, "generation", None)
         self.poll_once()
-        while not self.shutdown_event.wait(self.interval): self.poll_once()
+        if ready_callback is not None:
+            ready_callback()
+        while not self.shutdown_event.wait(self.interval):
+            if getattr(self.backend, "generation", None) != generation:
+                return
+            self.poll_once()
     def start(self): self._thread = threading.Thread(target=self._run, name="dpi-monitor", daemon=True); self._thread.start()
     def stop(self):
         self.shutdown_event.set()

@@ -156,9 +156,10 @@ def test_all_packaged_interactive_launchers_use_application_entry():
 
 
 def test_package_definitions_own_desktop_entry_and_icon():
-    assert list((ROOT / "packaging").rglob("*.desktop")) == [
-        ROOT / "packaging/appimage/omus.desktop"
-    ]
+    assert set((ROOT / "packaging").rglob("*.desktop")) == {
+        ROOT / "packaging/appimage/omus.desktop",
+        ROOT / "packaging/omus-autostart.desktop",
+    }
     debian = (ROOT / "debian/install").read_text()
     rpm = (ROOT / "omus.spec").read_text()
     arch = (ROOT / "PKGBUILD").read_text()

@@ -1,5 +1,32 @@
 # AI handoff log
 
+## 2026-09-20 — runtime persistence stabilization
+
+- Request: attached runtime robustness/stability mission; starting clean at
+  `057a5f336b331b58f1ff5b48a2e67d32a715868e`; dedicated branch
+  `codex/runtime-persistence`. Final commit contains this entry.
+- Root causes: one-shot unchecked tray registration; no watcher/bus recovery;
+  boot-time learned fallback erased pending native/battery discovery; polling
+  fallback rejected readiness callbacks and did not yield after promotion;
+  session-independent generated service; redundant reconciliation writes.
+- Added event-driven tray recovery, capped retries, unknown battery presentation,
+  runtime exclusion, graphical-session unit/login bootstrap and standard RPM
+  lifecycle hooks. Preserved the purple renderer and all hardware authority gates.
+- Source and RPM `%check`: 1,217 passed, one external GLib warning. Compileall,
+  diff checks, wheel/sdist, isolated wheel renderer, and unit/desktop validation
+  passed. Debian/AppImage artifact builds remain unavailable locally.
+- Installed desktop integration exercised DMS restart, three OMUS restarts,
+  watcher-late startup, SIGKILL recovery and duplicate refusal. Each returned one
+  90% battery item; repeated restarts retained eight threads/18 descriptors.
+  A subsequent cold check exposed the native-fallback defect, which was corrected
+  and retested: a stripped-environment startup again selected learned fallback,
+  immediately exported unknown battery, then automatically promoted to Native HID
+  and 90% battery on the same PID/item. Installed files matched source; config
+  remained byte-identical. Details: `RUNTIME_PERSISTENCE_HANDOFF.md`.
+- Code-reviewed/Unit-tested/Integration-tested. No reboot or receiver unplug was
+  performed; visual/button/reboot acceptance remains operator-observed work.
+  No push, merge, tag, release or protocol/udev authority expansion.
+
 ## 2026-09-19 — v1.0.3 battery tray release candidate
 
 - Integrated the approved battery artwork through protected-main PR #17 after

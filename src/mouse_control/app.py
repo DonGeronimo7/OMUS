@@ -15,4 +15,12 @@ def main(argv: list[str] | None = None) -> int:
         interactive=sys.stdin.isatty() and sys.stdout.isatty(),
     ):
         return launch(supplied_argv)
+    if supplied_argv and supplied_argv[0] == "run":
+        from .runtime_lock import runtime_lock
+        try:
+            with runtime_lock():
+                return cli.main(supplied_argv)
+        except (OSError, RuntimeError) as exc:
+            print(f"OMUS runtime: {exc}", file=sys.stderr)
+            return 1
     return cli.main(supplied_argv)

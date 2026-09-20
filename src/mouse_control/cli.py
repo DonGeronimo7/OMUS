@@ -550,6 +550,7 @@ def run_from_config(path: Path | None = None, *, motion_diagnostic=None) -> int:
     except OSError as exc:
         print(f"Could not read configuration: {exc}", file=sys.stderr)
         return 1
+    log.info("OMUS service starting; persisted configuration restored")
     device = config.get("device", {})
     mappings = config.get("remap", {})
     macros = config.get("macros", {})
@@ -679,6 +680,7 @@ def run_from_config(path: Path | None = None, *, motion_diagnostic=None) -> int:
             log.info("Starting DPI notification monitor")
             monitor.start()
         battery_monitor.start()
+        log.info("OMUS runtime workers ready")
         MouseRemapper(event_path, mappings, shutdown_event, dpi_cycler,
                       target_device=mouse or configured_mouse,
                       event_observer=hardware, macros=macros,
@@ -695,6 +697,7 @@ def run_from_config(path: Path | None = None, *, motion_diagnostic=None) -> int:
             monitor.stop()
         battery_monitor.stop()
         hardware.close()
+        log.info("OMUS clean shutdown")
         wake_summary = wake_coordinator.recorder.summary()
         trial_count = len(wake_coordinator.recorder.samples)
         for stage, values in wake_summary.items():

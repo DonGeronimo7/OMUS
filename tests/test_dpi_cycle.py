@@ -386,8 +386,8 @@ def test_runtime_teardown_never_rebinds_or_repeats_hardware_writes():
         assert cli.run_from_config() == 0
 
     select.assert_called_once_with(MOUSE, log_failures=True)
-    backend.set_polling_rate.assert_called_once_with(MOUSE, 1000)
-    backend.set_dpi.assert_called_once_with(MOUSE, 800)
+    backend.set_polling_rate.assert_not_called()
+    backend.set_dpi.assert_not_called()
 
 
 def test_runtime_literal_true_learned_cycle_trigger_creates_cycler():

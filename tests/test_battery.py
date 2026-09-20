@@ -82,7 +82,7 @@ def test_valid_battery_updates_tray_and_cleanup_removes_it():
     monitor.start()
     while not tray.values: time.sleep(.001)
     monitor.stop()
-    assert tray.values == [(BatteryState(percentage=83), "test")]
+    assert tray.values[-1] == (BatteryState(percentage=83), "test")
     assert tray.closed >= 1
 
 
@@ -95,14 +95,11 @@ def test_tray_validates_visible_percentage():
     finally: tray.close()
 
 
-def test_tray_close_leaves_recovery_queue_restartable():
+def test_tray_close_prevents_late_updates_from_resurrecting_worker():
     tray = StatusNotifierTray()
-    old_queue = tray._queue
     tray.close()
-    assert tray._queue is not old_queue
-    tray._queue.put(None)
-    assert asyncio.run(tray._queue.get()) is None
-    tray._queue.task_done()
+    tray.update(BatteryState(percentage=50), "test")
+    assert tray._thread is None
     tray.close()
 
 
@@ -220,7 +217,7 @@ def test_transient_failures_keep_last_known_battery_visible():
     monitor.start()
     try:
         wait_for(backend.finished.is_set)
-        assert tray.values == [(BatteryState(percentage=75), "test")]
+        assert tray.values[-1] == (BatteryState(percentage=75), "test")
         assert tray.closed == 0
         assert monitor._consecutive_failures == 2
     finally:
@@ -228,7 +225,7 @@ def test_transient_failures_keep_last_known_battery_visible():
         monitor.stop()
 
 
-def test_third_consecutive_failure_closes_the_tray():
+def test_third_consecutive_failure_keeps_unknown_tray():
     stop, tray = threading.Event(), Tray()
     backend = ScriptedBackend([BatteryState(percentage=75), RuntimeError("timeout"),
                                RuntimeError("timeout"), RuntimeError("timeout")])
@@ -237,7 +234,8 @@ def test_third_consecutive_failure_closes_the_tray():
     monitor.start()
     try:
         wait_for(backend.finished.is_set)
-        assert tray.closed == 1
+        assert tray.closed == 0
+        assert tray.values[-1][0].percentage is None
         assert monitor._consecutive_failures == 3
     finally:
         backend.release.set()
@@ -254,7 +252,7 @@ def test_successful_read_resets_failure_counter():
     monitor.start()
     try:
         wait_for(backend.finished.is_set)
-        assert [state.percentage for state, _ in tray.values] == [60, 61]
+        assert [state.percentage for state, _ in tray.values] == [None, 60, 61]
         assert tray.closed == 0
         assert monitor._consecutive_failures == 2
     finally:
@@ -272,3 +270,31 @@ def test_battery_menu_layout_has_valid_dbusmenu_struct_and_variant_shapes():
     properties = battery_menu_properties("Example Mouse", BatteryState(percentage=83))
     group_variant = Variant("a(ia{sv})", [[item_id, values] for item_id, values in properties.items()])
     assert group_variant.value[0][0] == 1
+
+
+def test_battery_absent_at_boot_recovers_without_restarting_monitor():
+    stop, tray = threading.Event(), Tray()
+    backend = Backend(available=False)
+    backend.discovery_pending = True
+    monitor = BatteryMonitorSupervisor(backend, DEVICE, lambda _: backend, stop, tray=tray,
+                                       interval=.01, retry_interval=.001)
+    monitor.start()
+    try:
+        wait_for(lambda: bool(tray.values))
+        assert tray.values[-1][0].percentage is None
+        original_thread = monitor._thread
+        monitor.start()
+        assert monitor._thread is original_thread
+        backend.available = True
+        wait_for(lambda: tray.values[-1][0].percentage == 83)
+        assert tray.closed == 0
+    finally:
+        monitor.stop()
+    assert not original_thread.is_alive()
+
+
+def test_unknown_battery_exports_valid_tooltip_and_menu():
+    state = BatteryState(percentage=None, status="unavailable")
+    assert 'Unknown' in battery_tooltip('test', state)[3]
+    assert battery_menu_properties('test', state)[1]['label'].value == 'Battery: Unknown'
+    Variant('(ia{sv}av)', battery_menu_layout('test', state))

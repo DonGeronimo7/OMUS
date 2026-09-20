@@ -51,7 +51,9 @@ class HardwareSupervisor(HardwareBackend):
         self._device_resolver = device_resolver or (lambda selected: selected)
         self._has_preferred_backend = self._backend_has_proven_adapter(backend)
         self._preferred_adapter = self._adapter_affinity(backend)
-        self._discovery_pending = bool(discovery_pending and not self._has_preferred_backend)
+        self._discovery_pending = bool(
+            getattr(backend, "discovery_pending", False) is True
+            or (discovery_pending and not self._has_preferred_backend))
         self._lock = threading.RLock()
         # Evdev observation is part of the pointer hot path.  It must never
         # wait for slow backend discovery, readback, or desired-state writes
@@ -225,8 +227,10 @@ class HardwareSupervisor(HardwareBackend):
         if desired.polling_rate_hz is not None:
             try:
                 if backend.supports_polling_rate_writes_without_takeover(device):
-                    backend.set_polling_rate(device, desired.polling_rate_hz)
                     actual = backend.get_polling_rate(device)
+                    if actual != desired.polling_rate_hz:
+                        backend.set_polling_rate(device, desired.polling_rate_hz)
+                        actual = backend.get_polling_rate(device)
                     if actual != desired.polling_rate_hz:
                         raise HardwareError(
                             f"polling verification requested {desired.polling_rate_hz} Hz, "
@@ -246,8 +250,10 @@ class HardwareSupervisor(HardwareBackend):
                 backend.apply_dpi_stages(
                     device, list(desired.dpi_stages), desired.active_dpi)
             if desired.active_dpi > 0 and backend.supports_dpi(device):
-                backend.set_dpi(device, desired.active_dpi)
                 actual = backend.get_dpi(device)
+                if not self._dpi_matches(actual, desired.active_dpi):
+                    backend.set_dpi(device, desired.active_dpi)
+                    actual = backend.get_dpi(device)
                 if not self._dpi_matches(actual, desired.active_dpi):
                     raise HardwareError(
                         f"DPI verification requested {desired.active_dpi}, read {actual}")
@@ -316,6 +322,15 @@ class HardwareSupervisor(HardwareBackend):
                         self._adapter_affinity(replacement),
                     )
                     return False
+                old_signature = self._discovery_binding_signature(old)
+                new_signature = self._discovery_binding_signature(replacement)
+                if (not force and old_signature is not None and new_signature is not None and
+                        old_signature == new_signature):
+                    close = getattr(replacement, "close", None)
+                    if close:
+                        close()
+                    self.device = resolved_device
+                    return False
                 self._reconcile_backend(replacement, resolved_device)
                 prepare_rebind = getattr(replacement, "prepare_observer_rebind", None)
                 if callable(prepare_rebind):
@@ -327,15 +342,6 @@ class HardwareSupervisor(HardwareBackend):
                         close()
                 raise
 
-            old_signature = self._discovery_binding_signature(old)
-            new_signature = self._discovery_binding_signature(replacement)
-            if (not force and old_signature is not None and new_signature is not None and
-                    old_signature == new_signature):
-                close = getattr(replacement, "close", None)
-                if close:
-                    close()
-                self.device = resolved_device
-                return False
 
             self.device = resolved_device
             with self._observer_lock:
@@ -349,7 +355,7 @@ class HardwareSupervisor(HardwareBackend):
             replacement_preferred = self._backend_has_proven_adapter(replacement)
             if replacement_preferred:
                 self._has_preferred_backend = True
-                self._discovery_pending = False
+                self._discovery_pending = getattr(replacement, "discovery_pending", False) is True
                 replacement_affinity = self._adapter_affinity(replacement)
                 if replacement_affinity[0] > self._preferred_adapter[0]:
                     self._preferred_adapter = replacement_affinity

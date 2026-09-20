@@ -9,3 +9,5 @@ assets/icons/hicolor/32x32/apps/omus.png usr/share/icons/hicolor/32x32/apps
 assets/icons/hicolor/24x24/apps/omus.png usr/share/icons/hicolor/24x24/apps
 assets/icons/hicolor/16x16/apps/omus.png usr/share/icons/hicolor/16x16/apps
 packaging/omus.metainfo.xml usr/share/metainfo
+packaging/omus-autostart.desktop etc/xdg/autostart
+packaging/omus.service usr/lib/systemd/user
