@@ -132,11 +132,37 @@ def test_pixmap_fill_grows_with_charge_at_common_tray_sizes():
             assert width == actual_height == height
             assert isinstance(pixels, bytes)
             assert len(pixels) == width * height * 4
-            assert b"\xff\xff\xff\xff" in pixels
+            assert any(pixels[index] == 255 for index in range(0, len(pixels), 4))
             assert b"\0\0\0\0" in pixels
-            filled_counts.append(pixels.count(b"\xff\xff\xff\xff"))
+            filled_counts.append(sum(pixels[index] for index in range(0, len(pixels), 4)))
         assert filled_counts == sorted(filled_counts)
         assert filled_counts[0] < filled_counts[-1]
+
+
+def test_pixmap_is_deterministic_transparent_and_uses_omus_gradient():
+    for height in (16, 20, 22, 24, 32):
+        for percentage in (0, 10, 50, 100):
+            first = battery_pixmap(percentage, height)
+            assert first == battery_pixmap(percentage, height)
+            pixels = first[2]
+            assert pixels[:4] == b"\0\0\0\0"
+            opaque_colors = {tuple(pixels[index + 1:index + 4])
+                             for index in range(0, len(pixels), 4)
+                             if pixels[index] == 255}
+            assert opaque_colors
+            assert all(blue > green and red > green for red, green, blue in opaque_colors)
+            if percentage:
+                assert len(opaque_colors) > 1
+
+
+def test_pixmap_rejects_invalid_percentage_and_dimensions():
+    for percentage, height in ((-1, 16), (101, 16), (50, 15), (50, 0)):
+        try:
+            battery_pixmap(percentage, height)
+        except ValueError:
+            pass
+        else:
+            assert False, (percentage, height)
 
 
 def test_sni_icon_pixmap_uses_dbus_next_struct_and_byte_array_shapes():
