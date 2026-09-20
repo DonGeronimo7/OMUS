@@ -37,6 +37,7 @@ privacy-conscious report that helps expand support.
 [![VirusTotal release scan](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml)
 [![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14722/badge)](https://www.bestpractices.dev/projects/14722)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
