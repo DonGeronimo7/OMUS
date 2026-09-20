@@ -269,3 +269,19 @@ and the documentation-only evidence commit containing this final paragraph.
 Starting tree was clean; final tree/hash are verified in the task response.
 `main` is untouched; all earlier intentional commits retained; feature branch
 not pushed, remote not needed for a push check; no merge, tag, release, or reboot.
+
+
+## Cold-boot acceptance and integration authorization
+
+The user subsequently performed an actual reboot and reported automatic OMUS
+return, substantially faster battery/tray and DPI-notification readiness, correct
+notification/sensitivity agreement, hardware-truth synchronization, and no manual
+intervention. This closes the earlier cold-boot acceptance limitation for
+`bdf260c`; no new boot timing number is inferred from that human report.
+
+Integration preparation retains the accepted runtime code exactly. The mandatory
+Ruff check exposed only dbus-next signature annotations in the private-bus test;
+a local lint suppression documents those required non-Python signatures without
+changing test/runtime behavior. The user authorized pushing the persistence
+branch and integrating through the protected-main PR workflow, with no tag or
+release. Discovery work starts only after that integration is verified.

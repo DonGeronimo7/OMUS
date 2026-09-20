@@ -29,7 +29,7 @@ def test_exported_item_survives_watcher_replacement_and_repeated_runtime_lifetim
             super().__init__(WATCHER)
             self.items = []
         @method()
-        def RegisterStatusNotifierItem(self, name: 's') -> '':
+        def RegisterStatusNotifierItem(self, name: 's') -> '':  # noqa: F722, F821 — D-Bus signatures
             self.items.append(name)
 
     async def wait_for(predicate):
