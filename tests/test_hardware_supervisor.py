@@ -282,3 +282,34 @@ def test_cold_learned_fallback_keeps_failed_protocol_discovery_pending_without_r
     assert supervisor.current_backend is native
     assert not supervisor.discovery_pending
     assert supervisor.generation == 1
+
+
+def test_native_reconnect_at_same_nodes_replaces_session_and_reads_live_state():
+    """Matching static topology cannot keep a disconnected native owner alive."""
+    first, replacement = discovery_backend('native'), discovery_backend('native')
+    first._protocol_backend = backend(dpi=3000)
+    replacement._protocol_backend = backend(dpi=1500)
+    factory = Mock(return_value=replacement)
+    supervisor = HardwareSupervisor(
+        first, G305, factory,
+        DesiredHardwareState(active_dpi=1000, restore_dpi=False))
+    cycler = DpiCycler(supervisor, G305, [1000, 1500, 2000, 2500, 3000],
+                       1000, notifier=MagicMock())
+    assert cycler.current_dpi == 3000
+    assert supervisor._discovery_binding_signature(first) == (
+        supervisor._discovery_binding_signature(replacement))
+
+    # Battery failure can request rebind without the watcher's force flag.
+    assert supervisor.rebind(expected_generation=0)
+    assert supervisor.current_backend is replacement
+    assert supervisor.generation == 1
+    first.close.assert_called_once()
+    replacement.close.assert_not_called()
+    replacement._protocol_backend.set_dpi.assert_not_called()
+    assert not supervisor.rebind(expected_generation=0)
+    factory.assert_called_once_with(G305)
+
+    assert cycler.cycle()
+    assert cycler.current_dpi == 2000
+    replacement._protocol_backend.set_dpi.assert_called_once_with(G305, 2000)
+    first._protocol_backend.set_dpi.assert_not_called()

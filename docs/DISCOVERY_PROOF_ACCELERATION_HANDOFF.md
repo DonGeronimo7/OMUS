@@ -1,5 +1,9 @@
 # Discovery proof acceleration — local review handoff
 
+This is the original implementation checkpoint. Subsequent installed acceptance
+and the bounded recovery correction are recorded in
+[DISCOVERY_PROOF_ACCEPTANCE.md](DISCOVERY_PROOF_ACCEPTANCE.md).
+
 ## Goal and repository state
 
 Reuse established, capability-specific protocol knowledge without granting writes
