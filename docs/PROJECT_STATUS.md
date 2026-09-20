@@ -1342,3 +1342,20 @@ with two HID transactions, and service restart preserves 3000 DPI. The user
 reported notification absence/delay during initial reconnect/startup; subsequent
 notifications resume. The observed 16-second management recovery remains a
 performance acceptance issue under investigation. See `DPI_TRUTH_HANDOFF.md`.
+
+
+## 2026-09-20 — DPI recovery performance acceptance
+
+Read-only receiver version probes now share one existing timeout window through
+the sole HID reader, instead of waiting sequentially per slot. Every candidate
+is still checked, ambiguous responders rejected, and feature IDs resolved through
+ROOT; normal writes remain serialized and verified. Source and RPM: 1,244 passed
+each. The updated local RPM is installed, without publication.
+
+Installed startup reached remapping in 2,428 ms versus roughly 6,170 ms;
+USB management recovery improved from 16,042 to 5,074 ms, with remapping at
+109 ms. Synchronized cycles remain approximately 20 ms and two HID transactions.
+The user confirmed timing/sensitivity agreement, and final USB testing showed two
+matching five-stage sequences. Initial readiness still takes time; this is not
+a guarantee of immediate notifications before hardware observation is ready.
+Full evidence, validation limits, and Git checkpoints: `DPI_TRUTH_HANDOFF.md`.

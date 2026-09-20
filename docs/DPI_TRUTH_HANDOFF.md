@@ -171,3 +171,89 @@ Next bounded task: profile the existing HID++ probe/recovery delay, preserve exa
 identity/ambiguity checks, and remove only demonstrated unnecessary waits.
 Physical button-to-visible timing, settled idle CPU, and reboot acceptance are
 not established by the transaction benchmark.
+
+## Recovery performance correction after checkpoint afdc25b
+
+The user clarified that absent/mistimed popups occur only in the initial
+startup/reconnect window. Existing sequential ROOT version probes waited up to
+750 ms for each of seven candidate receiver slots; a nonresponsive pass measured
+approximately 755 ms per query. This is independent of the 20 ms DPI write path.
+
+`HidSession.probe_protocol_versions` now overlaps **only these existing read-only
+ROOT version queries** within one unchanged timeout window. The sole reader
+routes replies by complete device/feature/function/software identity, routes
+matching protocol errors, and wakes every pending probe on disconnect.
+Normal requests keep their existing serialized path. No additional thread,
+reader, persistent route cache, generic write API, timeout reduction, fixed G305
+slot, or early return after finding one responder is introduced.
+
+`connect_hidpp20` still evaluates every slot and rejects multiple responders,
+reusing the verified version response rather than querying it again. Feature IDs
+still resolve dynamically through ROOT on each new session. Compatibility
+transports without the optional probe operation keep their serial API.
+
+Tests cover out-of-order responses, issuing all probes before waiting, exact
+reply identity, errors, disconnect, invalid/duplicate slots, zero/multiple/single
+responders, and no duplicate version read. Full source gate: **1244 passed,
+1 warning in 13.41s**. RPM %check: **1244 passed, 1 warning in 15.52s**.
+Compileall and diff checks pass.
+
+A bounded source runtime using the complete production discovery path selected
+Native HID at 1654.553 ms, synchronized 3000 at 1674.453 ms, registered the tray
+at 1752.189 ms, and became remapping-operational at 1832.639 ms (logging-relative
+process milestones). A complete-route G305 benchmark bound in 1608.335 ms and
+again confirmed **800 → 1500 → 2000 → 2500 → 3000**, twice, with exactly two HID
+transactions per change. This route includes passive Discovery overhead, unlike
+the earlier direct-native binding measurement.
+
+Direct-native diagnostic attempts after the USB reinsert received no responses;
+they are not passed hardware tests. The production-route measurements above are
+the successful evidence. An error-decoding hypothesis was inspected against
+[Logitech's public HID++ specification](https://lekensteyn.nl/files/logitech/logitech_hidpp10_specification_for_Unifying_Receivers.pdf),
+but no observed packet evidence justified changing error decoding; it is unchanged.
+
+
+## Final installed acceptance
+
+The second local RPM installation completed, and `rpm -V omus` reported no
+differences. Installed service process start to configuration was 201.770 ms;
+native/device selection 2269.805 ms; silent hardware synchronization 2289.691 ms
+(read itself 9.920 ms); watcher ready 2292.966 ms; workers 2293.152 ms; tray
+2349.381 ms; remapping operational **2428.494 ms**. Startup preserved live 3000
+DPI despite saved active=800, with no restoration burst or startup DPI popup.
+
+The user explicitly reported **“Timing and sensitivity now agree”** after the
+faster build, then performed a separate requested USB unplug/reinsert trial.
+That final instrumented trial recorded:
+- device-return → remapping: **108.840 ms**;
+- device-return → management/DPI watcher ready: **5074.202 ms**, versus the earlier
+  **16041.523 ms** trial;
+- silent synchronization to **3000**, with an **8.960 ms** hardware read;
+- subsequent confirmed/readback/native-notification sequence:
+  **800 → 1500 → 2000 → 2500 → 3000**, twice, all `replaces_id=0`;
+- no native-observation software write. A native onboard press has no requested
+  software DPI; the separate ten-cycle software benchmark verifies request =
+  readback = notifier value with two transactions each.
+
+**Physically validated on this G305**: post-readiness slow/rapid popup and
+sensitivity agreement (operator report), automatic USB recovery (journal and
+operator trial), non-default restart preservation, and native canonical
+readback/software-cycle transaction counts. No other mouse model is newly
+claimed physically validated.
+
+The remaining startup/reconnect readiness window is explicit: this is faster
+bounded protocol initialization, not instant hardware readiness. The measured
+5.07-second reconnect sample includes existing discovery/retry/device response
+behavior; it is not a guaranteed upper bound. Events before an authoritative
+observer exists cannot be reconstructed into truthful historical DPI popups.
+No arbitrary sleeps, reduced timeout, fixed receiver slot, cached volatile DPI,
+or skipped ambiguity checks were used to hide this limitation.
+
+Physical switch-to-presentation latency was not instrumented. The approximately
+20 ms figures measure software cycle/confirmation (and test notifier enqueue),
+not desktop animation. Actual cold system reboot was not repeated; the user had
+already confirmed persistence after reboot, and reboot remains user-controlled.
+
+Next bounded task: user-controlled cold-boot acceptance of this exact installed
+candidate, checking live DPI, native readiness, remapping, and the purple tray.
+The earlier profiling follow-up is complete for this scoped correction.

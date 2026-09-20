@@ -65,6 +65,7 @@ class HidSession:
         self._request_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._waiter: tuple[tuple[int, int, int, int], _Waiter] | None = None
+        self._probe_waiters: dict[tuple[int, int, int, int], _Waiter] = {}
         self._callbacks: list[Callable[[HidppReport], None]] = []
         self._callback_failures: dict[Callable[[HidppReport], None], int] = {}
         self._stop = threading.Event()
@@ -133,6 +134,49 @@ class HidSession:
                     if self._waiter and self._waiter[1] is waiter:
                         self._waiter = None
 
+    def probe_protocol_versions(self, device_indexes: tuple[int, ...]) -> dict[int, tuple[int, int]]:
+        """Overlap only read-only ROOT version probes, retaining one reader.
+
+        Every candidate is checked before selection. Unanswered slots share the
+        ordinary request timeout instead of multiplying it by the slot count.
+        This is deliberately not a batch hardware-write API.
+        """
+        if (not device_indexes or len(set(device_indexes)) != len(device_indexes)
+                or any(index not in (*range(1, 7), 0xFF) for index in device_indexes)):
+            raise ValueError("invalid receiver probe slots")
+        with self._request_lock:
+            pending = {(index, 0, 1, DISCOVERY_SOFTWARE_ID): _Waiter(threading.Event())
+                       for index in device_indexes}
+            with self._state_lock:
+                if self._stop.is_set():
+                    raise HidppError("HID session is closed")
+                self._probe_waiters = pending
+            try:
+                for index in device_indexes:
+                    packet = bytes((0x11, index, 0, 0x10 | DISCOVERY_SOFTWARE_ID)) + bytes(16)
+                    try:
+                        self._record_trace("tx", packet)
+                        self._io.write(packet)
+                    except OSError as exc:
+                        raise HidppError(f"HID session probe failed: {exc}") from exc
+                deadline = time.monotonic() + self.timeout
+                result = {}
+                for key, waiter in pending.items():
+                    waiter.event.wait(max(0., deadline - time.monotonic()))
+                    with self._state_lock:
+                        report = waiter.report
+                        error = waiter.error
+                    if error is None and report is not None:
+                        parameters = report.parameters
+                        if len(parameters) >= 2 and parameters[0] >= 2:
+                            result[key[0]] = (parameters[0], parameters[1])
+                if self._stop.is_set():
+                    raise HidppError("HID session disconnected during protocol probe")
+                return result
+            finally:
+                with self._state_lock:
+                    self._probe_waiters = {}
+
     @staticmethod
     def _error_for(report: HidppReport, key: tuple[int, int, int, int]) -> HidppError | None:
         device, feature, function, software = key
@@ -159,6 +203,20 @@ class HidSession:
                     waiter.report = report
                     waiter.event.set()
                     return
+            if self._probe_waiters:
+                key = (report.device_index, report.feature_index,
+                       report.function_or_event, report.software_id)
+                waiter = self._probe_waiters.get(key)
+                if waiter is not None:
+                    waiter.report = report
+                    waiter.event.set()
+                    return
+                for key, waiter in self._probe_waiters.items():
+                    error = self._error_for(report, key)
+                    if error is not None:
+                        waiter.error = error
+                        waiter.event.set()
+                        return
             callbacks = tuple(self._callbacks)
         for callback in callbacks:
             try:
@@ -195,6 +253,9 @@ class HidSession:
                 if self._waiter:
                     self._waiter[1].error = HidppError(f"HID session disconnected: {failure}")
                     self._waiter[1].event.set()
+                for waiter in self._probe_waiters.values():
+                    waiter.error = HidppError(f"HID session disconnected: {failure}")
+                    waiter.event.set()
             with self._state_lock:
                 if not self._io_closed:
                     self._io_closed = True

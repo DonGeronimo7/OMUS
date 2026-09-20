@@ -421,3 +421,84 @@ def test_onboard_polling_choices_require_exact_validated_identity(product, busty
         assert not any(c[1:3] in ((0x12, 1), (0x17, 2)) for c in session.calls)
     finally:
         backend.close()
+
+
+def test_protocol_probe_issues_all_queries_before_waiting_and_routes_out_of_order():
+    class ProbeIo(QueueIo):
+        def write(self, data):
+            self.writes.append(data)
+            if len(self.writes) == 7:
+                # Out of order, every slot responds (no wall-clock assertion).
+                for index in (0xff, 6, 5, 4, 3, 2, 1):
+                    self.incoming.put(packet(index, 0, 1, 0x0a, b"\x02\x01"))
+                self.incoming.put(packet(1, 0x12, 1, 0, b"\x04"))
+    session = HidSession(Path("/dev/fake"), io_factory=ProbeIo)
+    try:
+        indexes = (*range(1, 7), 0xff)
+        assert session.probe_protocol_versions(indexes) == {i: (2, 1) for i in indexes}
+        assert len(session._io.writes) == 7
+        assert all(p[2:4] == b"\x00\x1a" and not any(p[4:])
+                   for p in session._io.writes)
+        assert session._probe_waiters == {}
+    finally:
+        session.close()
+
+
+def test_protocol_probe_rejects_wrong_identity_and_consumes_matching_errors():
+    class ProbeIo(QueueIo):
+        def write(self, data):
+            index = data[1]
+            self.incoming.put(packet(index, 0, 1, 0x09, b"\x02\x00"))
+            self.incoming.put(packet(index, 3, 1, 0x0a, b"\x02\x00"))
+            self.incoming.put(packet(index, 0, 2, 0x0a, b"\x02\x00"))
+            self.incoming.put(packet(index, 0xff, 0, 0, b"\x1a\x02"))
+    session = HidSession(Path("/dev/fake"), io_factory=ProbeIo)
+    events = []
+    session.subscribe(events.append)
+    try:
+        assert session.probe_protocol_versions((1, 4)) == {}
+        assert len(events) == 6
+        assert session._probe_waiters == {}
+    finally:
+        session.close()
+
+
+def test_protocol_probe_disconnect_releases_all_waiters():
+    class DisconnectIo(QueueIo):
+        def write(self, data):
+            self.incoming.put(b"")
+    session = HidSession(Path("/dev/fake"), io_factory=DisconnectIo)
+    try:
+        with pytest.raises(HidppError, match="disconnect"):
+            session.probe_protocol_versions((1, 2, 3))
+        assert session._probe_waiters == {}
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("responders", [(4,), (1, 4), ()])
+def test_batched_connector_preserves_ambiguity_and_reuses_verified_versions(responders):
+    class ProbedSession(FakeSession):
+        def probe_protocol_versions(self, indexes):
+            assert indexes == (*range(1, 7), 0xff)
+            return {i: (2, 0) for i in responders}
+        def request(self, device, feature, function, parameters=b""):
+            assert (feature, function) != (0, 1), "duplicate protocol query"
+            return super().request(device, feature, function, parameters)
+    session = ProbedSession()
+    if len(responders) == 1:
+        assert connect_hidpp20(session).device_index == responders[0]
+    else:
+        with pytest.raises(HidppError, match="ambiguous" if responders else "no HID"):
+            connect_hidpp20(session)
+
+
+@pytest.mark.parametrize("indexes", [(), (1, 1), (0,), (7,)])
+def test_protocol_probe_invalid_slots_never_send(indexes):
+    session = HidSession(Path("/dev/fake"), io_factory=QueueIo)
+    try:
+        with pytest.raises(ValueError):
+            session.probe_protocol_versions(indexes)
+        assert session._io.writes == []
+    finally:
+        session.close()

@@ -1,5 +1,18 @@
 # AI handoff log
 
+## 2026-09-20 — bounded receiver-probe performance correction
+
+Continue from correctness checkpoint `afdc25b`. Profiled sequential unanswered
+ROOT probes, then overlapped only read-only version queries under one unchanged
+timeout with the existing sole reader. Normal write transactions remain unchanged.
+Source: 1,244 passed in 13.41s; RPM: 1,244 passed in 15.52s; compile/diff pass.
+Updated RPM installed and verified. User: “Timing and sensitivity now agree.”
+Final USB trial: remap 108.840 ms, management 5074.202 ms (previously 16041.523 ms);
+two correct five-stage sequences afterward. Installed startup 2428.494 ms.
+Initial readiness and unmeasured physical presentation latency remain explicit
+limits. See `DPI_TRUTH_HANDOFF.md`. No push, merge, tag, release, or reboot.
+
+
 ## 2026-09-20 — hardware-authoritative DPI checkpoint
 
 Starting at `2f4d162` on `codex/runtime-persistence`; correctness fixes and
