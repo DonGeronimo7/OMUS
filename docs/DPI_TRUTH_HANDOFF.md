@@ -257,3 +257,15 @@ already confirmed persistence after reboot, and reboot remains user-controlled.
 Next bounded task: user-controlled cold-boot acceptance of this exact installed
 candidate, checking live DPI, native readiness, remapping, and the purple tray.
 The earlier profiling follow-up is complete for this scoped correction.
+
+Final settled resource sample after acceptance: **eight threads, 18 descriptors,
+44,416 KiB RSS**, and **zero additional CPU ticks over 44.080 seconds** at the
+host's /proc accounting resolution. This is a bounded observation of essentially
+idle behavior, not proof of literally zero CPU consumption. No duplicate worker,
+descriptor growth, or repeated retry activity was observed after recovery.
+
+Commits: `afdc25b` (DPI truth checkpoint), `68a042c` (bounded protocol probing),
+and the documentation-only evidence commit containing this final paragraph.
+Starting tree was clean; final tree/hash are verified in the task response.
+`main` is untouched; all earlier intentional commits retained; feature branch
+not pushed, remote not needed for a push check; no merge, tag, release, or reboot.
