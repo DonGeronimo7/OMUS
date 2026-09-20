@@ -1,10 +1,10 @@
 Name:           omus
-Version:        1.0.2
+Version:        1.0.3
 Release:        1%{?dist}
 Summary:        One Mouse Universal System for Linux
 License:        GPL-3.0-or-later
 URL:            https://github.com/DonGeronimo7/OMUS
-%global python_version 1.0.2
+%global python_version 1.0.3
 Source0:        omus-%{python_version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
@@ -91,6 +91,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_datadir}/icons/hicolor/*/apps/omus.png
 %{_datadir}/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
 %changelog
+* Sat Sep 19 2026 Marc-Anthony Geronimo - 1.0.3-1
+- Add the OMUS-branded rounded purple-gradient battery tray indicator.
+
 * Sat Sep 19 2026 Marc-Anthony Geronimo - 1.0.2-1
 - Accept bounded HTTPS redirects to exact GitHub release-asset infrastructure.
 

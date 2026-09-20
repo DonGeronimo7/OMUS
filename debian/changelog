@@ -1,3 +1,10 @@
+omus (1.0.3) unstable; urgency=medium
+
+  * Add the OMUS-branded rounded purple-gradient battery tray indicator.
+  * Preserve battery polling, reconnect, and StatusNotifier behavior.
+
+ -- Marc-A. Geronimo <noreply@example.com>  Sat, 19 Sep 2026 21:30:00 -0400
+
 omus (1.0.2) unstable; urgency=medium
 
   * Accept legitimate GitHub release-asset redirects without broadening trust.

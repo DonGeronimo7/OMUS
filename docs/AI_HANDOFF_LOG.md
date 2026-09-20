@@ -1,5 +1,16 @@
 # AI handoff log
 
+## 2026-09-19 — v1.0.3 battery tray release candidate
+
+- Integrated the approved battery artwork through protected-main PR #17 after
+  Python 3.12/3.13/3.14, repository-security, RPM, dependency-audit, CodeQL,
+  and ClusterFuzzLite checks passed.
+- Operator live-panel acceptance confirms the horizontal renderer and canonical
+  purple palette display correctly when DankMaterialShell tray tinting is
+  disabled; that shell tint was the only observed visual interference.
+- Advanced canonical Python, RPM, Debian, Arch, AppImage, README, changelog,
+  and release-note surfaces to v1.0.3 without changing runtime behavior.
+
 ## 2026-09-19 — OMUS purple battery tray artwork
 
 - Replaced the plain monochrome StatusNotifier battery pixmap with a rounded,
@@ -13,7 +24,7 @@
   helper for native and nearest-neighbor visual inspection.
 - The focused battery suite passed 20 tests and the complete suite passed 1,197
   tests with one external GLib warning. Visual inspection covered all five
-  published sizes; live compositor/panel validation remains pending.
+  published sizes, and subsequent live-panel validation accepted the design.
 
 ## 2026-09-19 — v1.0.2 secure updater patch candidate
 

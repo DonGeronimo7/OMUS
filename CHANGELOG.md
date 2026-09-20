@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3 — OMUS battery tray visual refresh
+
+- Add the new OMUS-branded rounded purple-gradient battery tray indicator.
+- Keep battery percentage legible through proportional fill and retain a
+  restrained purple low-battery outline treatment.
+- Preserve battery polling, backend behavior, reconnect recovery,
+  StatusNotifier registration, tooltip, DBusMenu, Ayatana label, and tray
+  lifecycle behavior unchanged.
+
 ## 1.0.2 — Secure release-asset updater correction
 
 - Accept bounded HTTPS redirects to the exact GitHub release-asset hosts used

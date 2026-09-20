@@ -1,3 +1,22 @@
+# OMUS v1.0.3 — Battery tray visual refresh
+
+OMUS v1.0.3 introduces the new OMUS-branded rounded purple-gradient battery
+tray indicator. The horizontal battery remains readable at common 16, 20, 22,
+24, and 32 pixel panel sizes, represents charge through proportional fill, and
+uses a restrained brighter purple outline for low-battery states.
+
+This is a visual and user-experience improvement, not expanded hardware
+support. Battery detection, polling, backend behavior, reconnect recovery,
+StatusNotifier registration, tooltip, DBusMenu, Ayatana percentage label, and
+tray lifecycle behavior are unchanged.
+
+The design was accepted in the live desktop panel with shell tray tinting
+disabled. Primary candidate artifacts are `omus-1.0.3-1.fc44.noarch.rpm`,
+`omus_1.0.3_all.deb`, `OMUS-1.0.3-x86_64.AppImage`,
+`omus-1.0.3-py3-none-any.whl`, and `omus-1.0.3.tar.gz`.
+
+---
+
 # OMUS v1.0.2 — Secure updater redirect correction
 
 OMUS v1.0.2 corrects the RPM, DEB, and AppImage updater's handling of GitHub
