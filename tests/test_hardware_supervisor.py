@@ -145,8 +145,8 @@ def test_dpi_battery_and_events_all_follow_the_current_backend():
 
     supervisor.rebind(0)
     assert cycler.cycle()
-    assert supervisor.desired.active_dpi == 1500
-    second.set_dpi.assert_called_once_with(G305, 1500)
+    assert supervisor.desired.active_dpi == 800
+    second.set_dpi.assert_called_once_with(G305, 800)
     first.set_dpi.assert_not_called()
     assert supervisor.get_battery_state(G305) == BatteryState(percentage=90)
     second.get_battery_state.assert_called_once_with(G305)

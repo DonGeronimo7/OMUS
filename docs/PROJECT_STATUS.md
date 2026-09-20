@@ -1326,3 +1326,19 @@ RPM has been exercised on Fedora/niri/DMS; the exact evidence and remaining
 reboot/physical acceptance gate are in `RUNTIME_PERSISTENCE_HANDOFF.md`.
 Automated source and RPM gates pass 1,217 tests. No new write authority, generic
 HID write, udev scope, updater policy, or physical hardware support is claimed.
+
+
+## 2026-09-20 — hardware-authoritative DPI correctness checkpoint
+
+Runtime now reads live DPI silently instead of restoring/assuming persisted
+active DPI. Native stage reports observe hardware without a second software
+cycle. Confirmed setter results are reused; failed/unchanged writes cannot report
+requested DPI as success. Learned read errors no longer promote stale cached
+state. Generation/wake changes invalidate the cursor, and unchanged tray
+snapshots reuse artwork. Source and RPM gates pass 1,234 tests.
+
+The corrected local RPM is installed; G305 transaction median remains 19.99 ms
+with two HID transactions, and service restart preserves 3000 DPI. The user
+reported notification absence/delay during initial reconnect/startup; subsequent
+notifications resume. The observed 16-second management recovery remains a
+performance acceptance issue under investigation. See `DPI_TRUTH_HANDOFF.md`.

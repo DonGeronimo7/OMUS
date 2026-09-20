@@ -816,10 +816,10 @@ class DiscoveryBackend(HardwareBackend):
                 value = int(context.values["raw_readback"])
             except (OSError, LearnedOperationError, TransactionError) as exc:
                 self._reset_learned_runtime()
-                if self._last_dpi is None:
-                    raise HardwareError(
-                        f"Automatic Discovery learned DPI read failed: {exc}"
-                    ) from exc
+                self._last_dpi = None
+                raise HardwareError(
+                    f"Automatic Discovery learned DPI read failed: {exc}"
+                ) from exc
             else:
                 self._last_dpi = value
         if self._last_dpi is None:

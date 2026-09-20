@@ -624,7 +624,7 @@ def run_from_config(path: Path | None = None, *, motion_diagnostic=None) -> int:
     hardware = HardwareSupervisor(
         initial_backend, hardware_device,
         lambda selected: get_backend(selected, log_failures=False),
-        DesiredHardwareState(active_dpi=active_dpi,
+        DesiredHardwareState(active_dpi=active_dpi, restore_dpi=False,
                              dpi_stages=tuple(dpi_stages),
                              polling_rate_hz=polling_rate_hz,
                              volatile_lighting=tuple(

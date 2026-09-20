@@ -298,3 +298,44 @@ def test_unknown_battery_exports_valid_tooltip_and_menu():
     assert 'Unknown' in battery_tooltip('test', state)[3]
     assert battery_menu_properties('test', state)[1]['label'].value == 'Battery: Unknown'
     Variant('(ia{sv}av)', battery_menu_layout('test', state))
+
+
+def test_tray_reuses_artwork_and_skips_identical_updates(monkeypatch):
+    from unittest.mock import Mock
+    import mouse_control.battery as battery
+    from mouse_control.tray_session import TraySession
+
+    async def scenario():
+        tray = StatusNotifierTray()
+        # Drive the real queue/worker on this test loop, without a desktop bus.
+        tray._thread = Mock()
+        exported = asyncio.Event()
+        captured = {}
+        async def session(_self, item, menu, path):
+            captured.update(item=item, menu=menu)
+            exported.set()
+            await asyncio.Future()
+        monkeypatch.setattr(TraySession, "run", session)
+        render = Mock(wraps=battery.battery_pixmap)
+        monkeypatch.setattr(battery, "battery_pixmap", render)
+        state = BatteryState(percentage=90, status="discharging")
+        tray.update(state, "test")
+        worker = asyncio.create_task(tray._run())
+        await exported.wait()
+        item = captured["item"]
+        initial = item.IconPixmap
+        assert item.IconPixmap == initial
+        assert render.call_count == 5
+        emit = Mock()
+        item.emit_properties_changed = emit
+        tray.update(state, "test")
+        # The queue remains empty for an identical visible snapshot.
+        tray.update(BatteryState(percentage=90, status="charging"), "test")
+        tray._queue.put(None)
+        await worker
+        emit.assert_called_once()
+        assert render.call_count == 5
+        item.set_state("test", BatteryState(percentage=80), captured["menu"])
+        assert render.call_count == 10
+        tray.close()
+    asyncio.run(scenario())

@@ -71,8 +71,9 @@ class FreedesktopNotifier:
         self._queue.close()
 
 class DpiMonitor:
-    def __init__(self, backend, device, notifier=None, interval=1., shutdown_event=None):
+    def __init__(self, backend, device, notifier=None, interval=1., shutdown_event=None, dpi_cycler=None):
         self.backend, self.device, self.notifier, self.interval = backend, device, notifier or FreedesktopNotifier(), interval
+        self.dpi_cycler = dpi_cycler
         self.shutdown_event = shutdown_event or threading.Event(); self._last_dpi = None; self._read_failed = self._notify_failed = False; self._thread = None
     def poll_once(self):
         try:
@@ -82,6 +83,7 @@ class DpiMonitor:
         except Exception as exc:
             if not self._read_failed: LOG.warning("DPI monitoring read failed; will retry: %s", exc); self._read_failed = True
             return
+        if self.dpi_cycler is not None: self.dpi_cycler.observe_dpi(dpi)
         previous, self._last_dpi = self._last_dpi, dpi
         if previous is None or dpi == previous: return
         try: self.notifier.notify_dpi(dpi); self._notify_failed = False
@@ -130,26 +132,29 @@ class DpiEventMonitor:
             self.dpi_cycler.cycle()
             return
         if not state.confirmed or state.x_dpi <= 0: LOG.warning("Ignoring unconfirmed hardware DPI state"); return
+        if self.dpi_cycler is not None:
+            self.dpi_cycler.observe_dpi(state.display_value)
         if state.reconnect_resync:
             observe_resync = getattr(self.notifier, "observe_resync", None)
             if callable(observe_resync):
                 observe_resync(state.display_value)
             LOG.info("Hardware DPI resynchronized at %s", state.display_value)
             return
-        if self.dpi_cycler is not None and state.active_stage is not None:
-            # A physical press advances the onboard slot. Repeated reports for
-            # that slot, including our live-write echo, are one transition.
+        # A native stage event is an observation, not a second software press.
+        if state.active_stage is not None:
             if state.active_stage == self._last_stage:
                 return
             self._last_stage = state.active_stage
-            self.dpi_cycler.backend = self.backend
-            self.dpi_cycler.cycle()
-            return
-        if self.dpi_cycler is not None and state.active_stage is None:
-            self.dpi_cycler.observe_dpi(state.display_value)
-        if self.notify_dpi(state.display_value): LOG.info("Hardware DPI changed to %s (stage %s)", state.display_value, state.active_stage)
+        if self.notify_dpi(state.display_value):
+            LOG.info("Hardware DPI confirmed=%s stage=%s", state.display_value, state.active_stage)
     def _run(self, ready_callback=None):
-        try: self.backend.watch_dpi_events(self.device, self.handle_state, self.shutdown_event, ready_callback)
+        def ready():
+            if self.dpi_cycler is not None:
+                if self.dpi_cycler.synchronize():
+                    observe = getattr(self.notifier, "observe_resync", None)
+                    if callable(observe): observe(self.dpi_cycler.current_dpi)
+            if ready_callback is not None: ready_callback()
+        try: self.backend.watch_dpi_events(self.device, self.handle_state, self.shutdown_event, ready)
         except Exception as exc:
             if self.log_errors:
                 LOG.warning("HID++ DPI monitoring stopped: %s", exc)
@@ -275,4 +280,4 @@ def create_dpi_monitor(backend, device, enabled=True, shutdown_event=None, stage
     except Exception as exc:
         if log_failure: LOG.warning("DPI monitoring is unavailable: %s", exc)
         return None
-    return DpiMonitor(backend, device, notifier, shutdown_event=shutdown_event)
+    return DpiMonitor(backend, device, notifier, shutdown_event=shutdown_event, dpi_cycler=dpi_cycler)

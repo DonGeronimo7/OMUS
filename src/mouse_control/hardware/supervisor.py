@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from contextlib import contextmanager
 import logging
 import threading
 from collections.abc import Callable
@@ -28,6 +29,7 @@ class DesiredHardwareState:
     dpi_stages: tuple[int, ...] = ()
     polling_rate_hz: int | None = None
     volatile_lighting: tuple[LightingState, ...] = ()
+    restore_dpi: bool = True
 
 
 class HardwareSupervisor(HardwareBackend):
@@ -184,6 +186,20 @@ class HardwareSupervisor(HardwareBackend):
         )
 
     @property
+    def dpi_epoch(self):
+        with self._lock:
+            wake = self._wake_coordinator.generation if self._wake_coordinator else None
+            return self._generation, wake
+
+    @contextmanager
+    def dpi_transaction(self):
+        """Keep a button's cursor/write/readback on one live backend generation."""
+        with self._lock:
+            if self._closed:
+                raise HardwareError("hardware supervisor is closed")
+            yield
+
+    @property
     def generation(self) -> int:
         with self._lock:
             return self._generation
@@ -246,10 +262,10 @@ class HardwareSupervisor(HardwareBackend):
                 LOG.warning("Could not reconcile %s polling state: %s", backend.name, exc)
 
         try:
-            if desired.dpi_stages and backend.supports_dpi_stages(device):
+            if desired.restore_dpi and desired.dpi_stages and backend.supports_dpi_stages(device):
                 backend.apply_dpi_stages(
                     device, list(desired.dpi_stages), desired.active_dpi)
-            if desired.active_dpi > 0 and backend.supports_dpi(device):
+            if desired.restore_dpi and desired.active_dpi > 0 and backend.supports_dpi(device):
                 actual = backend.get_dpi(device)
                 if not self._dpi_matches(actual, desired.active_dpi):
                     backend.set_dpi(device, desired.active_dpi)

@@ -24,7 +24,12 @@ def cycler(stages=(800, 1500, 2000, 2500, 3000), current=800, enabled=True):
     backend = MagicMock(spec=HardwareBackend)
     backend.name = "Test"
     backend.supports_dpi.return_value = True
-    backend.get_dpi.return_value = None
+    backend.live_dpi = current
+    backend.get_dpi.side_effect = lambda _device: backend.live_dpi
+    def set_dpi(_device, requested):
+        backend.live_dpi = requested
+        return DpiState(requested, confirmed=True)
+    backend.set_dpi.side_effect = set_dpi
     notifier = MagicMock()
     return DpiCycler(backend, MOUSE, list(stages), current, enabled, notifier), backend, notifier
 
@@ -181,9 +186,10 @@ def test_cycler_and_event_monitor_suppress_same_value_hardware_echo():
     notifier.notify_dpi.assert_called_once_with(1500)
 
 
-def test_cycle_rejects_mismatched_readback_without_advancing_or_notifying():
+def test_cycle_rejects_unchanged_readback_without_notifying():
     target, backend, notifier = cycler(stages=(800, 1400, 2000))
-    backend.get_dpi.side_effect = [1450, 1400]
+    backend.set_dpi.side_effect = [DpiState(800, confirmed=True),
+                                   DpiState(1400, confirmed=True)]
     assert not target.cycle()
     assert target.current_dpi == 800
     notifier.notify_dpi.assert_not_called()
@@ -203,33 +209,20 @@ def test_rapid_deliberate_presses_notify_even_when_readback_repeats():
     assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == [800, 800]
 
 
-def test_g305_physical_events_use_configured_cycler_and_ignore_write_echoes():
+def test_g305_physical_events_observe_hardware_without_software_writes():
     stages = [1000, 1500, 2000, 2500, 3000]
     target, backend, _ = cycler(stages=stages, current=1000)
     notifier = MagicMock()
     monitor = DpiEventMonitor(backend, MOUSE, stages, 1000, notifier,
                               dpi_cycler=target)
     target.notifier = monitor
-    live = 1000
-    def set_dpi(_device, requested):
-        nonlocal live
-        live = requested
-        return DpiState(live, confirmed=True)
-    backend.set_dpi.side_effect = set_dpi
-    backend.get_dpi.side_effect = lambda _device: live
-    for onboard_stage, onboard_dpi, expected in zip(
-            [1, 2, 3, 4, 0], [1500, 2000, 2500, 3000, 800],
-            [1500, 2000, 2500, 3000, 1000]):
-        monitor.handle_state(DpiState(onboard_dpi, active_stage=onboard_stage,
-                                      confirmed=True))
-        # A write echo and a duplicate original transition must not cycle again.
-        monitor.handle_state(DpiState(expected, active_stage=onboard_stage,
-                                      confirmed=True))
-        monitor.handle_state(DpiState(onboard_dpi, active_stage=onboard_stage,
-                                      confirmed=True))
-        assert target.current_dpi == expected
-    assert [call.args[1] for call in backend.set_dpi.call_args_list] == stages[1:] + stages[:1]
-    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == stages[1:] + stages[:1]
+    actual = [1500, 2000, 2500, 3000, 800]
+    for stage, dpi in zip([1, 2, 3, 4, 0], actual):
+        for _ in range(2):
+            monitor.handle_state(DpiState(dpi, active_stage=stage, confirmed=True))
+        assert target.current_dpi == dpi
+    backend.set_dpi.assert_not_called()
+    assert [call.args[0] for call in notifier.notify_dpi.call_args_list] == actual
 
 
 def test_confirmed_external_dpi_sets_cycler_cursor_and_off_list_starts_first():
@@ -239,12 +232,11 @@ def test_confirmed_external_dpi_sets_cycler_cursor_and_off_list_starts_first():
                               dpi_cycler=target)
     target.notifier = monitor
     monitor.handle_state(DpiState(2000, confirmed=True))
-    backend.get_dpi.return_value = 1000
-    monitor.handle_state(DpiState(800, active_stage=0, confirmed=True))
+    backend.set_dpi.assert_not_called()
+    assert target.cycle()
     backend.set_dpi.assert_called_once_with(MOUSE, 1000)
     monitor.handle_state(DpiState(1750, confirmed=True))
-    backend.get_dpi.return_value = 1000
-    monitor.handle_state(DpiState(1500, active_stage=1, confirmed=True))
+    assert target.cycle()
     assert backend.set_dpi.call_args_list[-1].args == (MOUSE, 1000)
 
 

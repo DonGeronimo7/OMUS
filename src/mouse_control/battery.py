@@ -147,6 +147,7 @@ class StatusNotifierTray:
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._closed = False
+        self._last_update = None
 
     def update(self, state: BatteryState, device_name: str) -> None:
         if state.percentage is not None and not 0 <= state.percentage <= 100:
@@ -154,6 +155,10 @@ class StatusNotifierTray:
         with self._lock:
             if self._closed:
                 return
+            update = (device_name, state)
+            if update == self._last_update:
+                return
+            self._last_update = update
             self.visible_percentage = state.percentage
             self._queue.put((device_name, state))
             if self._thread is None:
@@ -175,6 +180,8 @@ class StatusNotifierTray:
                     super().__init__("org.kde.StatusNotifierItem")
                     self.device_name = device_name
                     self.state = initial_state
+                    self._pixmap_percentage = None
+                    self._pixmaps = None
                 @dbus_property(access=PropertyAccess.READ)
                 def Category(self) -> "s": return "Hardware"
                 @dbus_property(access=PropertyAccess.READ)
@@ -187,7 +194,12 @@ class StatusNotifierTray:
                 def IconName(self) -> "s": return ""
                 @dbus_property(access=PropertyAccess.READ)
                 def IconPixmap(self) -> "a(iiay)":
-                    return [battery_pixmap(self.state.percentage or 0, size) for size in (16, 20, 22, 24, 32)]
+                    percentage = self.state.percentage or 0
+                    if self._pixmaps is None or percentage != self._pixmap_percentage:
+                        self._pixmaps = [battery_pixmap(percentage, size)
+                                         for size in (16, 20, 22, 24, 32)]
+                        self._pixmap_percentage = percentage
+                    return self._pixmaps
                 @dbus_property(access=PropertyAccess.READ)
                 def ToolTip(self) -> "(sa(iiay)ss)":
                     return battery_tooltip(self.device_name, self.state)

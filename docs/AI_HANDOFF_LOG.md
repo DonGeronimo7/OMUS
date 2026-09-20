@@ -1,5 +1,15 @@
 # AI handoff log
 
+## 2026-09-20 — hardware-authoritative DPI checkpoint
+
+Starting at `2f4d162` on `codex/runtime-persistence`; correctness fixes and
+installed G305 evidence are in `DPI_TRUTH_HANDOFF.md`. Source/RPM: 1,234 passed
+each; compile/diff checks pass. No push, merge, tag, release, or reboot.
+Two HID transactions and 19.99 ms median are preserved. Physical reconnect
+revealed a 16-second management readiness delay; user confirms popup issues only
+during initial recovery/startup. Next layer is profiling that specific delay.
+
+
 ## 2026-09-20 — runtime persistence stabilization
 
 - Request: attached runtime robustness/stability mission; starting clean at
