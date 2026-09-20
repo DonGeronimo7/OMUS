@@ -1,5 +1,17 @@
 # OMUS Project Status
 
+## 2026-09-20 — Offline Discovery IR/evidence foundation
+
+- Dedicated local branch adds capability IR, differential proof-plan compilation,
+  byte/bit-preserving offline state proposals, an explainable persisted evidence
+  DAG with transitive invalidation, and a pinned kernel vocabulary importer.
+- Seed corpus: 52 lexical/enum facts from three Linux v6.12 Roccat files. No
+  inferred DPI/polling setters, new runtime authority, HID-BPF attachment, automatic
+  experiment execution, or Lab integration is claimed.
+- New focused tests: 39 passed. Full suite: 1,320 passed, one private-bus sandbox
+  skip; that integration test passed separately outside the sandbox. Physical
+  validation remains pending. See `DISCOVERY_IR_HANDOFF.md` for scope and metrics.
+
 ## 2026-09-20 — v1.0.4 runtime recovery and proof-acceleration candidate
 
 - The accepted runtime-persistence, hardware-truth DPI, bounded receiver-probe,

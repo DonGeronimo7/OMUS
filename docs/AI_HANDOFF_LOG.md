@@ -1,5 +1,18 @@
 # AI handoff log
 
+## 2026-09-20 — Discovery IR and evidence foundation
+
+User mission attachment `Pasted text.txt` (62186559-888a-439e-85e3-d9f1e4e31bf0).
+Starting clean at `912bdcc6e4d536abcf3df259228a0bfad82ec2bd`; dedicated local branch
+`codex/autonomous-discovery-ir`. Final commit contains this entry. Added offline
+capability plans/RMW proposals, content-addressed evidence dependencies and
+invalidation, pinned kernel vocabulary mining and 52 seed facts. Reused existing
+protocol grammar/codecs; no new runtime or hardware write path. Focused: 39 passed;
+full: 1,320 passed, one sandbox skip, one GLib warning; isolated private-bus test
+passed outside sandbox. Compile/diff pass. No physical test/install/push/release.
+`DISCOVERY_IR_HANDOFF.md` records metrics, limitations and the next compiler adapter
+step; the broader autonomous Discovery mission is not complete.
+
 ## 2026-09-20 — v1.0.4 release preparation
 
 Prepared the accepted `f757cbc` main baseline as the backwards-compatible
