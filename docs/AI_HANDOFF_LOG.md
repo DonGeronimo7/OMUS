@@ -1,5 +1,34 @@
 # AI handoff log
 
+## 2026-09-20 — installed Discovery acceptance and same-node recovery correction
+
+Starting candidate `4640054` over main `9b93b4a`; branch
+`codex/discovery-proof-acceleration`. Physical G305 tests passed native slow/rapid,
+software stages (user retained 1000 first stage), mixed ownership, USB recovery,
+restart and mouse off/on. A regression first failed for same-signature native
+replacement; the supervisor now retains that fresh owner and advances its epoch.
+Source/RPM after physical acceptance: 1,282 passed each, no skips. Warm proof
+73.474 µs / zero requests; corrected remap/DPI recovery 86.921/5001.211 ms.
+Final service eight threads/18 descriptors. Full evidence, timing variability,
+temporary control method and safety limits: `DISCOVERY_PROOF_ACCEPTANCE.md`.
+The acceptance commit contains this entry. Publication/merge follows required
+hosted checks; no release, tag, version change or wider Discovery work.
+
+## 2026-09-20 — integrated baseline and local Discovery proof acceleration
+
+Phase 1 completed through issue #19 / protected PR #20. Remote and local main
+were verified at `9b93b4a8453d675f84cb7d407cc5105efde8c062`, containing accepted
+`bdf260c` runtime behavior and the recorded cold-boot acceptance. No release/tag.
+
+Phase 2 starts there on `codex/discovery-proof-acceleration`. Current-owner
+capability receipts replace repeated known-protocol inference in setup, avoid
+redundant backend selection, preserve one-reader ownership, and distinguish
+volatile authority from persistence. Disk reports retain historical facts only.
+Source: 1,281 passed; focused: 158 passed. Full package results and measured
+71.686-microsecond/zero-request warm proof are in
+`DISCOVERY_PROOF_ACCELERATION_HANDOFF.md`, including explicit physical limits.
+The implementation commit contains this entry. Phase 2 remains local and uninstalled.
+
 ## 2026-09-20 — bounded receiver-probe performance correction
 
 Continue from correctness checkpoint `afdc25b`. Profiled sequential unanswered

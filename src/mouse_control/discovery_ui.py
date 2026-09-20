@@ -181,6 +181,15 @@ def render_discovery_result(
                 lines.append(
                     f"  {item.level.name.lower():10s} {item.code}{source}: {item.message}"
                 )
+                if item.code == "capability-proof":
+                    details = item.details
+                    passed = [name for name, value in details.get("predicates", {}).items() if value]
+                    lines.append(f"    {details.get('operation')}: {details.get('stage')}")
+                    lines.append("    established: " + ", ".join(passed))
+                    lines.append("    blocked by: " + (", ".join(details.get("blockers", ())) or "none"))
+                    lines.append("    persistence: " + (
+                        "proven" if details.get("persistent_authorized") else "not authorized"))
+
         else:
             lines.append("  none")
 

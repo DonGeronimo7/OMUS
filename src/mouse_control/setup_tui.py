@@ -521,8 +521,9 @@ class SetupController:
             )
 
     def apply_automatic_discovery(self, outcome: Any) -> None:
-        """Consume fresh DiscoveryEngine output and rebind the production backend."""
-        self._apply_discovery_outcome(outcome, rebind_backend=True)
+        """Retain a reused owner; newly learned operations still need rebinding."""
+        self._apply_discovery_outcome(
+            outcome, rebind_backend=not bool(getattr(outcome, "bound_protocol_used", False)))
 
     def apply_discovery_error(self, message: str) -> None:
         self.discovery_error = message

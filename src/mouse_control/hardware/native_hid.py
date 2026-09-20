@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import logging
+import hashlib
 
 from ..discovery import MouseDevice
 from ..generic_hid import discover_hid_devices
@@ -33,6 +34,7 @@ class NativeHidBackend(HardwareBackend):
         self._session_factory = session_factory
         self._connectors = connectors
         self._bound: dict[MouseDevice, tuple[HidSession, Hidpp20Driver]] = {}
+        self._bound_descriptors: dict[MouseDevice, str | None] = {}
         self.discovery_pending = False
 
     def supports_device(self, device: MouseDevice) -> bool:
@@ -42,6 +44,7 @@ class NativeHidBackend(HardwareBackend):
             return False
         self.discovery_pending = True
         candidates: list[tuple[HidSession, Hidpp20Driver]] = []
+        descriptors: list[str | None] = []
         for interface in self._discovery(device):
             try:
                 session = self._session_factory(interface.path)
@@ -51,6 +54,8 @@ class NativeHidBackend(HardwareBackend):
                 for connector in self._connectors:
                     try:
                         candidates.append((session, connector(session)))
+                        raw = getattr(interface, "report_descriptor", b"")
+                        descriptors.append(hashlib.sha256(raw).hexdigest() if raw else None)
                         break
                     except HidppError:
                         continue
@@ -66,6 +71,7 @@ class NativeHidBackend(HardwareBackend):
         if not candidates:
             return False
         self._bound[device] = candidates[0]
+        self._bound_descriptors[device] = descriptors[0]
         self.discovery_pending = False
         return True
 
@@ -74,9 +80,30 @@ class NativeHidBackend(HardwareBackend):
         if bound is not None and getattr(bound[0], "closed", False):
             bound[0].close()
             del self._bound[device]
+            self._bound_descriptors.pop(device, None)
         if not self.supports_device(device):
             raise HardwareError("Native HID: no validated protocol driver")
         return self._bound[device][1]
+
+    def discovery_protocol(self, device: MouseDevice, physical):
+        """Export this live binding without selection, reads, or a second owner."""
+        from pathlib import Path
+        from ..protocol_discovery import hidpp_match
+
+        bound = self._bound.get(device)
+        if bound is None or getattr(bound[0], "closed", False) or physical.ambiguous:
+            return None
+        session, driver = bound
+        nodes = [node for node in physical.hidraw_nodes
+                 if Path(node.path) == Path(session.path)]
+        if len(nodes) != 1 or nodes[0].descriptor_sha256 is None:
+            return None
+        if self._bound_descriptors.get(device) != nodes[0].descriptor_sha256:
+            return None
+        if (device.bustype, device.vendor, device.product) != (
+                physical.bus, physical.vendor_id, physical.product_id):
+            return None
+        return hidpp_match(physical, nodes[0], driver)
 
     def get_capabilities(self, device: MouseDevice) -> HardwareCapabilities:
         return self._driver(device).capabilities
@@ -124,6 +151,13 @@ class NativeHidBackend(HardwareBackend):
         try:
             return self._driver(device).set_dpi(dpi)
         except HidppError as exc:
+            # Failed confirmation revokes discovery's operation receipt for this
+            # binding. No success-path traffic, profile access or extra read.
+            driver = self._bound.get(device)
+            if driver is not None:
+                failures = getattr(driver[1], "discovery_proof_failures", set())
+                failures.add("dpi")
+                driver[1].discovery_proof_failures = failures
             raise HardwareError(f"Native HID: {exc}") from exc
 
     def supports_polling_rate(self, device: MouseDevice) -> bool:
@@ -236,3 +270,4 @@ class NativeHidBackend(HardwareBackend):
         for session, _driver in self._bound.values():
             session.close()
         self._bound.clear()
+        self._bound_descriptors.clear()

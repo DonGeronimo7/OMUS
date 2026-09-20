@@ -608,6 +608,11 @@ class DiscoveryBackend(HardwareBackend):
         self._bind_protocol_adapter(device)
         return True
 
+    def discovery_protocol(self, device: MouseDevice, physical):
+        """Reuse the existing optional protocol owner for discovery diagnostics."""
+        exporter = getattr(self._protocol_backend, "discovery_protocol", None)
+        return exporter(device, physical) if exporter is not None else None
+
     def get_device_name(self, device: MouseDevice) -> str | None:
         if self._protocol_backend is not None:
             return self._protocol_backend.get_device_name(device)

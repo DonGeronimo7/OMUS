@@ -6,7 +6,10 @@ Instances are scoped to one selection and must not guess ambiguous identities.
 """
 from abc import ABC, abstractmethod
 import threading
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..discovery_models import PhysicalDevice, ProtocolMatch
 from ..discovery import MouseDevice
 from .capabilities import BatteryState, DpiState, HardwareCapabilities, LightingState
 
@@ -21,6 +24,14 @@ class HardwareBackend(ABC):
     @abstractmethod
     def supports_device(self, device: MouseDevice) -> bool:
         """Probe and bind a confidently matched physical device."""
+
+    def discovery_protocol(self, device: MouseDevice, physical: "PhysicalDevice") -> "ProtocolMatch | None":
+        """Export current operation facts without probing or selecting a backend.
+
+        Optional: a generic/read-only backend has no trusted protocol receipt.
+        An exporter must refuse stale, mismatched or ambiguous bindings.
+        """
+        return None
 
     def get_device_name(self, device: MouseDevice) -> str | None:
         return device.name

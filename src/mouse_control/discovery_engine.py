@@ -64,6 +64,7 @@ class DiscoveryEngine:
         learned_operation_store: LearnedOperationStore | None = None,
         learned_polling_store: LearnedPollingOperationStore | None = None,
         save_profiles: bool = True,
+        bound_protocol: Callable[[PhysicalDevice], ProtocolMatch | None] | None = None,
     ) -> None:
         self._topology_builder = topology_builder
         self._detectors = tuple(detectors) if detectors is not None else None
@@ -76,25 +77,33 @@ class DiscoveryEngine:
             learned_polling_store or LearnedPollingOperationStore()
         )
         self._save_profiles = save_profiles
+        self._bound_protocol = bound_protocol
         self._descriptors: dict[DeviceNode, ParsedHidDescriptor] = {}
+        self._descriptor_device: PhysicalDevice | None = None
+        self._descriptors_inspected = False
         self._feature_snapshots: dict[DeviceNode, dict[int, bytes]] = {}
         self._repertoire_candidates: tuple[FamilyCandidate, ...] = ()
         self._observations: list[DiscoveryEvidence] = []
         self._phases: list[DiscoveryPhase] = []
         self._profile_path: Path | None = None
         self._cached_profile_used = False
+        self.bound_protocol_used = False
 
     @property
     def descriptors(self) -> dict[DeviceNode, ParsedHidDescriptor]:
+        # Guided learning/full-access inspection explicitly asks for descriptors;
+        # retain that interface while ordinary known capability proof skips it.
+        if not self._descriptors_inspected and self._descriptor_device is not None:
+            self.inspect_descriptors(self._descriptor_device)
         return dict(self._descriptors)
 
     def semantic_fields(self, node: DeviceNode) -> tuple[InterpretedHidField, ...]:
         """Expose spec/descriptor-derived meaning independently of protocols."""
-        return interpret_descriptor(self._descriptors[node])
+        return interpret_descriptor(self.descriptors[node])
 
     def decode_input(self, node: DeviceNode, raw_report: bytes) -> DecodedHidReport:
         """Decode one passive Input report; this path has no write primitive."""
-        return decode_input_report(self._descriptors[node], raw_report)
+        return decode_input_report(self.descriptors[node], raw_report)
 
     @property
     def feature_snapshots(self) -> dict[DeviceNode, dict[int, bytes]]:
@@ -120,12 +129,15 @@ class DiscoveryEngine:
 
     def _reset_session_state(self) -> None:
         self._descriptors.clear()
+        self._descriptor_device = None
+        self._descriptors_inspected = False
         self._feature_snapshots.clear()
         self._repertoire_candidates = ()
         self._observations.clear()
         self._phases.clear()
         self._profile_path = None
         self._cached_profile_used = False
+        self.bound_protocol_used = False
 
     def restore_known_device(self, mouse: MouseDevice) -> DiscoveryResult | None:
         """Restore an exactly rebound profile without entering deep discovery.
@@ -185,6 +197,30 @@ class DiscoveryEngine:
             raise ProtocolDetectionError(
                 "known LAMZU bootloader/DFU identity is excluded from normal discovery"
             )
+        # A caller already owning the HID session can export verified structural
+        # facts. This does not select a backend, open a second reader, or read a
+        # profile. The owner is responsible for rejecting closed/stale bindings.
+        protocol = self._bound_protocol(physical) if self._bound_protocol else None
+        if protocol is not None:
+            self.bound_protocol_used = True
+            result = self.validate(physical, protocol, self.query_known_protocol(protocol))
+            self._phase(DiscoveryPhase.COMPLETE)
+            result.phases = list(self._phases)
+            emit(DiscoveryPhase.COMPLETE, "Current protocol owner reused", 1, 1)
+            return result
+        if self._bound_protocol is not None:
+            # A live owner refused a receipt. Never probe around that owner or
+            # silently substitute disk authority; let its lifecycle rebind it.
+            self._observations.append(DiscoveryEvidence(
+                EvidenceLevel.OBSERVED, "owner-proof-unavailable",
+                "Current owner could not verify this binding; rebind before proof reuse",
+                source="discovery_engine",
+            ))
+            self._phase(DiscoveryPhase.COMPLETE)
+            result = self.validate(physical, None, {})
+            result.phases = list(self._phases)
+            emit(DiscoveryPhase.COMPLETE, "Current binding requires verification", 1, 1)
+            return result
         if not force and not physical.ambiguous:
             with measure("persisted_evidence_lookup"):
                 restored = self._profile_store.restore_result(physical)
@@ -210,16 +246,6 @@ class DiscoveryEngine:
             6,
         )
 
-        emit(DiscoveryPhase.DESCRIPTORS, "Reading HID descriptors safely…", 2, 6)
-        self._phase(DiscoveryPhase.DESCRIPTORS)
-        self.inspect_descriptors(physical)
-        emit(
-            DiscoveryPhase.DESCRIPTORS,
-            f"{len(self._descriptors)} HID descriptor(s) collected",
-            3,
-            6,
-        )
-
         emit(DiscoveryPhase.PROTOCOL, "Searching known protocol teachers and repertoire…", 3, 6)
         self._phase(DiscoveryPhase.PROTOCOL)
         with measure("protocol_binding"):
@@ -229,6 +255,16 @@ class DiscoveryEngine:
             emit(DiscoveryPhase.PROTOCOL, f"Known protocol matched: {protocol.name}", 4, 6)
             capabilities = self.query_known_protocol(protocol)
         else:
+            emit(DiscoveryPhase.DESCRIPTORS, "Reading HID descriptors safely…", 2, 6)
+            self._phase(DiscoveryPhase.DESCRIPTORS)
+            self.inspect_descriptors(physical)
+            emit(
+                DiscoveryPhase.DESCRIPTORS,
+                f"{len(self._descriptors)} HID descriptor(s) collected",
+                3,
+                6,
+            )
+
             emit(
                 DiscoveryPhase.OBSERVE,
                 "Observing unknown hardware read-only…",
@@ -253,6 +289,7 @@ class DiscoveryEngine:
 
     def build_topology(self, mouse: MouseDevice) -> PhysicalDevice:
         physical = self._topology_builder(mouse)
+        self._descriptor_device = physical
         self._observations.extend(physical.evidence)
         self._observations.append(
             DiscoveryEvidence(
@@ -271,6 +308,7 @@ class DiscoveryEngine:
     def inspect_descriptors(
         self, physical: PhysicalDevice
     ) -> dict[DeviceNode, ParsedHidDescriptor]:
+        self._descriptors_inspected = True
         for node in physical.hidraw_nodes:
             try:
                 with measure("descriptor_acquisition"):

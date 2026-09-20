@@ -368,7 +368,7 @@ class DeviceProfileStore:
         path, profile = found
         identity = profile.get("identity", {})
         if not isinstance(identity, Mapping) or any(
-            expected is not None and current is not None and expected != current
+            expected is not None and expected != current
             for expected, current in (
                 (identity.get("vendor_id"), physical.vendor_id),
                 (identity.get("product_id"), physical.product_id),
@@ -389,7 +389,10 @@ class DeviceProfileStore:
                 capability = DiscoveredCapability(
                     name=str(name),
                     readable=bool(raw.get("readable")),
-                    writable=bool(raw.get("writable")),
+                    # Disk receipts retain knowledge, never live write authority.
+                    # A current native owner or independently PROVEN learned
+                    # executor re-establishes routing, semantics and readback.
+                    writable=False,
                     values=(None if values is None else tuple(int(value) for value in values)),
                     minimum=(None if raw.get("minimum") is None else int(raw["minimum"])),
                     maximum=(None if raw.get("maximum") is None else int(raw["maximum"])),
@@ -398,6 +401,23 @@ class DeviceProfileStore:
                 ).normalized()
             except (TypeError, ValueError):
                 return None
+            capability.evidence = [
+                DiscoveryEvidence(
+                    EvidenceLevel.VALIDATED, "cached-capability-knowledge",
+                    "Historical operation recipe; not a current binding receipt",
+                    source=item.source, details={
+                        "operation": item.details.get("operation"),
+                        "sources": item.details.get("sources", []),
+                    },
+                ) if item.code == "capability-proof" else item
+                for item in capability.evidence
+            ]
+            if raw.get("writable"):
+                capability.evidence.append(DiscoveryEvidence(
+                    EvidenceLevel.OBSERVED, "cached-authority-pending",
+                    "Static proof reused; current protocol owner must verify compatibility",
+                    source="device_profiles",
+                ))
             capabilities[str(name)] = capability
 
         protocol = None

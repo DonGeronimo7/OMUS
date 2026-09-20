@@ -161,12 +161,13 @@ def test_hidpp_detector_requires_one_responder():
     rr = SimpleNamespace(readable=True, writable=True, values=(125,250,500,1000))
     batt = SimpleNamespace(readable=True)
     driver = SimpleNamespace(
-        protocol_version=(4,2), device_index=1, name='G305', features={0x2201: object(), 0x8060: object()},
+        protocol_version=(4,2), device_index=1, name='G305', features={0x2201: SimpleNamespace(version=0), 0x8060: object()},
         capabilities=SimpleNamespace(dpi=dpi, report_rate=rr, battery=batt),
     )
     detector = Hidpp20Detector(session_factory=Session, connector=lambda s: driver)
     match = detector.detect(physical)
     assert match is not None and match.name == 'hidpp2'
+    assert match.metadata['device_name'] == 'G305'
     assert match.metadata['capabilities']['dpi'].writable
     assert all(s.closed for s in sessions)
 
@@ -287,7 +288,8 @@ def test_second_discovery_reuses_profile_without_descriptor_or_protocol_probe(tm
     assert engine.cached_profile_used is True
     assert restored.protocol is not None
     assert restored.protocol.responder == rebound_hid
-    assert restored.capabilities['dpi'].writable is True
+    assert restored.capabilities['dpi'].writable is False
+    assert any(e.code == 'cached-authority-pending' for e in restored.capabilities['dpi'].evidence)
     assert probe_calls == []
     assert detector_calls == []
     assert progress[-1].cached is True

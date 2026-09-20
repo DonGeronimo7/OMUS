@@ -1,5 +1,24 @@
 # OMUS Project Status
 
+## 2026-09-20 — installed Discovery proof acceptance
+
+- Main baseline is protected PR #20 at `9b93b4a`; Discovery implementation is
+  `4640054` on `codex/discovery-proof-acceleration`.
+- Installed G305 acceptance passed native slow/rapid transitions, normal software
+  stages, mixed ownership, receiver recovery, service restart and mouse off/on.
+  Capability knowledge remains separate from canonical live DPI and battery.
+- Acceptance exposed a same-topology native-session replacement defect. The
+  regression-backed correction advances the owner generation even if paths and
+  descriptors match; non-native settling remains bounded.
+- Final source and RPM gates: **1,282 passed each**, no skips. Warm proof:
+  **73.474 µs / zero requests**. Corrected reconnect: **87 ms remapping / 5.00 s
+  DPI management**. Normal cycles remain approximately 20 ms / two requests.
+  Ordinary service retains eight threads and 18 descriptors.
+- See `DISCOVERY_PROOF_ACCEPTANCE.md` for exact measurements, failed/intermediate
+  trials, the software-control test method and remaining evidence limits.
+  Hosted-check approval is the remaining integration gate. No tag, release,
+  version change or broader hardware-support claim is part of this work.
+
 ## 2026-09-19 — v1.0.3 battery tray patch candidate
 
 - The live-approved horizontal battery tray artwork is integrated on `main`

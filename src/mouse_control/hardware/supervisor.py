@@ -340,7 +340,13 @@ class HardwareSupervisor(HardwareBackend):
                     return False
                 old_signature = self._discovery_binding_signature(old)
                 new_signature = self._discovery_binding_signature(replacement)
-                if (not force and old_signature is not None and new_signature is not None and
+                # A native session is live state, unlike its static topology.
+                # After a failure, the same hidraw path/descriptor can belong
+                # to a new connection. Keep that replacement and advance the
+                # epoch so consumers reacquire hardware state. Only collapse
+                # equivalent non-native discovery while enumeration settles.
+                if (not force and self._adapter_affinity(old)[0] != 2 and
+                        old_signature is not None and new_signature is not None and
                         old_signature == new_signature):
                     close = getattr(replacement, "close", None)
                     if close:
@@ -388,6 +394,9 @@ class HardwareSupervisor(HardwareBackend):
                 self._wake_coordinator.recognized()
                 self._wake_coordinator.backend_usable()
             return True
+
+    def discovery_protocol(self, device, physical):
+        return self._call("discovery_protocol", device, physical)
 
     def get_device_name(self, device): return self._call("get_device_name", device)
     def get_capabilities(self, device) -> HardwareCapabilities: return self._call("get_capabilities", device)

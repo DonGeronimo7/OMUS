@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+import hashlib
 
 from .base import HardwareBackend, HardwareError
 from .capabilities import (
@@ -32,6 +33,7 @@ class NativeRazerBackend(HardwareBackend):
         self._discovery = discovery
         self._session_factory = session_factory
         self._bound: dict[MouseDevice, tuple[HidrawRazerSession, RazerProductSpec]] = {}
+        self._bound_descriptors: dict[MouseDevice, str | None] = {}
         self.discovery_pending = False
 
     def _spec(self, device: MouseDevice) -> RazerProductSpec | None:
@@ -48,6 +50,7 @@ class NativeRazerBackend(HardwareBackend):
         self.discovery_pending = True
         opened: list[HidrawRazerSession] = []
         responders: list[HidrawRazerSession] = []
+        descriptors: list[str | None] = []
         try:
             for interface in self._discovery(device):
                 try:
@@ -60,12 +63,15 @@ class NativeRazerBackend(HardwareBackend):
                 except (OSError, RazerProtocolError):
                     continue
                 responders.append(session)
+                raw = getattr(interface, "report_descriptor", b"")
+                descriptors.append(hashlib.sha256(raw).hexdigest() if raw else None)
             if len(responders) > 1:
                 raise HardwareError("Native Razer: multiple protocol responders; refusing ambiguous ownership")
             if not responders:
                 return False
             selected = responders[0]
             self._bound[device] = (selected, spec)
+            self._bound_descriptors[device] = descriptors[0]
             self.discovery_pending = False
             opened.remove(selected)
             return True
@@ -89,6 +95,59 @@ class NativeRazerBackend(HardwareBackend):
             return session.query(command, spec.transaction_id)
         except (OSError, RazerProtocolError, ValueError) as exc:
             raise HardwareError(f"Native Razer transaction failed: {exc}") from exc
+
+    def discovery_protocol(self, device: MouseDevice, physical):
+        """Reuse an exact native owner, without treating storage as volatile.
+
+        The existing Razer writer retains its own policy. Discovery does not
+        grant new volatile or persistence authority from a storage selector.
+        """
+        from ..discovery_models import DiscoveredCapability, DiscoveryEvidence, EvidenceLevel, ProtocolMatch
+        from ..proof_state import CapabilityProof, OperationProof, ProofState
+        from ..protocol_repertoire import RAZER_DPI
+
+        bound = self._bound.get(device)
+        if bound is None or getattr(bound[0], "closed", False) or physical.ambiguous:
+            return None
+        session, spec = bound
+        if (device.bustype, device.vendor, device.product) != (
+                physical.bus, physical.vendor_id, physical.product_id) or physical.bus != 3:
+            return None
+        nodes = [node for node in physical.hidraw_nodes if node.path == Path(session.path)
+                 and (node.bus, node.vendor_id, node.product_id)
+                 == (physical.bus, physical.vendor_id, physical.product_id)]
+        if (len(nodes) != 1 or nodes[0].descriptor_sha256 is None
+                or self._bound_descriptors.get(device) != nodes[0].descriptor_sha256):
+            return None
+        proof = CapabilityProof(
+            OperationProof("dpi", ProofState.PROVEN, (RAZER_DPI.vendor_evidence,)),
+            read_proven=True, capability_identified=True, semantics_known=True,
+            values_bounded=spec.maximum_dpi >= 100 and spec.dpi_step > 0,
+            packet_known=True, shared_state_safe=True, confirmation_known=True,
+            failure_known=True, routing_unambiguous=True, compatible=True,
+            volatile_operation=False, runtime_policy_satisfied=True,
+        )
+        dpi = DiscoveredCapability(
+            "dpi", readable=True, writable=False, minimum=100,
+            maximum=spec.maximum_dpi, step=spec.dpi_step,
+            evidence=[DiscoveryEvidence(
+                EvidenceLevel.VALIDATED, "capability-proof",
+                "Exact Razer command known; storage/persistence policy not promoted",
+                source="native_razer", details=proof.explain(),
+            )],
+        )
+        return ProtocolMatch(
+            "razer-rpc90", "classic-90-byte", nodes[0],
+            evidence=[DiscoveryEvidence(
+                EvidenceLevel.PROVEN, "razer-single-responder",
+                "Existing exact-product native owner reused",
+                source="native_razer", details={
+                    "transaction_id": spec.transaction_id, "dpi_storage": spec.dpi_storage,
+                    "report_bytes": 90, "readback": "xy-dpi",
+                },
+            )],
+            metadata={"capabilities": {"dpi": dpi}, "proof_path": "exact"},
+        )
 
     def get_device_name(self, device: MouseDevice) -> str | None:
         return self._binding(device)[1].model
@@ -181,5 +240,6 @@ class NativeRazerBackend(HardwareBackend):
 
     def close(self) -> None:
         bindings, self._bound = self._bound, {}
+        self._bound_descriptors.clear()
         for session, _spec in bindings.values():
             session.close()
