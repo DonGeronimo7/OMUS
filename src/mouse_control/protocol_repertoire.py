@@ -31,6 +31,8 @@ from .protocol_grammar import (
     FrameSide,
     LogicalRecordRecognitionRecipe,
     ProtocolFamily,
+    ProtocolOperation,
+    SafetyClass,
     ProtocolSource,
     PushedStateRecognitionRecipe,
     RecognitionRecipe,
@@ -221,6 +223,36 @@ def _source(
 # source.  Families with older or incomplete write verification are useful for
 # classification but remain write-disabled until mouse-control proves them on
 # hardware or a modern upstream verification justifies promotion.
+# Sourced from OMUS's existing native implementations. These are descriptive
+# recipes, not packets or generic write permissions. In HID++ the page is a
+# feature ID (resolved through ROOT), and target zero is the sensor, never a
+# receiver slot. Razer's page is its command class; storage remains explicit.
+HIDPP_SENSOR_DPI = ProtocolOperation(
+    name="sensor-dpi", page=0x2201, target=0, request_length=3,
+    read_command=2, write_command=3, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("sensor_index", "dpi_be16"),
+    prerequisite=("dynamic-root", "feature-version-0-or-1", "enumerated-bounds",
+                  "unique-current-route", "canonical-readback"),
+    vendor_evidence="hidpp_driver.py; G305 acceptance; test_native_hid.py",
+)
+HIDPP_REPORT_RATE = ProtocolOperation(
+    name="report-rate", page=0x8060, target=0, request_length=1,
+    read_command=1, write_command=2, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("period_ms",),
+    prerequisite=("dynamic-root", "enumerated-period-flags", "live-control-ownership",
+                  "unique-current-route", "canonical-readback"),
+    vendor_evidence="hidpp_driver.py; NativeHidBackend polling policy; G305 acceptance",
+)
+RAZER_DPI = ProtocolOperation(
+    name="xy-dpi", page=0x04, target=0x01, request_length=7,
+    read_command=0x85, write_command=0x05, safety=SafetyClass.UNKNOWN,
+    payload_fields=("storage", "x_be16", "y_be16", "reserved_zeros_2"),
+    prerequisite=("exact-product-spec", "transaction-id", "90-byte-envelope",
+                  "canonical-xy-readback", "storage-and-persistence-policy"),
+    vendor_evidence="native_razer.py; VERIFIED_RAZER_PRODUCTS; OpenRazer corpus",
+)
+
+
 DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
     *LAMZU_AURORA_FAMILIES,
     ProtocolFamily(
@@ -286,6 +318,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
     ProtocolFamily(
         name="hidpp2",
         revision="dynamic-root",
+        operations=(HIDPP_SENSOR_DPI, HIDPP_REPORT_RATE),
         sources=(
             _source(
                 "mouse-control",
@@ -305,6 +338,7 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
     ProtocolFamily(
         name="razer-rpc90",
         revision="classic-90-byte",
+        operations=(RAZER_DPI,),
         sources=(
             _source(
                 "OpenRazer",

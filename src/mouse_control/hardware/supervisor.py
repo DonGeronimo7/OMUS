@@ -389,6 +389,9 @@ class HardwareSupervisor(HardwareBackend):
                 self._wake_coordinator.backend_usable()
             return True
 
+    def discovery_protocol(self, device, physical):
+        return self._call("discovery_protocol", device, physical)
+
     def get_device_name(self, device): return self._call("get_device_name", device)
     def get_capabilities(self, device) -> HardwareCapabilities: return self._call("get_capabilities", device)
     def supports_battery(self, device): return self._call("supports_battery", device)

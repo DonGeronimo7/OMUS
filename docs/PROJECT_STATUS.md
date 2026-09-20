@@ -1,5 +1,21 @@
 # OMUS Project Status
 
+## 2026-09-20 — persistence integrated; Discovery proof acceleration for local review
+
+- Protected PR #20 integrated accepted persistence/DPI behavior into main at
+  `9b93b4a8453d675f84cb7d407cc5105efde8c062`, after the user's actual cold-boot
+  acceptance and all eight required checks. No tag or release was created.
+- Local branch `codex/discovery-proof-acceleration` adds per-capability predicate
+  receipts, current-owner reuse in setup, and non-authoritative disk profiles.
+  Known HID++ DPI proof adds zero transactions to an existing owner; Razer storage
+  writes, polling takeover, shared unknown fields and persistence stay restricted.
+- Source gate: 1,281 passed. Candidate hardware reads retained 3000 DPI; warm proof
+  measured 71.686 microseconds with zero requests. Startup/resources remain aligned
+  with the merged baseline. See `DISCOVERY_PROOF_ACCELERATION_HANDOFF.md` for exact
+  commands, package results, scope, corpus restrictions and physical evidence limits.
+- Discovery is not installed, pushed, merged, tagged or released. Candidate USB
+  and button-presentation acceptance remains a separately authorized next step.
+
 ## 2026-09-19 — v1.0.3 battery tray patch candidate
 
 - The live-approved horizontal battery tray artwork is integrated on `main`

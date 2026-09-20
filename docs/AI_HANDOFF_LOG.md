@@ -1,5 +1,20 @@
 # AI handoff log
 
+## 2026-09-20 — integrated baseline and local Discovery proof acceleration
+
+Phase 1 completed through issue #19 / protected PR #20. Remote and local main
+were verified at `9b93b4a8453d675f84cb7d407cc5105efde8c062`, containing accepted
+`bdf260c` runtime behavior and the recorded cold-boot acceptance. No release/tag.
+
+Phase 2 starts there on `codex/discovery-proof-acceleration`. Current-owner
+capability receipts replace repeated known-protocol inference in setup, avoid
+redundant backend selection, preserve one-reader ownership, and distinguish
+volatile authority from persistence. Disk reports retain historical facts only.
+Source: 1,281 passed; focused: 158 passed. Full package results and measured
+71.686-microsecond/zero-request warm proof are in
+`DISCOVERY_PROOF_ACCELERATION_HANDOFF.md`, including explicit physical limits.
+The implementation commit contains this entry. Phase 2 remains local and uninstalled.
+
 ## 2026-09-20 — bounded receiver-probe performance correction
 
 Continue from correctness checkpoint `afdc25b`. Profiled sequential unanswered

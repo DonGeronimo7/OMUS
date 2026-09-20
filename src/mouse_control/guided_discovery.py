@@ -54,6 +54,7 @@ class AutomaticDiscoveryOutcome:
     engine: DiscoveryEngine
     research_plan: Any | None = None
     cached_profile_used: bool = False
+    bound_protocol_used: bool = False
 
 
 @dataclass(frozen=True)
@@ -637,18 +638,22 @@ def run_automatic_discovery(
     selected: Any,
     *,
     progress: ProgressCallback | None = None,
-    engine_factory: Callable[[], DiscoveryEngine] = DiscoveryEngine,
+    engine_factory: Callable[..., DiscoveryEngine] = DiscoveryEngine,
     force: bool = False,
+    protocol_owner: Any | None = None,
 ) -> AutomaticDiscoveryOutcome:
     """Run the shared comprehensive safe discovery engine with progress events."""
     report = progress or (lambda _message: None)
-    engine = engine_factory()
+    engine = (engine_factory(bound_protocol=lambda physical:
+                             protocol_owner.discovery_protocol(selected, physical))
+              if protocol_owner is not None else engine_factory())
     result = engine.discover(selected, progress=report, force=force)
     return AutomaticDiscoveryOutcome(
         result=result,
         engine=engine,
         research_plan=engine.research_plan(result),
         cached_profile_used=engine.cached_profile_used,
+        bound_protocol_used=engine.bound_protocol_used,
     )
 
 

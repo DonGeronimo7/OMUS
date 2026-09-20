@@ -1209,6 +1209,10 @@ class CursesSetupApp:
                 self.controller.selected,
                 progress=progress,
                 force=force,
+                protocol_owner=(self.controller.backend
+                    if getattr(self.controller.backend, "protocol_adapter_name", None)
+                    and callable(getattr(self.controller.backend, "discovery_protocol", None))
+                    else None),
             )
         except PermissionError as exc:
             self.controller.apply_discovery_error(
