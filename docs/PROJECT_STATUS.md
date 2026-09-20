@@ -1,5 +1,16 @@
 # OMUS Project Status
 
+## 2026-09-19 — v1.0.3 battery tray patch candidate
+
+- The live-approved horizontal battery tray artwork is integrated on `main`
+  with rounded pixel-aligned geometry, proportional fill, the canonical OMUS
+  purple gradient, transparent background, and a restrained low-battery outline.
+- Desktop-panel acceptance confirmed the renderer itself displays correctly;
+  DankMaterialShell tinting was the only interference and is external to OMUS.
+- Battery polling, backend behavior, reconnect recovery, StatusNotifier
+  registration, tooltip, DBusMenu, Ayatana label, and tray lifecycle remain
+  unchanged. This patch does not expand hardware support or write authority.
+
 ## 2026-09-19 — v1.0.2 secure updater patch candidate
 
 - The published v1.0.1 RPM redirects once from the canonical OMUS `github.com`
