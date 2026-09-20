@@ -1,5 +1,20 @@
 # AI handoff log
 
+## 2026-09-19 — OMUS purple battery tray artwork
+
+- Replaced the plain monochrome StatusNotifier battery pixmap with a rounded,
+  pixel-aligned OMUS design using a fixed violet-to-lavender gradient sampled
+  from the canonical application icon. Percentage remains encoded by fill
+  extent, while 0–10% retains the purple identity with a brighter outline.
+- Preserved the existing explicit `IconPixmap` sizes and empty `IconName`, plus
+  all polling, lifecycle, tooltip, menu, Ayatana-label, and recovery behavior.
+- Added deterministic payload, transparency, gradient, monotonic-fill, invalid-
+  input, and D-Bus shape coverage, plus a dependency-free developer PNG export
+  helper for native and nearest-neighbor visual inspection.
+- The focused battery suite passed 20 tests and the complete suite passed 1,197
+  tests with one external GLib warning. Visual inspection covered all five
+  published sizes; live compositor/panel validation remains pending.
+
 ## 2026-09-19 — v1.0.2 secure updater patch candidate
 
 - Reproduced the published v1.0.1 RPM redirect: canonical OMUS `github.com`

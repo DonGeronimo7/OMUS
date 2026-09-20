@@ -11,6 +11,14 @@ from .hardware import BatteryState, HardwareBackend
 LOG = logging.getLogger(__name__)
 SNI_MENU_PATH = "/StatusNotifierMenu"
 
+# Sampled from assets/omus-icon.png and fixed here so tray rendering never
+# depends on a runtime image file.  IconPixmap is ARGB32 in network byte order,
+# so each pixel below is serialized as alpha, red, green, blue.
+_OMUS_VIOLET = (96, 15, 176)
+_OMUS_PURPLE = (178, 68, 250)
+_OMUS_LAVENDER = (213, 115, 255)
+_OMUS_LOW_OUTLINE = (229, 164, 255)
+
 
 def battery_icon(percentage: int) -> str:
     if percentage <= 10:
@@ -25,37 +33,66 @@ def battery_icon(percentage: int) -> str:
 
 
 def battery_pixmap(percentage: int, height: int) -> list[int | bytes]:
-    """Return a square, monochrome SNI ARGB32 battery pixmap."""
+    """Return a crisp, rounded OMUS-purple SNI ARGB32 battery pixmap."""
     if not 0 <= percentage <= 100 or height < 16:
         raise ValueError("invalid battery pixmap dimensions or percentage")
     width = height
-    stroke = max(1, height // 16)
-    margin = max(1, height // 10)
-    nub_width = max(2, height // 8)
+    margin = 1 if height < 28 else 2
+    nub_width = max(2, round(height * .12))
     bx = margin
     bw = width - 2 * margin - nub_width
-    bh = max(9, height * 9 // 16)
+    bh = max(10, round(height * .58))
     by = (height - bh) // 2
+    radius = max(3, round(height * .16))
+    inset = 1 if height <= 22 else 2
     pixels = bytearray(width * height * 4)
 
-    def dot(x: int, y: int) -> None:
+    def dot(x: int, y: int, color: tuple[int, int, int] | None) -> None:
         if 0 <= x < width and 0 <= y < height:
             offset = (y * width + x) * 4
-            pixels[offset:offset + 4] = b"\xff\xff\xff\xff"
+            pixels[offset:offset + 4] = (b"\0\0\0\0" if color is None else
+                                          bytes((255, *color)))
 
-    def rect(x: int, y: int, w: int, h: int) -> None:
+    def rounded_rect(x: int, y: int, w: int, h: int, r: int,
+                     color_at) -> None:
+        """Rasterize a pixel-aligned rounded rectangle without fuzzy edges."""
+        r = max(0, min(r, w // 2, h // 2))
         for row in range(y, y + h):
             for col in range(x, x + w):
-                dot(col, row)
+                dx = max(x + r - col - .5, col + .5 - (x + w - r), 0)
+                dy = max(y + r - row - .5, row + .5 - (y + h - r), 0)
+                if dx * dx + dy * dy <= r * r:
+                    dot(col, row, color_at(col, row))
 
-    rect(bx, by, bw, stroke)
-    rect(bx, by + bh - stroke, bw, stroke)
-    rect(bx, by, stroke, bh)
-    rect(bx + bw - stroke, by, stroke, bh)
-    rect(bx + bw, by + bh // 3, nub_width, max(1, bh // 3))
-    fill = round((bw - 2 * stroke) * percentage / 100)
-    if fill:
-        rect(bx + stroke, by + stroke, fill, bh - 2 * stroke)
+    outline = _OMUS_LOW_OUTLINE if percentage <= 10 else _OMUS_LAVENDER
+    solid_outline = lambda _x, _y: outline
+
+    # The terminal is drawn first so its softly rounded left edge tucks neatly
+    # behind the body instead of reading as a separate rectangular block.
+    terminal_height = max(3, bh // 3)
+    terminal_y = by + (bh - terminal_height) // 2
+    rounded_rect(bx + bw - 1, terminal_y, nub_width + 1, terminal_height,
+                 max(1, nub_width // 2), solid_outline)
+    rounded_rect(bx, by, bw, bh, radius, solid_outline)
+
+    ix, iy = bx + inset, by + inset
+    iw, ih = bw - 2 * inset, bh - 2 * inset
+    inner_radius = max(1, radius - inset)
+    rounded_rect(ix, iy, iw, ih, inner_radius, lambda _x, _y: None)
+
+    fill_width = round(iw * percentage / 100)
+    if fill_width:
+        def gradient(col: int, _row: int) -> tuple[int, int, int] | None:
+            if col >= ix + fill_width:
+                return None
+            position = 0 if fill_width == 1 else (col - ix) / (fill_width - 1)
+            # The mid-purple anchor keeps short, low-resolution ramps vivid.
+            start, end = (_OMUS_VIOLET, _OMUS_PURPLE) if position < .6 else (
+                _OMUS_PURPLE, _OMUS_LAVENDER)
+            local = position / .6 if position < .6 else (position - .6) / .4
+            return tuple(round(a + (b - a) * local) for a, b in zip(start, end))
+
+        rounded_rect(ix, iy, iw, ih, inner_radius, gradient)
     # dbus-next represents D-Bus STRUCT values as lists, while the `ay`
     # member specifically requires immutable bytes.
     return [width, height, bytes(pixels)]
