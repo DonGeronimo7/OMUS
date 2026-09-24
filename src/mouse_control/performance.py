@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Opt-in, low-overhead timing primitives for startup and discovery work."""
 from __future__ import annotations
 

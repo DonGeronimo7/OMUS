@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pure State / Effect / Persistence analysis for Discovery Lab evidence.
 
 This module compares canonical state evidence across time and connection

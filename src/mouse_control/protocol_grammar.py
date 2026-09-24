@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Declarative protocol grammar used by automatic hardware discovery.
 
 The grammar describes *how* a mouse protocol is shaped without coupling that

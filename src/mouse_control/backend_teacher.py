@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compatibility imports for the pre-registry teacher module name.
 
 New code should import :mod:`mouse_control.teacher_registry`. Keeping this

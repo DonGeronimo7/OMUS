@@ -1,3 +1,73 @@
+# OMUS v1.1.0 — Bounded Automatic Discovery and evidence-driven Lab
+
+## Automatic Discovery
+
+OMUS now runs one canonical, explainable pipeline from exact interface
+quarantine and physical identity through Protocol Genome recognition, active
+fingerprint selection, Advice compilation, bounded grammar/integrity/structure
+inference, and proof or Lab escalation. All 20 currently compiled repertoire
+families produce 62 operation-specific Genome records. These records represent
+known structure and evidence; they do not imply that every listed mouse is
+physically validated or writable.
+
+Inference is deterministic and explicitly budgeted. When safe automatic
+analysis cannot continue, OMUS reports the missing evidence and one exact human
+action instead of guessing. Compact runtime recipes are validated against
+identity, descriptor, firmware, generation, evidence ancestry, and evidence
+revision before reuse.
+
+## Discovery Lab and TUI
+
+The existing full-screen Hardware Discovery and Lab pages now present the same
+canonical outcome. Recognition, inference, proof, fast-path reuse, stopping
+reason, and required Lab action remain visibly distinct. Evidence collected in
+the Lab returns to the same EvidenceGraph rather than creating a parallel
+authority path. Existing navigation, setup, service, update, and review/save
+behavior is preserved.
+
+## Safety
+
+- Hardware authority remains fail-closed and bound to exact identity,
+  interface, generation, evidence, adapter ownership, and protocol proof.
+- Recipe persistence is atomic and rejects symlinks, corruption, oversized
+  data, schema drift, stale revisions, and invalid value domains.
+- Corpus, vendor, public, and community evidence can improve recognition but
+  cannot grant write authority.
+- Generic HID inspection remains read-only; ambiguous or unknown hardware is
+  never probed with speculative writes.
+
+## Native support
+
+The Logitech G305 remains the physically validated HID++ reference device.
+Native Razer remains an independently implemented, exact-model path covered by
+offline regression tests. Other repertoire families range from sourced
+recognition through experimental/Lab-assisted discovery and require their own
+physical evidence before write support can be claimed.
+
+## Licensing
+
+OMUS v1.1.0 is distributed under `AGPL-3.0-or-later`. Organizations requiring
+other terms may contact the project for separate commercial licensing. The
+public AGPL source is not intentionally feature-limited, and rights already
+received under the AGPL are unaffected by commercial availability. Historical
+releases retain the licenses applicable when they were distributed; third-party
+research, data, and assets retain their recorded licenses or provenance.
+
+## Security and supply chain
+
+Release gates retain immutable-pinned GitHub Actions, least-privilege workflow
+permissions, hash-locked dependency environments, CodeQL, OpenSSF Scorecard,
+CycloneDX project SBOM generation, SHA-256 manifests, SLSA provenance and SBOM
+attestations, exact artifact allowlists, VirusTotal follow-up verification, and
+reproducible wheel comparison. Hosted checks are required for publication and
+are not represented as locally executed by these notes.
+
+Primary candidate artifacts are `omus-1.1.0-1.fc44.noarch.rpm`,
+`omus_1.1.0_all.deb`, `OMUS-1.1.0-x86_64.AppImage`,
+`omus-1.1.0-py3-none-any.whl`, and `omus-1.1.0.tar.gz`.
+
+---
+
 # OMUS v1.0.4 — Reliable runtime recovery and safe fast proof
 
 ## Reliability

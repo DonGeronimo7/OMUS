@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Enforce repository-owned GitHub workflow security invariants."""
 
 from __future__ import annotations

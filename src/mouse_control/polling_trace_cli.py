@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Capture complete known-good polling-rate transactions for inference.
 
 The proven native backend acts only as a teacher. Raw HidSession TX/RX is

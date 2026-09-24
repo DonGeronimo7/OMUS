@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Build a physical-device graph from evdev, hidraw, and sysfs.
 
 The core rule is that volatile character-device names are interfaces, not

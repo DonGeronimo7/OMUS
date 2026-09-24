@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from types import SimpleNamespace
 
 from mouse_control.protocol_grammar import CodecKind

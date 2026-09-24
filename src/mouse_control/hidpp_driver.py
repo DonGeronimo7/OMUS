@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Native Logitech HID++ 2 protocol driver.
 
 The implementation is independent and based on observed HID++ wire behavior;
@@ -87,6 +88,50 @@ def decode_supported_dpi(parameters: bytes) -> tuple[tuple[int, ...], tuple[DpiR
     return tuple(values), tuple(ranges)
 
 
+def decode_extended_dpi_parameters(parameters: bytes) -> tuple[int, int, int, int, int, int]:
+    """Decode HID++ 0x2202 get_sensor_dpi_parameters (function 5)."""
+    if len(parameters) < 10:
+        raise HidppError("malformed extended-DPI parameters response")
+    sensor = parameters[0]
+    dpi_x = int.from_bytes(parameters[1:3], "big")
+    default_x = int.from_bytes(parameters[3:5], "big")
+    dpi_y = int.from_bytes(parameters[5:7], "big")
+    default_y = int.from_bytes(parameters[7:9], "big")
+    lod = parameters[9]
+    if dpi_x <= 0 or default_x <= 0 or lod not in (0, 1, 2, 3):
+        raise HidppError("invalid extended-DPI parameters response")
+    return sensor, dpi_x, default_x, dpi_y, default_y, lod
+
+
+def decode_extended_dpi_ranges(words: tuple[int, ...]) -> tuple[tuple[int, ...], tuple[DpiRange, ...]]:
+    """Decode one validated 0x2202 DPI range stream."""
+    values: list[int] = []
+    ranges: list[DpiRange] = []
+    index = 0
+    while index < len(words):
+        word = int(words[index])
+        if word == 0:
+            break
+        if word & 0xE000 == 0xE000:
+            if not values or index + 1 >= len(words):
+                raise HidppError("malformed extended-DPI stepped range")
+            step = word & 0x1FFF
+            maximum = int(words[index + 1])
+            if step <= 0 or maximum <= 0 or maximum < values[-1]:
+                raise HidppError("invalid extended-DPI stepped range")
+            ranges.append(DpiRange(values[-1], maximum, step))
+            index += 2
+            continue
+        if word <= 0 or word > 0xDFFF:
+            raise HidppError("invalid extended-DPI fixed value")
+        if word not in values:
+            values.append(word)
+        index += 1
+    if not values and not ranges:
+        raise HidppError("device returned no extended-DPI values")
+    return tuple(values), tuple(ranges)
+
+
 class Hidpp20Driver:
     protocol_name = "Logitech HID++ 2"
 
@@ -131,19 +176,56 @@ class Hidpp20Driver:
 
     def _discover_dpi(self) -> DpiCapabilities:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
-        if feature is None:
-            # 0x2202 is represented but not claimed until its independent-axis
-            # packet format is implemented and validated.
+        if feature is not None:
+            count = self.session.request(self.device_index, feature.index, 0x00)
+            if not count.parameters or count.parameters[0] == 0:
+                raise HidppError("device returned no adjustable-DPI sensors")
+            response = self.session.request(self.device_index, feature.index, 0x01, b"\0")
+            values, ranges = decode_supported_dpi(response.parameters)
+            profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
+            return DpiCapabilities(
+                readable=True, writable=True, values=values, ranges=ranges,
+                events=profiles is not None and profiles.version in (0, 1),
+            )
+
+        extended = self.features.get(EXTENDED_ADJUSTABLE_DPI_FEATURE_ID)
+        if extended is None:
             return DpiCapabilities()
-        count = self.session.request(self.device_index, feature.index, 0x00)
+        count = self.session.request(self.device_index, extended.index, 0x00)
         if not count.parameters or count.parameters[0] == 0:
-            raise HidppError("device returned no adjustable-DPI sensors")
-        response = self.session.request(self.device_index, feature.index, 0x01, b"\0")
-        values, ranges = decode_supported_dpi(response.parameters)
-        profiles = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
+            raise HidppError("device returned no extended-DPI sensors")
+        capabilities = self.session.request(
+            self.device_index, extended.index, 0x01, b"\0"
+        ).parameters
+        if len(capabilities) < 3 or capabilities[0] != 0:
+            raise HidppError("malformed extended-DPI capability response")
+        level_count, flags = capabilities[1], capabilities[2]
+        independent_axes = bool(flags & 0x01)
+
+        words: list[int] = []
+        terminated = False
+        for page in range(16):
+            response = self.session.request(
+                self.device_index, extended.index, 0x02, bytes((0, 0, page))
+            ).parameters
+            if len(response) < 3 or tuple(response[:3]) != (0, 0, page):
+                raise HidppError("extended-DPI range page echo mismatch")
+            payload = response[3:]
+            for offset in range(0, len(payload) - 1, 2):
+                word = int.from_bytes(payload[offset:offset + 2], "big")
+                words.append(word)
+                if word == 0:
+                    terminated = True
+                    break
+            if terminated:
+                break
+        if not terminated:
+            raise HidppError("extended-DPI range stream did not terminate")
+        values, ranges = decode_extended_dpi_ranges(tuple(words))
         return DpiCapabilities(
             readable=True, writable=True, values=values, ranges=ranges,
-            events=profiles is not None and profiles.version in (0, 1),
+            independent_axes=independent_axes, stage_count=level_count or None,
+            events=True,
         )
 
     @property
@@ -225,27 +307,52 @@ class Hidpp20Driver:
 
     def get_dpi_state(self, *, active_stage: int | None = None) -> DpiState:
         feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
-        if feature is None:
+        if feature is not None:
+            response = self.session.request(self.device_index, feature.index, 0x02, b"\0")
+            if len(response.parameters) < 3 or response.parameters[0] != 0:
+                raise HidppError("malformed current-DPI response")
+            dpi = int.from_bytes(response.parameters[1:3], "big")
+            if dpi <= 0:
+                raise HidppError("device returned invalid current DPI")
+            return DpiState(dpi, dpi, active_stage=active_stage, confirmed=True)
+
+        extended = self.features.get(EXTENDED_ADJUSTABLE_DPI_FEATURE_ID)
+        if extended is None:
             raise HidppError("adjustable DPI is unsupported")
-        response = self.session.request(self.device_index, feature.index, 0x02, b"\0")
-        if len(response.parameters) < 3 or response.parameters[0] != 0:
-            raise HidppError("malformed current-DPI response")
-        dpi = int.from_bytes(response.parameters[1:3], "big")
-        if dpi <= 0:
-            raise HidppError("device returned invalid current DPI")
-        return DpiState(dpi, dpi, active_stage=active_stage, confirmed=True)
+        parameters = self.session.request(
+            self.device_index, extended.index, 0x05, b"\0"
+        ).parameters
+        sensor, dpi_x, _default_x, dpi_y, _default_y, _lod = decode_extended_dpi_parameters(parameters)
+        if sensor != 0:
+            raise HidppError("extended-DPI sensor echo mismatch")
+        return DpiState(dpi_x, dpi_y or None, active_stage=active_stage, confirmed=True)
 
     def set_dpi(self, dpi: int) -> DpiState:
         if not self._dpi_capabilities.writable or not self._dpi_capabilities.accepts(dpi):
             raise HidppError(f"unsupported DPI {dpi}")
-        feature = self.features[ADJUSTABLE_DPI_FEATURE_ID]
-        self.session.request(self.device_index, feature.index, 0x03,
-                             bytes((0,)) + dpi.to_bytes(2, "big"))
+        feature = self.features.get(ADJUSTABLE_DPI_FEATURE_ID)
+        if feature is not None:
+            self.session.request(self.device_index, feature.index, 0x03,
+                                 bytes((0,)) + dpi.to_bytes(2, "big"))
+        else:
+            extended = self.features.get(EXTENDED_ADJUSTABLE_DPI_FEATURE_ID)
+            if extended is None:
+                raise HidppError("adjustable DPI is unsupported")
+            current = self.session.request(
+                self.device_index, extended.index, 0x05, b"\0"
+            ).parameters
+            sensor, _x, _default_x, _y, _default_y, lod = decode_extended_dpi_parameters(current)
+            if sensor != 0:
+                raise HidppError("extended-DPI sensor echo mismatch")
+            y_dpi = dpi if self._dpi_capabilities.independent_axes else 0
+            payload = (bytes((0,)) + dpi.to_bytes(2, "big")
+                       + y_dpi.to_bytes(2, "big") + bytes((lod,)))
+            self.session.request(self.device_index, extended.index, 0x06, payload)
         state = self.get_dpi_state()
-        if state.x_dpi != dpi or state.y_dpi not in (None, 0, dpi):
+        expected_y = dpi if self._dpi_capabilities.independent_axes else None
+        if state.x_dpi != dpi or (expected_y is not None and state.y_dpi != expected_y):
             raise HidppError(
-                f"DPI verification failed: requested {dpi}, "
-                f"read {state.display_value}")
+                f"DPI verification failed: requested {dpi}, read {state.display_value}")
         return state
 
     def get_report_rate(self) -> int:
@@ -274,37 +381,58 @@ class Hidpp20Driver:
                   shutdown_event: threading.Event,
                   ready_callback: Callable[[], None] | None = None) -> None:
         profile = self.features.get(ONBOARD_PROFILES_FEATURE_ID)
-        if profile is None or not self._dpi_capabilities.events:
+        extended = self.features.get(EXTENDED_ADJUSTABLE_DPI_FEATURE_ID)
+        legacy_events = (
+            ADJUSTABLE_DPI_FEATURE_ID in self.features
+            and profile is not None and profile.version in (0, 1)
+        )
+        extended_events = (
+            ADJUSTABLE_DPI_FEATURE_ID not in self.features and extended is not None
+        )
+        if not self._dpi_capabilities.events or not (legacy_events or extended_events):
             raise HidppError("DPI events are unsupported")
-        pending: queue.Queue[int] = queue.Queue()
+        pending: queue.Queue[int | DpiState] = queue.Queue()
 
         def receive(report: HidppReport) -> None:
-            if (report.device_index == self.device_index and
+            if legacy_events and profile is not None and (
+                    report.device_index == self.device_index and
                     report.report_id == 0x11 and report.feature_index == profile.index and
                     report.function_or_event == 0x01 and report.software_id == 0 and
                     report.parameters and report.parameters[0] < 16):
-                stage = report.parameters[0]
-                pending.put(stage)
+                pending.put(report.parameters[0])
+                return
+            if extended_events and extended is not None and (
+                    report.device_index == self.device_index and
+                    report.report_id == 0x11 and report.feature_index == extended.index and
+                    report.function_or_event == 0x00 and report.software_id == 0 and
+                    len(report.parameters) >= 6):
+                sensor = report.parameters[0]
+                x_dpi = int.from_bytes(report.parameters[1:3], "big")
+                y_dpi = int.from_bytes(report.parameters[3:5], "big")
+                lod = report.parameters[5]
+                if sensor == 0 and x_dpi > 0 and lod in (0, 1, 2, 3):
+                    pending.put(DpiState(x_dpi, y_dpi or None, confirmed=True))
 
         unsubscribe = self.session.subscribe(receive)
         try:
-            # Subscription registration, rather than thread creation, is the
-            # point at which the monitor may advertise that it can receive a
-            # physical button transition.
             if ready_callback is not None:
                 ready_callback()
             while not shutdown_event.is_set():
                 if getattr(self.session, "closed", False):
                     raise HidppError("HID session disconnected")
                 try:
-                    stage = pending.get(timeout=0.25)
+                    item = pending.get(timeout=0.25)
                 except queue.Empty:
                     continue
-                # The event's slot is routing data. Query hardware for truth.
-                state = self.get_dpi_state(active_stage=stage)
-                callback(state)
+                if isinstance(item, DpiState):
+                    callback(item)
+                else:
+                    # Legacy profile events carry routing/stage data only;
+                    # query hardware for the authoritative current DPI.
+                    callback(self.get_dpi_state(active_stage=item))
         finally:
             unsubscribe()
+
 
 
 def connect_hidpp20(session: HidSession) -> Hidpp20Driver:

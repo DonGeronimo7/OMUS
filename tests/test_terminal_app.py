@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Terminal-native launcher behavior and package metadata tests."""
 
 from __future__ import annotations

@@ -32,13 +32,13 @@ OMUS has never seen your exact mouse, its guided discovery workflow
 can inspect what the device exposes, learn from your actions, and produce a
 privacy-conscious report that helps expand support.
 
-[![Current release: v1.0.4](https://img.shields.io/badge/release-v1.0.4-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.4)
+[![Current release: v1.1.0](https://img.shields.io/badge/release-v1.1.0-6f42c1)](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.1.0)
 [![CI](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/ci.yml)
 [![VirusTotal release scan](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/virustotal-release.yml)
 [![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14722/badge)](https://www.bestpractices.dev/projects/14722)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
 
@@ -46,45 +46,45 @@ privacy-conscious report that helps expand support.
 > recognizes it, great. If it does not, run discovery. Every unfamiliar device
 > can reveal a protocol pattern or hardware behavior shared by other mice.
 
-The current release is [v1.0.4](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.4).
+The current release is [v1.1.0](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.1.0).
 
 ## Install and run
 
 Download the package for your system from the
-[v1.0.4 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.0.4),
+[v1.1.0 release](https://github.com/DonGeronimo7/OMUS/releases/tag/v1.1.0),
 then install it as shown below.
 
 ### Fedora, Nobara, and other RPM systems
 
-[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.4/omus-1.0.4-1.fc44.noarch.rpm), then run:
+[Download the RPM](https://github.com/DonGeronimo7/OMUS/releases/download/v1.1.0/omus-1.1.0-1.fc44.noarch.rpm), then run:
 
 ```bash
-sudo dnf install ./omus-1.0.4-1.fc44.noarch.rpm
+sudo dnf install ./omus-1.1.0-1.fc44.noarch.rpm
 ```
 
 ### Debian, Ubuntu, Mint, and other DEB systems
 
-[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.4/omus_1.0.4_all.deb), then run:
+[Download the DEB](https://github.com/DonGeronimo7/OMUS/releases/download/v1.1.0/omus_1.1.0_all.deb), then run:
 
 ```bash
-sudo apt install ./omus_1.0.4_all.deb
+sudo apt install ./omus_1.1.0_all.deb
 ```
 
 ### Other x86-64 Linux distributions
 
-[Download the AppImage](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.4/OMUS-1.0.4-x86_64.AppImage), then run:
+[Download the AppImage](https://github.com/DonGeronimo7/OMUS/releases/download/v1.1.0/OMUS-1.1.0-x86_64.AppImage), then run:
 
 ```bash
-chmod +x OMUS-1.0.4-x86_64.AppImage
-./OMUS-1.0.4-x86_64.AppImage setup
+chmod +x OMUS-1.1.0-x86_64.AppImage
+./OMUS-1.1.0-x86_64.AppImage setup
 ```
 
 Native packages are preferred: they install the desktop launcher, service
 integration, dependencies, and device-access rules. The AppImage bundles the
 user-space application but cannot replace the host's systemd, udev, or kernel
 input support. An [Arch `PKGBUILD`](PKGBUILD),
-[Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.4/omus-1.0.4-py3-none-any.whl),
-and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v1.0.4/omus-1.0.4.tar.gz)
+[Python wheel](https://github.com/DonGeronimo7/OMUS/releases/download/v1.1.0/omus-1.1.0-py3-none-any.whl),
+and [source archive](https://github.com/DonGeronimo7/OMUS/releases/download/v1.1.0/omus-1.1.0.tar.gz)
 are also published.
 
 Launch the guided interface as your normal desktop user:
@@ -396,5 +396,14 @@ maintainer review.
 
 ## License
 
-OMUS is licensed under the GNU General Public License, version 3 or
-later. See [`LICENSE`](LICENSE).
+The current OMUS development tree is licensed under the GNU Affero General
+Public License, version 3 or any later version (`AGPL-3.0-or-later`). See
+[`LICENSE`](LICENSE).
+
+Organizations requiring terms other than `AGPL-3.0-or-later` may contact the
+project for separate commercial licensing. Dual licensing changes the available
+legal terms, not the functionality of the public OMUS source. Third-party
+components, research evidence, and assets retain their respective licenses or
+provenance, and versions already distributed remain under the licenses that
+applied to those versions. See [`DUAL-LICENSING.md`](DUAL-LICENSING.md) and
+[`docs/LICENSING_PROVENANCE.md`](docs/LICENSING_PROVENANCE.md).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Replay-driven protocol timing extraction for canonical Lab experiments.
 
 The profiler consumes relationships already established by temporal dialogue,

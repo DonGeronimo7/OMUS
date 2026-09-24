@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Persisted exact-model learned polling state machines.
 
 Polling is intentionally modeled separately from the simple learned DPI transaction

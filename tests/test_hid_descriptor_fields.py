@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Field-level HID descriptor parsing tests for generic discovery."""
 
 from mouse_control.hid_descriptor import (

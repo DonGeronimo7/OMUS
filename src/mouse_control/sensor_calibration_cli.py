@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Interactive vendor-neutral DPI/polling calibration for discovery work."""
 
 from __future__ import annotations

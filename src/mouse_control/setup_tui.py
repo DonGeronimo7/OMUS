@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """State-driven setup TUI controller.
 
 The controller contains session/navigation state only. Hardware discovery and
@@ -20,6 +21,7 @@ from .hardware import HardwareError, get_backend
 from .hardware.capabilities import LightingState
 from .lighting import validate_lighting_state
 from .discovery_models import DiscoveryProgress
+from .discovery_view import DiscoveryView, view_from_automatic_outcome
 from .setup_flow import SetupChoices, discover_choices, restore_dpi
 from .performance import timed
 from .lab_orchestrator import initial_lab_hypotheses, plan_next_experiment
@@ -208,6 +210,7 @@ class SetupController:
         self.research_plan: Any | None = None
         self.research_probe_outcome: Any | None = None
         self.discovery_engine: Any | None = None
+        self.discovery_view: DiscoveryView | None = None
         self.lab_experiment: Any | None = None
         self.vendor_capture_import: Any | None = None
         self.polling_measurement: Any | None = None
@@ -378,6 +381,7 @@ class SetupController:
         self.research_plan = None
         self.research_probe_outcome = None
         self.discovery_engine = None
+        self.discovery_view = None
         self.lab_experiment = None
         self.vendor_capture_import = None
         self.polling_measurement = None
@@ -497,6 +501,7 @@ class SetupController:
         self.research_plan = getattr(outcome, "research_plan", None)
         self.discovery_complete = True
         self.discovery_error = None
+        self.discovery_view = view_from_automatic_outcome(outcome)
         cached = bool(getattr(outcome, "cached_profile_used", False))
         # A discovery pass may have exposed an already-PROVEN exact-model store.
         # Rebind through the production registry so setup and runtime share the
@@ -530,6 +535,17 @@ class SetupController:
         self.discovery_complete = False
         self.discovery_progress.clear()
         self.status = message
+
+    def apply_discovery_view(self, view: DiscoveryView) -> None:
+        """Publish one generation-current engine snapshot to the canonical TUI."""
+        if not isinstance(view, DiscoveryView):
+            raise TypeError("DiscoveryView required")
+        self.discovery_view = view
+        self.status = (
+            view.human_action
+            if view.human_action
+            else f"Discovery phase {view.phase.replace('_', ' ')} is ready for review."
+        )
 
     def apply_lab_experiment(self, experiment: Any) -> None:
         """Retain one canonical Lab result for progressive TUI inspection."""
@@ -1151,6 +1167,18 @@ class SetupController:
                 )
                 for index, line in enumerate(self.hardware_lines())
             )
+            if self.discovery_view is not None:
+                rows.extend((DisplayRow(""), DisplayRow("Discovery engine", role="heading")))
+                rows.extend(DisplayRow(line, dim="quarantined" in line.lower())
+                            for line in self.discovery_view.overview)
+                rows.append(DisplayRow(f"Current phase: {self.discovery_view.phase.replace('_', ' ')}"))
+                for line in self.discovery_view.decisions[-4:]:
+                    rows.append(DisplayRow(line, dim=True))
+                if self.discovery_view.human_action:
+                    rows.append(DisplayRow(
+                        f"Next required evidence: {self.discovery_view.human_action}",
+                        role="primary",
+                    ))
             if self.discovery_progress:
                 rows.extend((DisplayRow(""), DisplayRow("Recent discovery progress", dim=True)))
                 for event in self.discovery_progress[-4:]:
@@ -1197,6 +1225,14 @@ class SetupController:
                 DisplayRow("Selected-device capture is local, bounded, and read-only.", dim=True),
                 DisplayRow(f"Current question: {plan.purpose}", role="primary"),
             ]
+            if self.discovery_view is not None and self.discovery_view.human_action:
+                rows.extend((
+                    DisplayRow("Automatic Discovery boundary", role="heading"),
+                    DisplayRow("Current evidence is insufficient for safe automatic progress."),
+                    DisplayRow(f"Requested action: {self.discovery_view.human_action}", role="primary"),
+                    DisplayRow("Captured evidence returns to the same EvidenceGraph and Discovery pipeline.", dim=True),
+                    DisplayRow("No inferred or community evidence grants write authority.", dim=True),
+                ))
             repertoire = tuple(
                 getattr(self.discovery_engine, "repertoire_candidates", ())
                 if self.discovery_engine is not None else ()
@@ -1639,6 +1675,7 @@ class SetupController:
                 DisplayRow(f"Version {__version__}", role="primary"),
                 DisplayRow(f"Selected backend: {backend}"),
                 DisplayRow("Linux evdev/uinput remapping with evidence-gated hardware control."),
+                DisplayRow("License: AGPL-3.0-or-later", dim=True),
                 DisplayRow("Project: github.com/DonGeronimo7/OMUS", dim=True),
                 DisplayRow("One Mouse Universal System", dim=True),
                 DisplayRow("Every mouse. One system.", dim=True),

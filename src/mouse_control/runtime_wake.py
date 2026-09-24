@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Event-driven wake coordination and latency instrumentation.
 
 The coordinator never discovers hardware and never grants authority.  It only

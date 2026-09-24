@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from mouse_control.calibrated_discovery import (
     CalibratedDpiState,
     calibrated_cycle_hypothesis,

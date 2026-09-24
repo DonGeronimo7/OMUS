@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Optional DPI monitoring and Freedesktop desktop notifications."""
 from __future__ import annotations
 import asyncio, logging, threading

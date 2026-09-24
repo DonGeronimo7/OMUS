@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Hardware tests use no daemon, input device, or real writes."""
 from types import SimpleNamespace
 from unittest.mock import Mock, patch

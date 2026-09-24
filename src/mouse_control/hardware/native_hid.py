@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral native HID backend."""
 
 from __future__ import annotations

@@ -1,3 +1,11 @@
+omus (1.1.0) unstable; urgency=medium
+
+  * Integrate bounded Automatic Discovery, Protocol Genome, Advice, and Lab escalation.
+  * Add validated compact recipes and fail-closed evidence and identity checks.
+  * Release current OMUS under AGPL-3.0-or-later.
+
+ -- Marc-A. Geronimo <noreply@example.com>  Thu, 24 Sep 2026 13:30:00 -0400
+
 omus (1.0.4) unstable; urgency=medium
 
   * Restore runtime features after reboot, session loss, and reconnect.

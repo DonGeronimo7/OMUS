@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Robust, protocol-neutral polling-rate analysis from evdev motion timestamps.
 
 This module intentionally does not replace sensor_calibration.estimate_peak_polling_hz().

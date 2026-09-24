@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Wait for VirusTotal analyses and render conservative release evidence."""
 
 from __future__ import annotations

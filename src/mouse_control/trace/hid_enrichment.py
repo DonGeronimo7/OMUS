@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Derived HID interpretation linked to immutable trace observations."""
 from dataclasses import dataclass
 from ..hid_report import DecodedHidValue

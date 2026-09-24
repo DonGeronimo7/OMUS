@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from mouse_control import doctor
 from mouse_control.discovery import MouseDevice
 

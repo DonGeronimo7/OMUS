@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Teacher-free raw polling replay laboratory.
 
 The native backend is used only to establish the known initial state and to

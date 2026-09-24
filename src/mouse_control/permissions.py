@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Report the narrowly scoped device access needed by the remapper."""
 
 from __future__ import annotations

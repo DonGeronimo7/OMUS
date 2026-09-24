@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Choose safe discovery experiments by expected information gain.
 
 This module is deliberately protocol-neutral.  Callers describe the outcomes

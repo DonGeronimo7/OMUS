@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Specification-derived HID meaning and explicit Linux evdev expectations."""
 from __future__ import annotations
 from dataclasses import dataclass

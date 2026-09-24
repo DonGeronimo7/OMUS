@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic, versioned manifest support for trace sessions."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Stable raw-stream identity and mirrored-report regressions."""
 
 from pathlib import Path

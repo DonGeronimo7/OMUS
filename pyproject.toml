@@ -4,13 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omus"
-version = "1.0.4"
+version = "1.1.0"
 description = "One Mouse Universal System for Linux discovery, configuration, and remapping"
 authors = [
     {name = "Marc-A. Geronimo"}
 ]
 readme = "README.md"
-license = {text = "GPL-3.0-or-later"}
+license = "AGPL-3.0-or-later"
+license-files = [
+    "LICENSE",
+    "CREDITS.md",
+    "DUAL-LICENSING.md",
+    "docs/LICENSING_PROVENANCE.md",
+]
 requires-python = ">=3.12"
 dependencies = [
     "dbus-next>=0.2.3",
@@ -38,9 +44,6 @@ mouse-control-polling-promote = "mouse_control.polling_promotion_cli:main"
 
 [tool.setuptools.package-data]
 mouse_control = ["udev/*.rules"]
-
-[tool.setuptools]
-license-files = ["LICENSE", "CREDITS.md"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

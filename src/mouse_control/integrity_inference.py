@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bounded multi-frame checksum/integrity inference.
 
 Structural matches are descriptive evidence only. They never authorize writes.

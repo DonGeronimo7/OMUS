@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only logical-record reassembly across fixed HID transport frames."""
 
 from __future__ import annotations

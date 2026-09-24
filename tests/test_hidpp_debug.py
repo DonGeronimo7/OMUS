@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 import sys
 from unittest.mock import Mock, patch

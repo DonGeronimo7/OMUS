@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import json
 from pathlib import Path
 
@@ -39,6 +40,9 @@ def test_finalize_adds_stable_cyclonedx_serial_number(tmp_path: Path):
     assert finalized["bomFormat"] == "CycloneDX"
     assert finalized["specVersion"] == "1.6"
     assert finalized["serialNumber"] == first_serial
+    assert finalized["metadata"]["component"]["licenses"] == [
+        {"license": {"id": "AGPL-3.0-or-later"}}
+    ]
 
 
 @pytest.mark.parametrize(

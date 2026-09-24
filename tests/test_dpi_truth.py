@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Hardware state, software cursor and persisted choices are independent."""
 import threading
 from unittest.mock import Mock

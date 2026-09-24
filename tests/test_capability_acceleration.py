@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Operation-count and safety acceptance for reusable native protocol proof."""
 from dataclasses import replace
 from pathlib import Path

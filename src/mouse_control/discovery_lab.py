@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canonical read-only experiments and differential protocol analysis.
 
 The Discovery Lab composes the project's existing observation layers.  It does

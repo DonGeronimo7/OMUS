@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic observational profiles for decoded HID fields."""
 from __future__ import annotations
 from dataclasses import dataclass,field

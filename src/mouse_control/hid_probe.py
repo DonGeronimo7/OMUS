@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only hidraw inspection primitives for unknown hardware discovery.
 
 This module intentionally exposes no SET_REPORT, HIDIOCSFEATURE,

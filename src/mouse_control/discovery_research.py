@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Research orchestration policy for Automatic Discovery.
 
 This module deliberately separates three things that were historically mixed:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Login bootstrap for packaged desktops; systemd owns every runtime process."""
 from __future__ import annotations
 

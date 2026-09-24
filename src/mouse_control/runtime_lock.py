@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Kernel-owned runtime exclusion; stale files never imply a live process."""
 from contextlib import contextmanager
 import fcntl

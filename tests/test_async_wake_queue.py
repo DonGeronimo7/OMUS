@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The UI bridge wakes for work instead of polling on a timer."""
 
 import asyncio

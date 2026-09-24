@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Laboratory test for numeric DPI generalization.
 
 This command deliberately tests values that were never part of the teacher

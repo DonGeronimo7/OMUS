@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Safe, explicit update dispatch for OMUS and legacy installations.
 
 This deliberately delegates to the mechanism which owns the running copy; it

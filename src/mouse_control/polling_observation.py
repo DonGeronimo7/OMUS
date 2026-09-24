@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reusable read-only current polling-rate observation for setup and diagnostics."""
 from __future__ import annotations
 

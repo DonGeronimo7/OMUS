@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Offline, provenance-preserving vendor capture ingestion for Discovery Lab.
 
 The importer accepts bounded data files and projects observations into existing

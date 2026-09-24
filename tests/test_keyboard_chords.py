@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Keyboard chord parser and uinput lifetime tests."""
 
 import sys

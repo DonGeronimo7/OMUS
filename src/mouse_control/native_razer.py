@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Native Razer protocol grammar and exact-model transport.
 
 This module deliberately does not depend on OpenRazer, its daemon, D-Bus API,

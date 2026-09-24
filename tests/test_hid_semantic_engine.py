@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Golden coverage for descriptor schema, bit decoding and HID semantics."""
 import pytest
 from mouse_control.hid_descriptor import parse_report_descriptor, HidCollectionType

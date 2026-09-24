@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Runtime execution for PROVEN learned polling state machines.
 
 The executor is protocol-neutral: persisted packet patterns decide how requests

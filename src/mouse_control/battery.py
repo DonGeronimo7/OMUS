@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Optional battery polling and an intentionally tiny StatusNotifier item."""
 from __future__ import annotations
 

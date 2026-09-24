@@ -1,5 +1,127 @@
 # OMUS Project Status
 
+## 2026-09-24 — v1.1.0 local release candidate preparation
+
+- Release metadata now consistently identifies v1.1.0, a minor release for the
+  completed bounded Automatic Discovery and integrated Lab/TUI work. Current
+  package metadata remains `AGPL-3.0-or-later`; historical releases retain
+  their applicable historical licenses.
+- Wheel, sdist, and Fedora RPM artifacts build locally. RPM `%check` passes the
+  complete source suite. Source packaging now includes `.SRCINFO`, closing a
+  release defect found by the RPM build gate.
+- The durable acceptance matrix is `docs/RELEASE_ACCEPTANCE_1.1.0.md`. Candidate
+  physical writes/reconnect/remapping were not executed because the installed
+  service owned the attached Logitech receiver; no active installation was
+  changed. Physical Razer hardware was unavailable and local CycloneDX tooling
+  was unavailable, so those correctly remain external gates.
+
+## 2026-09-24 — AGPL licensing and provenance transition
+
+- The current development tree after engineering baseline `2bf8760` is
+  `AGPL-3.0-or-later`; historical releases retain their applicable historical
+  licenses. Public and potential commercial editions differ in licensing terms,
+  not intentional functionality.
+- Git history identifies Marc-Anthony Geronimo/DonGeronimo7 as the sole human
+  contributor through the boundary. Bot-authored history consists of dependency
+  maintenance or repository automation; no CLA or DCO relicensing mechanism
+  exists, so outside code intended for commercial dual licensing is gated
+  pending a legally reviewed contributor agreement.
+- `docs/LICENSING_PROVENANCE.md` and `CREDITS.md` distinguish first-party code,
+  external protocol facts, the generated Linux evidence corpus, fixtures,
+  dependencies, and assets. The unknown origin of the write-disabled
+  `bitmouse-72` research fixture and independent asset provenance remain
+  administrative follow-up, not claimed first-party evidence.
+- Wheel metadata emits `License-Expression: AGPL-3.0-or-later`; wheel and sdist
+  include the canonical AGPL text, credits, dual-licensing terms, and provenance
+  map without the prior setuptools licensing deprecations. Source validation
+  passes 1,436 tests with the existing private-bus skip and GLib warning. No
+  intentional runtime behavior changed.
+
+## 2026-09-24 — Final Discovery engineering-hardening checkpoint
+
+- Canonical Automatic Discovery outcomes now feed the existing full-screen
+  Hardware Discovery and Lab pages. Recognition, inferred state, proven state,
+  fast-path reuse, stopping reason, and one requested human action are visibly
+  distinct; device rebinding clears the presentation snapshot.
+- Compact runtime recipes now validate generation and evidence revision as well
+  as identity, descriptor, firmware, and evidence ancestry. Parsing is strict
+  and bounded; persistence is atomic and rejects corruption, oversized files,
+  symlinks, schema drift, extra/missing fields, and invalid value domains.
+- EvidenceGraph, Genome, pipeline, community-import, and grammar/integrity/
+  bitfield/record/alignment entry points have explicit deterministic budgets.
+  Unknown or excessive input fails closed without changing runtime authority.
+- Offline HID++ and native Razer corpus paths remain distinct and
+  non-authorizing. Full source suite passes 1,435 tests with the existing
+  private-bus skip; source distribution and wheel builds succeed. Physical
+  G305, Razer, HID-BPF, UHID/vendor-app, and unknown-device acceptance remain
+  separate unexecuted gates.
+
+## 2026-09-24 — Discovery integration and corpus hardening checkpoint
+
+- The canonical offline pipeline now joins exact interface quarantine, existing
+  repertoire-to-Genome compilation, active fingerprint selection, Advice
+  compilation, grammar inference, and precise human escalation in one
+  explainable execution trace. Descriptor mismatch fails before corpus work.
+- All 20 existing protocol-repertoire families compile into 62 independent
+  identity/operation Genome records. This includes current HID++, native Razer,
+  LAMZU, Darmoshark, WLMOUSE, RAWM and other established repertoire knowledge;
+  no compiled corpus record is promoted to `WRITE_VERIFIED` by translation.
+- Added bounded checksum/CRC candidates, controlled bitfield inference,
+  repeated-record detection, cross-model alignment, compact runtime recipes,
+  and attributed community evidence. Ambiguity and invalidated evidence fail
+  closed. A small canonical presentation model exposes pipeline decisions and
+  the next requested human action for later full-screen TUI wiring.
+- Compact recipe decode measures 3.41 microseconds and interface admission 923
+  nanoseconds on the development workstation. Research graph traversal and
+  inference remain outside the runtime input path.
+
+## 2026-09-24 — Deferred Discovery autonomy offline checkpoint
+
+- Added exact, generation-bound research-interface quarantine with separate
+  normal-input, configuration, receiver, firmware, bootloader, and unknown
+  roles. Passive observation remains the default; mutation needs an exact
+  descriptor/role policy and still requires the existing experiment authority.
+- Added conservative trace grammar inference, retained byte-order alternatives,
+  operation-specific Protocol Genome records with transitive evidence
+  invalidation, and an offline orchestrator that reports the exact evidence or
+  human action needed when automatic analysis cannot continue.
+- Added a testable HID-BPF loader lifecycle shell, deterministic Virtual Oracle
+  teaching replay, and firmware artifact inspection/dry-run matching. These
+  paths provide no physical write primitive and do not claim live kernel,
+  UHID, vendor-software, firmware-update, or hardware validation.
+- The new modules are outside the input forwarding path. Exact interface
+  admission benchmarks below one microsecond on the development workstation;
+  existing performance regressions remain green.
+
+## 2026-09-24 — Discovery autonomy P0 software checkpoint
+
+- Reconciled the September 21 deterministic Discovery implementation over the
+  v1.0.4-derived IR branch: bounded experiment execution, mutation policy,
+  public protocol codecs/priors, HID++ 0x2202 vocabulary, symbolic actions,
+  reactive modeling, Virtual Peripheral Oracle core, and HID-BPF admission
+  contract. No public/static evidence grants runtime write authority.
+- Added offline active fingerprint selection, a provenance-bound Advice
+  Compiler, ordered/register dialogue inference, bounded autonomous candidate
+  ranking through the existing `ExperimentAuthority`, and explicit scoped
+  family-equivalence hypotheses. Passive/read evidence is preferred; stale
+  generations, invalidated evidence, missing baselines/verifiers/rollback, and
+  hidden-state conflicts are refused.
+- Automated validation is software-only. No new device, HID-BPF kernel adapter,
+  virtual transport adapter, cross-model writer, or firmware operation is
+  physically validated or enabled by this checkpoint.
+
+## 2026-09-20 — Offline Discovery IR/evidence foundation
+
+- Dedicated local branch adds capability IR, differential proof-plan compilation,
+  byte/bit-preserving offline state proposals, an explainable persisted evidence
+  DAG with transitive invalidation, and a pinned kernel vocabulary importer.
+- Seed corpus: 52 lexical/enum facts from three Linux v6.12 Roccat files. No
+  inferred DPI/polling setters, new runtime authority, HID-BPF attachment, automatic
+  experiment execution, or Lab integration is claimed.
+- New focused tests: 39 passed. Full suite: 1,320 passed, one private-bus sandbox
+  skip; that integration test passed separately outside the sandbox. Physical
+  validation remains pending. See `DISCOVERY_IR_HANDOFF.md` for scope and metrics.
+
 ## 2026-09-20 — v1.0.4 runtime recovery and proof-acceleration candidate
 
 - The accepted runtime-persistence, hardware-truth DPI, bounded receiver-probe,

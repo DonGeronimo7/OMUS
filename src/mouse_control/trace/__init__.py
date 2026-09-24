@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral USB trace evidence.
 
 This package is intentionally observation-only.  Captured traffic can become

@@ -1,5 +1,18 @@
 # AI handoff log
 
+## 2026-09-20 — Discovery IR and evidence foundation
+
+User mission attachment `Pasted text.txt` (62186559-888a-439e-85e3-d9f1e4e31bf0).
+Starting clean at `912bdcc6e4d536abcf3df259228a0bfad82ec2bd`; dedicated local branch
+`codex/autonomous-discovery-ir`. Final commit contains this entry. Added offline
+capability plans/RMW proposals, content-addressed evidence dependencies and
+invalidation, pinned kernel vocabulary mining and 52 seed facts. Reused existing
+protocol grammar/codecs; no new runtime or hardware write path. Focused: 39 passed;
+full: 1,320 passed, one sandbox skip, one GLib warning; isolated private-bus test
+passed outside sandbox. Compile/diff pass. No physical test/install/push/release.
+`DISCOVERY_IR_HANDOFF.md` records metrics, limitations and the next compiler adapter
+step; the broader autonomous Discovery mission is not complete.
+
 ## 2026-09-20 — v1.0.4 release preparation
 
 Prepared the accepted `f757cbc` main baseline as the backwards-compatible
@@ -1833,3 +1846,124 @@ Request: user attachment `pasted-text.txt` on
   reinsert the G305 receiver, and verify that the temporary Generic bind is
   followed by Native HID promotion and resumed one-notification-per-DPI press.
   That physical receiver-reinsert validation remains pending.
+## 2026-09-24 — Discovery autonomy P0 software checkpoint
+
+- Starting point: `codex/autonomous-discovery-ir` at `7f967cf`; reconciled the
+  exact September 21 implementation bundle, then added offline fingerprint,
+  advice, ordered/register, planner, and family-equivalence layers.
+- Safety: all new layers are transport-free and non-authorizing; reversible
+  planner candidates require the existing eligible `ExperimentAuthority`, a
+  current generation, valid evidence, baseline, verifier, and rollback.
+- Validation: pre-change full suite 1,320 passed / one skip; reconciled focused
+  suite 146 passed; final full suite 1,403 passed / one existing private-bus
+  skip. Physical validation was not performed.
+- Deferred: explicit interface quarantine, parser/grammar inference, a real
+  kernel HID-BPF adapter, Virtual Oracle transport adapters, machine-readable
+  Protocol Genome expansion, firmware dry-run infrastructure, and TUI/Lab UI.
+## 2026-09-24 — Deferred Discovery autonomy offline checkpoint
+
+- Continued `codex/autonomous-discovery-ir` from `28f76c3` with explicit
+  interface quarantine, grammar alternatives, Protocol Genome ingestion,
+  offline Discovery escalation, HID-BPF lifecycle/fallback, Oracle teaching
+  replay, and non-writing firmware dry-run infrastructure.
+- Safety: unknown/normal-input interfaces remain observation-only; bootloader
+  mutation is rejected into a separate trust domain; stale generations and
+  descriptor mismatches are refused; every new research/firmware result is
+  non-authorizing.
+- Validation: baseline 1,403 passed / one skip; final 1,417 passed / the same
+  private-bus skip. Focused performance tests pass; exact quarantine admission
+  measured 935 ns best-of-five over 10,000 loops. Compileall, diff check,
+  dependency-lock verification, and workflow security policy pass. Ruff was
+  unavailable in the system Python environment.
+- Deferred external gates: live HID-BPF kernel program/attachment, UHID or
+  USB/IP surface, vendor-application exercise, family-specific firmware
+  container parsers, canonical TUI screens, and physical hardware acceptance.
+## 2026-09-24 — Discovery integration and corpus hardening checkpoint
+
+- Continued from `2f3c074`; connected quarantine, Protocol Genome, active
+  fingerprinting, Advice, grammar inference and escalation through one offline
+  decision pipeline with a TUI-ready presentation model.
+- Populated Genome records from all 20 existing repertoire families (62
+  identity/operation records), preserving operation-specific proof and never
+  translating repertoire knowledge into `WRITE_VERIFIED` authority.
+- Added finite integrity candidates (sum/XOR, reviewed CRC8/16/32 forms),
+  bitfields, repeated records, cross-model alignment, compact recipe
+  validation/invalidation, and non-authorizing community evidence categories.
+- Validation: baseline 1,417 passed / one skip; final 1,429 passed / the same
+  private-bus skip. Compileall, diff check, dependency-lock verification,
+  workflow security policy, and performance tests pass. Recipe decode: 3.41
+  us; interface admission: 923 ns. Ten-thousand recipe loads peaked at
+  5,053,377 bytes with 242,936 bytes current after the temporary list release.
+- Remaining external/feature gates: real kernel HID-BPF attachment, UHID/vendor
+  exercise, family-specific firmware parsers, full-screen TUI controller
+  wiring, exhaustive request/reply timing inference, and physical acceptance.
+## 2026-09-24 — Final Discovery engineering-hardening checkpoint
+
+- Continued from `3b264b7`; wired production Automatic Discovery presentation
+  into the canonical Hardware/Lab pages without changing navigation or adding a
+  second execution path. Rebind clears stale UI state; Lab evidence explicitly
+  returns to the same EvidenceGraph/pipeline.
+- Hardened compact recipes with generation/evidence revision, exact schemas,
+  bounded fields, atomic persistence, symlink/corruption refusal, and complete
+  invalidation reasons. Added explicit input budgets across graph, Genome,
+  pipeline, community evidence, and inference entry points.
+- Regression coverage includes existing native HID++/G305 and native Razer
+  suites plus explicit cross-family non-promotion tests. No physical hardware
+  was exercised.
+- Validation: 1,435 passed, one existing private-bus skip; 112 focused TUI,
+  pipeline, HID++ and Razer tests passed; performance suite 4 passed.
+  Compileall, diff check, dependency-lock and workflow-security verification,
+  sdist, and wheel build pass. Recipe decode changed from 3.41 us to 5.35 us
+  after strict validation; TUI view construction is 1.33 us and all 20-family
+  Genome compilation is 53.6 us.
+
+## 2026-09-24 — AGPL licensing and provenance transition
+
+- Continued from clean `codex/autonomous-discovery-ir` commit `2bf8760` and
+  changed the current tree to `AGPL-3.0-or-later` without retroactively
+  relabeling historical releases or changing runtime behavior.
+- Added the official AGPLv3 text, PEP 639 metadata, first-party Python SPDX
+  headers, dual-licensing and provenance records, a future-contribution gate,
+  distribution-format declarations, SBOM root-license normalization, and a
+  deterministic license-consistency check.
+- Git history identifies Marc-Anthony Geronimo/DonGeronimo7 as the sole human
+  contributor. External protocol facts and generated Linux evidence retain
+  attribution; the unknown `bitmouse-72` source and independent icon provenance
+  remain documented administrative follow-up. No CLA or DCO relicensing grant
+  was found.
+- Validation: 1,436 passed, one existing private-bus skip, and one existing
+  GLib warning; compileall, diff check, dependency-lock, workflow-security,
+  license-consistency, focused release/SBOM tests, sdist, and wheel build pass.
+  Wheel metadata reports `License-Expression: AGPL-3.0-or-later`; required
+  licensing/provenance files are present in wheel and sdist, and the prior
+  setuptools licensing deprecations are absent. Ruff was unavailable locally.
+
+## 2026-09-24 — v1.1.0 final release-preparation checkpoint
+
+- Continued from clean `codex/autonomous-discovery-ir` commit `2fcd588e` and
+  selected v1.1.0 as the semver-minor identity for the completed user-facing
+  Automatic Discovery, Lab, and canonical TUI work. Updated Python, RPM, Arch,
+  Debian, AppImage documentation, README, changelog, release notes, and About
+  surfaces without changing runtime architecture or hardware authority.
+- The RPM build found that `.SRCINFO` was absent from the sdist, causing the
+  packaged license-consistency test to fail. `MANIFEST.in` now includes it and
+  a release-metadata regression covers the requirement. The rebuilt Fedora RPM
+  `%check` passes 1,437 tests with the existing private-bus skip.
+- Read-only host inspection confirmed an attached Logitech `046d:c53f`
+  receiver on hidraw interface 02. The active installed service was left
+  untouched, so candidate HID++ reads/writes, reconnect, remapping, and
+  notifications remain explicitly not executed rather than inferred from old
+  logs. No supported Razer device was available.
+- `docs/RELEASE_ACCEPTANCE_1.1.0.md` records commands, artifact hashes, package
+  contents, offline versus physical evidence, hosted-only SBOM status, and
+  licensing follow-up. No push, merge, tag, publication, installation, service
+  restart, firmware action, or unknown-device write occurred.
+
+## 2026-09-24 — v1.1.0 hosted lint correction
+
+- Protected CI on release pull request #24 found two unused test imports that
+  local gates had not exercised because Ruff was unavailable in the base
+  environment. Runtime behavior and test assertions were unaffected.
+- Removed only the unused imports from `tests/test_discovery_execution.py` and
+  `tests/test_mutation_policy.py`. Per release policy this is a new candidate;
+  the prior commit and artifact hashes are not publication inputs.

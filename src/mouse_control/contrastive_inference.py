@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Teacher-free contrastive inference for guided HID discovery.
 
 The generic learner must not discard a byte merely because ordinary mouse

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Native Razer teacher protocol regressions."""
 
 from pathlib import Path

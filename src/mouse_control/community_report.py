@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic, privacy-conscious Automatic Discovery artifact."""
 
 from __future__ import annotations

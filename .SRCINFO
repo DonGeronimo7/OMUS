@@ -1,10 +1,10 @@
 pkgbase = omus
 	pkgdesc = One Mouse Universal System for Linux
-	pkgver = 1.0.4
+	pkgver = 1.1.0
 	pkgrel = 1
 	url = https://github.com/DonGeronimo7/OMUS
 	arch = any
-	license = GPL-3.0-or-later
+	license = AGPL-3.0-or-later
 	makedepends = git
 	makedepends = python-build
 	makedepends = python-installer
@@ -14,7 +14,7 @@ pkgbase = omus
 	depends = python-dbus-next
 	depends = python-packaging
 	depends = systemd
-	source = omus::git+https://github.com/DonGeronimo7/OMUS.git#tag=v1.0.4
+	source = omus::git+https://github.com/DonGeronimo7/OMUS.git#tag=v1.1.0
 	sha256sums = SKIP
 
 pkgname = omus

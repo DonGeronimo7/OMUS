@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the vendor-agnostic protocol repertoire and inference core."""
 
 from __future__ import annotations
@@ -692,3 +693,59 @@ def test_mixed_pushed_state_streams_cannot_form_one_recognition() -> None:
     )
     assert decision.status is RecognitionStatus.CANDIDATE
     assert "coherent-pushed-state-stream" in decision.ranked[0].missing
+
+
+def test_darmoshark_dms_exact_descriptor_is_recognized_but_never_write_authorized() -> None:
+    n = node(vendor=0x248A, product=0xFF12, interface=2)
+    d = descriptor(
+        HidReportDefinition(0x51, "feature", 20, (0x8C,)),
+        HidReportDefinition(0x52, "feature", 64, (0x8C,)),
+        HidReportDefinition(0x54, "input", 20, (0x8C,)),
+    )
+    matches = match_repertoire(physical(vendor=0x248A, product=0xFF12, n=n), {n: d})
+    dms = next(item for item in matches if item.family.name == "darmoshark-dms")
+    assert dms.exact_identity
+    assert dms.score >= dms.family.minimum_match_score
+    assert not dms.write_authorized
+    assert {op.write_command for op in dms.family.operations} == {0x40, 0x41}
+
+
+def test_darmoshark_dms_requires_usage_page_and_does_not_cover_dms_v2() -> None:
+    n = node(vendor=0x248A, product=0xFF12)
+    wrong_usage = descriptor(
+        HidReportDefinition(0x51, "feature", 20, (0xFF00,)),
+        HidReportDefinition(0x52, "feature", 64, (0xFF00,)),
+        HidReportDefinition(0x54, "input", 20, (0xFF00,)),
+    )
+    matches = match_repertoire(physical(vendor=0x248A, product=0xFF12, n=n), {n: wrong_usage})
+    assert all(item.family.name != "darmoshark-dms" for item in matches)
+    assert all("dms_v2" not in item.revision for item in DEFAULT_REPERTOIRE)
+
+
+def test_wlmouse_beastx_exact_descriptor_is_recognized_read_only() -> None:
+    n = node(vendor=0x36A7, product=0xA887, interface=0)
+    d = descriptor(
+        HidReportDefinition(0x04, "input", 64, (0xFF1C,)),
+        HidReportDefinition(0x04, "output", 64, (0xFF1C,)),
+    )
+    matches = match_repertoire(physical(vendor=0x36A7, product=0xA887, n=n), {n: d})
+    beast = next(item for item in matches if item.family.name == "wlmouse-beastx-pages")
+    assert beast.exact_identity
+    assert beast.score >= beast.family.minimum_match_score
+    assert not beast.write_authorized
+    assert beast.family.operations[0].read_command == 0x05
+    assert beast.family.operations[0].write_command == 0x06
+
+
+def test_hidpp_repertoire_models_2202_and_8061_separately_without_generic_match() -> None:
+    hidpp = family("hidpp2")
+    pages = {operation.page for operation in hidpp.operations}
+    assert {0x2201, 0x2202, 0x8060, 0x8061}.issubset(pages)
+    assert next(op for op in hidpp.operations if op.page == 0x2202).write_command == 6
+    assert next(op for op in hidpp.operations if op.page == 0x8061).write_command == 3
+
+    n = node(vendor=0x046D, product=0x9999)
+    assert all(
+        item.family.name != "hidpp2"
+        for item in match_repertoire(physical(vendor=0x046D, product=0x9999, n=n), {n: descriptor()})
+    )

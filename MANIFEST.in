@@ -1,5 +1,5 @@
-include LICENSE CREDITS.md SECURITY.md CONTRIBUTING.md README.md CHANGELOG.md RELEASE_NOTES.md omus.spec
-include PKGBUILD
+include LICENSE CREDITS.md DUAL-LICENSING.md SECURITY.md CONTRIBUTING.md README.md CHANGELOG.md RELEASE_NOTES.md omus.spec
+include PKGBUILD .SRCINFO
 recursive-include .github *.yml *.yaml
 recursive-include .clusterfuzzlite *
 recursive-include docs *.md

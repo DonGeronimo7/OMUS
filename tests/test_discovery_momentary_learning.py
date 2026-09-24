@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Regression tests for momentary guided-action discovery."""
 
 from mouse_control.discovery_models import PhysicalDevice

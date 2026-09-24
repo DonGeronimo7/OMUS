@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Auditable USB HID Usage Tables 1.7 ontology used by interpretation.
 
 The database intentionally describes standardized usages only. Vendor-defined

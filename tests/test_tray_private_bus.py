@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Private session bus integration: never touches the user's desktop."""
 import asyncio
 import shutil

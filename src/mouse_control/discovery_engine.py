@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Automatic, safety-first physical mouse discovery orchestration."""
 
 from __future__ import annotations

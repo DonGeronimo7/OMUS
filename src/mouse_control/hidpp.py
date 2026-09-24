@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Logitech HID++ packet primitives and diagnostic discovery helpers.
 
 Feature indexes are assigned by each device and resolved through ROOT. Runtime

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Persistent read-only profiles learned by physically calibrated discovery.
 
 These profiles are deliberately separate from runtime/write-capability profiles.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Conservative dependent-field inference with retained alternatives."""
 
 from __future__ import annotations

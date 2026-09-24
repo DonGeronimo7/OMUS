@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Human and machine-readable output for automatic hardware discovery.
 
 Presentation is deliberately separate from discovery so the engine stays

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Backend-neutral reversible write-possibility probes for Automatic Discovery.
 
 These probes are research, not runtime authority. They execute only exact-model

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic evdev reconnect lifecycle regression tests."""
 
 import errno

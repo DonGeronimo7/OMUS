@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from copy import deepcopy
 from pathlib import Path
 

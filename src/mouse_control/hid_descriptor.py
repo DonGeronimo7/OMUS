@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Lossless, dependency-free HID report-descriptor schema parser.
 
 This module records descriptor-declared facts. It never infers vendor meaning

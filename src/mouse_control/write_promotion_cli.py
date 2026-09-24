@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Explicit hardware promotion of one DEMONSTRATED learned DPI operation.
 
 The native backend is used only to establish/restore a known safe starting

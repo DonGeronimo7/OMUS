@@ -1,9 +1,11 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from mouse_control.discovery import MouseDevice
 from mouse_control.guided_discovery import GuidedDiscoveryOutcome, GuidedDpiLearningOutcome
+from mouse_control.discovery_view import DiscoveryView
 from mouse_control.setup_flow import SetupChoices
 from mouse_control.setup_tui import ActionKind, SECTIONS, SetupController, SetupSection
 from mouse_control.setup_tui_curses import CursesSetupApp
@@ -97,10 +99,62 @@ def test_deferred_controller_does_not_open_hardware_before_first_frame():
     assert app.backend is None
     assert opened == []
     assert app.detail_rows()[0].text == "Select the mouse to configure."
-
     ready = app.initialized_copy(0)
     assert opened == [MOUSE1]
     assert ready.backend_ready is True
+
+
+def test_discovery_view_is_rendered_in_hardware_and_lab_without_implying_proof():
+    app, _ = controller()
+    view = DiscoveryView(
+        "escalation",
+        ("Interface 2: admitted", "Protocol Genome records: 4",
+         "Advice candidates: 2", "Grammar alternatives: 2"),
+        ("protocol_genome: loaded family knowledge",
+         "grammar: retained 2 alternatives",
+         "escalation: human evidence required"),
+        "change DPI once using the physical DPI button",
+    )
+    app.apply_discovery_view(view)
+    app.section_index = SECTIONS.index(SetupSection.HARDWARE)
+    hardware = "\n".join(row.text for row in app.detail_rows())
+    assert "Discovery engine" in hardware
+    assert "Grammar alternatives: 2" in hardware
+    assert "Next required evidence: change DPI once" in hardware
+    app.section_index = SECTIONS.index(SetupSection.LAB)
+    lab = "\n".join(row.text for row in app.detail_rows())
+    assert "Automatic Discovery boundary" in lab
+    assert "Requested action: change DPI once" in lab
+    assert "No inferred or community evidence grants write authority" in lab
+
+
+def test_device_rebind_clears_stale_discovery_view():
+    app, _ = controller()
+    app.apply_discovery_view(DiscoveryView("grammar", (), (), "capture one action"))
+    app._bind_device(1)
+    assert app.discovery_view is None
+
+
+def test_automatic_outcome_populates_canonical_discovery_view_with_proof_distinction():
+    app, _ = controller()
+    outcome = SimpleNamespace(
+        result=SimpleNamespace(
+            protocol=SimpleNamespace(name="Candidate Family"),
+            capabilities={"dpi": SimpleNamespace(mode="inferred")},
+        ),
+        engine=None,
+        research_plan=SimpleNamespace(
+            blockers=("one physical DPI observation is missing",),
+            deeper_learning_recommended=False,
+        ),
+        cached_profile_used=False,
+        bound_protocol_used=True,
+    )
+    app.apply_automatic_discovery(outcome)
+    assert app.discovery_view is not None
+    assert "RECOGNIZED / UNVERIFIED" in app.discovery_view.overview[0]
+    assert "dpi: inferred" in app.discovery_view.overview[2]
+    assert app.discovery_view.human_action == "one physical DPI observation is missing"
 
 
 def test_known_configured_device_loads_persisted_state_without_automatic_discovery():

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Linux binary-usbmon capture and normalization.
 
 Only the stable binary ABI is used.  The deprecated text format is not parsed.

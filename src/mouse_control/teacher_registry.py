@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Native semantic teacher registry for generic protocol learning.
 
 Teachers are answer keys, never protocol implementations. They may expose

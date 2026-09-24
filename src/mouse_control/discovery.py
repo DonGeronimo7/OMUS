@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Mouse discovery using python-evdev and stable /dev/input/by-id paths."""
 
 from __future__ import annotations

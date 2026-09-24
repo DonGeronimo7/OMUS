@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Project-owned open-set corpus and metric regression tests."""
 
 from dataclasses import replace

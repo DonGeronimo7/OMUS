@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compatibility import for the former generic fallback.
 
 The inert GenericBackend has been replaced by :class:`DiscoveryBackend`.

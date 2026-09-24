@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Regression tests for teacher-free contrastive guided learning."""
 
 from pathlib import Path

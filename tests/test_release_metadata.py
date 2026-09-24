@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 import re
 import tomllib
@@ -88,14 +89,27 @@ def test_rpm_packages_every_declared_console_script():
 
 def test_provenance_record_is_shipped_with_each_release_format():
     with (ROOT / "pyproject.toml").open("rb") as handle:
-        setuptools = tomllib.load(handle)["tool"]["setuptools"]
-    assert setuptools["license-files"] == ["LICENSE", "CREDITS.md"]
+        project = tomllib.load(handle)["project"]
+    assert project["license-files"] == [
+        "LICENSE",
+        "CREDITS.md",
+        "DUAL-LICENSING.md",
+        "docs/LICENSING_PROVENANCE.md",
+    ]
     assert "CREDITS.md" in _text("MANIFEST.in")
+    assert "DUAL-LICENSING.md" in _text("MANIFEST.in")
     assert "CONTRIBUTING.md" in _text("MANIFEST.in")
-    assert "%doc README.md CHANGELOG.md CREDITS.md" in _text("omus.spec")
+    assert "%doc README.md CHANGELOG.md CREDITS.md DUAL-LICENSING.md" in _text("omus.spec")
+    assert "%doc docs/LICENSING_PROVENANCE.md" in _text("omus.spec")
     assert "CREDITS.md" in _text("PKGBUILD")
+    assert "DUAL-LICENSING.md" in _text("PKGBUILD")
+    assert "LICENSING_PROVENANCE.md" in _text("PKGBUILD")
     assert "CREDITS.md" in _text("debian/omus.docs")
+    assert "DUAL-LICENSING.md" in _text("debian/omus.docs")
+    assert "LICENSING_PROVENANCE.md" in _text("debian/omus.docs")
     assert "CREDITS.md" in _text("packaging/appimage/build-appimage.sh")
+    assert "DUAL-LICENSING.md" in _text("packaging/appimage/build-appimage.sh")
+    assert "LICENSING_PROVENANCE.md" in _text("packaging/appimage/build-appimage.sh")
 
 
 def test_no_isolation_build_backend_is_pinned_in_development_environment():
@@ -126,6 +140,7 @@ def test_release_artifacts_smoke_test_primary_cpi_command():
 
 def test_source_archive_includes_repository_security_scripts():
     manifest = _text("MANIFEST.in")
+    assert "include PKGBUILD .SRCINFO" in manifest
     assert "recursive-include scripts *.py *.sh" in manifest
     assert "recursive-include .github *.yml *.yaml" in manifest
     assert "recursive-include requirements *.in *.txt" in manifest

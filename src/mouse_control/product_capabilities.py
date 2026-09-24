@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Auditable CLI-to-TUI product capability inventory.
 
 This is a product map, not command dispatch. Machine-only formatting switches

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Universal hardware entry point.
 
 Callers always receive Automatic Discovery.  Proven vendor/protocol backends are

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Static tripwires for reviewed security boundaries."""
 
 from pathlib import Path

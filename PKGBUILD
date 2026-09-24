@@ -1,10 +1,10 @@
 pkgname=omus
-pkgver=1.0.4
+pkgver=1.1.0
 pkgrel=1
 pkgdesc='One Mouse Universal System for Linux'
 arch=('any')
 url='https://github.com/DonGeronimo7/OMUS'
-license=('GPL-3.0-or-later')
+license=('AGPL-3.0-or-later')
 depends=('python' 'python-evdev' 'python-dbus-next' 'python-packaging' 'systemd')
 makedepends=('git' 'python-build' 'python-installer' 'python-setuptools')
 # Stable source is pinned to the exact upstream release tag.
@@ -32,5 +32,8 @@ package() {
     "$pkgdir/usr/share/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 CREDITS.md "$pkgdir/usr/share/doc/$pkgname/CREDITS.md"
+  install -Dm644 DUAL-LICENSING.md "$pkgdir/usr/share/doc/$pkgname/DUAL-LICENSING.md"
+  install -Dm644 docs/LICENSING_PROVENANCE.md \
+    "$pkgdir/usr/share/doc/$pkgname/LICENSING_PROVENANCE.md"
   install -Dm644 SECURITY.md "$pkgdir/usr/share/doc/$pkgname/SECURITY.md"
 }

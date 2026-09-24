@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reusable value codecs and frame-analysis helpers for protocol discovery."""
 
 from __future__ import annotations

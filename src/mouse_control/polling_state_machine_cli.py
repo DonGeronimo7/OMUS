@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Decisive teacher-free polling state-machine laboratory.
 
 Proves two consecutive generic transitions on one persistent raw HID session:

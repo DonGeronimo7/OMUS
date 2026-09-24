@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Known protocol-family repertoire and conservative structural matcher.
 
 The repertoire is intentionally *not* a device support table.  It records
@@ -235,13 +236,35 @@ HIDPP_SENSOR_DPI = ProtocolOperation(
                   "unique-current-route", "canonical-readback"),
     vendor_evidence="hidpp_driver.py; G305 acceptance; test_native_hid.py",
 )
+HIDPP_EXTENDED_SENSOR_DPI = ProtocolOperation(
+    name="extended-sensor-dpi", page=0x2202, target=0, request_length=6,
+    read_command=5, write_command=6, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("sensor_index", "x_dpi_be16", "y_dpi_be16", "lod"),
+    prerequisite=("dynamic-root", "sensor-capability-flags", "enumerated-bounds",
+                  "unique-current-route", "preserve-current-lod", "canonical-readback"),
+    vendor_evidence=(
+        "OpenLogi HID++ 0x2202 typed protocol; hidpp_driver.py exact implementation; "
+        "local deterministic protocol tests (physical validation still separate)"
+    ),
+)
 HIDPP_REPORT_RATE = ProtocolOperation(
-    name="report-rate", page=0x8060, target=0, request_length=1,
+    name="report-rate", page=0x8060, target=0, request_length=3,
     read_command=1, write_command=2, safety=SafetyClass.REVERSIBLE,
-    payload_fields=("period_ms",),
+    payload_fields=("period_ms", "reserved_zeros_2"),
     prerequisite=("dynamic-root", "enumerated-period-flags", "live-control-ownership",
                   "unique-current-route", "canonical-readback"),
     vendor_evidence="hidpp_driver.py; NativeHidBackend polling policy; G305 acceptance",
+)
+HIDPP_EXTENDED_REPORT_RATE = ProtocolOperation(
+    name="extended-report-rate", page=0x8061, target=0, request_length=3,
+    read_command=2, write_command=3, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("connection_type_or_rate_index", "reserved_zeros_2"),
+    prerequisite=("dynamic-root", "actual-rate-list", "resolved-connection-type",
+                  "live-control-ownership", "unique-current-route", "canonical-readback"),
+    vendor_evidence=(
+        "OpenLogi/usemice HID++ 0x8061 typed protocol; modeled separately from 0x8060; "
+        "runtime writer intentionally withheld until connection routing is proven"
+    ),
 )
 RAZER_DPI = ProtocolOperation(
     name="xy-dpi", page=0x04, target=0x01, request_length=7,
@@ -252,9 +275,102 @@ RAZER_DPI = ProtocolOperation(
     vendor_evidence="native_razer.py; VERIFIED_RAZER_PRODUCTS; OpenRazer corpus",
 )
 
+DMS_DPI = ProtocolOperation(
+    name="dpi-table", page=0x52, target=0, request_length=20,
+    read_command=0x07, write_command=0x40, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("active_index_x3", "five_dpi_u16le", "enabled_level_count"),
+    prerequisite=("exact-dms-identity", "drained-receiver-acks", "snapshot-baseline",
+                  "known-rate-dpi-nibbles", "canonical-snapshot-readback"),
+    vendor_evidence="darmoshark-m3-configurator PROTOCOL.md; hardware-tested M3 grammar",
+)
+DMS_REPORT_RATE = ProtocolOperation(
+    name="report-rate-index", page=0x51, target=0, request_length=20,
+    read_command=0x07, write_command=0x41, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("rate_level_index",),
+    prerequisite=("exact-dms-identity", "profile-proven-rate-map", "snapshot-baseline",
+                  "canonical-snapshot-readback"),
+    vendor_evidence="darmoshark-m3-configurator PROTOCOL.md; only indices 0/1/2 mapped on tested M3",
+)
+BEASTX_PAGE_SETTINGS = ProtocolOperation(
+    name="settings-page", page=0x18, target=0, request_length=64,
+    read_command=0x05, write_command=0x06, safety=SafetyClass.REVERSIBLE,
+    payload_fields=("report_id_04", "crc16_modbus_le", "page_offset", "page_data"),
+    prerequisite=("exact-36a7-a887-identity", "usage-page-ff1c", "page-baseline",
+                  "crc16-modbus", "whole-page-preservation", "page-readback"),
+    vendor_evidence="wlmouse-beastx-windows; hardware-tested Beast X page/CRC grammar",
+)
+
 
 DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
     *LAMZU_AURORA_FAMILIES,
+    ProtocolFamily(
+        name="darmoshark-dms",
+        revision="m3-hardware-tested-v1",
+        sources=(
+            _source(
+                "darmoshark-m3-configurator",
+                "PROTOCOL.md and tested M3 implementation",
+                SourceTrust.HARDWARE_VERIFIED,
+                verified_on="Darmoshark/Attack Shark M3",
+                notes=(
+                    "Public reverse engineering from the vendor WebHID configurator. "
+                    "OMUS imports recognition/codec knowledge only; local physical proof remains separate."
+                ),
+            ),
+        ),
+        signatures=(
+            ReportSignature("feature", 0x51, exact_length=20, required_usage_page=0x8C, weight=6),
+            ReportSignature("feature", 0x52, exact_length=64, required_usage_page=0x8C, weight=6),
+            ReportSignature("input", 0x54, exact_length=20, required_usage_page=0x8C, weight=4),
+        ),
+        vendor_ids=(0x248A,),
+        product_ids=(0xFF12, 0xFF30),
+        transports=(TransportKind.HID_FEATURE_GET, TransportKind.HID_FEATURE_SET, TransportKind.HID_INPUT),
+        operations=(DMS_DPI, DMS_REPORT_RATE),
+        write_scope=WriteScope.NEVER,
+        identity_required=True,
+        minimum_match_score=13,
+        notes=(
+            "Exact M3 dms grammar. dms_v2 is deliberately excluded. Receiver ACKs are stale-prone; "
+            "no public evidence is promoted to OMUS write authority without local experiment proof."
+        ),
+    ),
+    ProtocolFamily(
+        name="wlmouse-beastx-pages",
+        revision="36a7-a887-tested-v1",
+        sources=(
+            _source(
+                "wlmouse-beastx-windows",
+                "tested Beast X HID page protocol",
+                SourceTrust.HARDWARE_VERIFIED,
+                verified_on="WLMOUSE Beast X 36A7:A887",
+                notes=(
+                    "64-byte report-ID 4 page protocol with CRC16/MODBUS. "
+                    "Cross-model WLMOUSE transfer is not assumed."
+                ),
+            ),
+        ),
+        signatures=(
+            ReportSignature(
+                "input", 0x04, exact_length=64, required_usage_page=0xFF1C,
+                required_interface_number=0, weight=7,
+            ),
+            ReportSignature(
+                "output", 0x04, exact_length=64, required_usage_page=0xFF1C,
+                required_interface_number=0, weight=7,
+            ),
+        ),
+        vendor_ids=(0x36A7,), product_ids=(0xA887,),
+        transports=(TransportKind.HID_INPUT, TransportKind.HID_OUTPUT),
+        operations=(BEASTX_PAGE_SETTINGS,),
+        write_scope=WriteScope.NEVER,
+        identity_required=True,
+        minimum_match_score=16,
+        notes=(
+            "Exact tested Beast X identity only. Pure codecs exist in public_protocols.py; "
+            "writes remain disabled until OMUS proves page preservation/readback/rollback on hardware."
+        ),
+    ),
     ProtocolFamily(
         name="bitmouse-72",
         revision="semantic-frame-v1",
@@ -318,7 +434,10 @@ DEFAULT_REPERTOIRE: tuple[ProtocolFamily, ...] = (
     ProtocolFamily(
         name="hidpp2",
         revision="dynamic-root",
-        operations=(HIDPP_SENSOR_DPI, HIDPP_REPORT_RATE),
+        operations=(
+            HIDPP_SENSOR_DPI, HIDPP_EXTENDED_SENSOR_DPI,
+            HIDPP_REPORT_RATE, HIDPP_EXTENDED_REPORT_RATE,
+        ),
         sources=(
             _source(
                 "mouse-control",

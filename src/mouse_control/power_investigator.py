@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Conservative battery, charging, and power-state analysis for Discovery Lab.
 
 The investigator consumes existing selected-device evidence.  It performs no

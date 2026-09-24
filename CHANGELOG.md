@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.1.0 — Bounded Automatic Discovery and AGPL transition
+
+### Automatic Discovery and Lab
+
+- Integrate the canonical quarantine → identity → Protocol Genome → active
+  fingerprint → Advice → bounded inference → proof/Lab pipeline across all 20
+  currently compiled repertoire families and 62 operation-specific records.
+- Preserve exact source/evidence ancestry, deterministic budgets, alternative
+  interpretations, and one precise human action when physical proof is needed.
+- Add compact runtime recipes with strict schema, identity, descriptor,
+  firmware, generation, and evidence-revision validation.
+- Return Lab evidence to the same EvidenceGraph and keep professional/manual
+  proof distinct from automatic recognition or inference.
+
+### TUI and safety
+
+- Present recognized, inferred, and proven state separately in the canonical
+  Hardware Discovery and Lab pages, including the stopping reason and exact Lab
+  action, without changing established navigation.
+- Fail closed on ambiguity, stale generations, invalidated evidence, malformed
+  or excessive input, unsafe interfaces, and unproven write authority.
+- Persist recipes atomically and reject corruption, symlinks, schema drift,
+  oversized input, and stale evidence. Corpus and community knowledge cannot
+  grant hardware-write authority.
+
+### Native support and validation boundary
+
+- Preserve the physically validated Logitech G305 HID++ reference path and the
+  independently implemented native Razer path with their existing exact-model,
+  readback, ambiguity, and failure-isolation rules.
+- Compile corpus knowledge for additional protocol families without claiming
+  physical validation or writable support for every represented device.
+
+### Licensing and supply chain
+
+- License the current development and release tree as `AGPL-3.0-or-later` and
+  document separately available commercial terms. Historical releases retain
+  the licenses applicable when they were distributed.
+- Retain pinned workflows, hash-locked dependencies, CodeQL, OpenSSF Scorecard,
+  CycloneDX SBOM generation, checksums, SLSA provenance/attestation, exact
+  artifact allowlists, and reproducible-wheel validation as release gates.
+
 ## 1.0.4 — Runtime persistence and safe capability proof
 
 ### Reliability and DPI correctness
