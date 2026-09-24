@@ -1860,3 +1860,21 @@ Request: user attachment `pasted-text.txt` on
 - Deferred: explicit interface quarantine, parser/grammar inference, a real
   kernel HID-BPF adapter, Virtual Oracle transport adapters, machine-readable
   Protocol Genome expansion, firmware dry-run infrastructure, and TUI/Lab UI.
+## 2026-09-24 — Deferred Discovery autonomy offline checkpoint
+
+- Continued `codex/autonomous-discovery-ir` from `28f76c3` with explicit
+  interface quarantine, grammar alternatives, Protocol Genome ingestion,
+  offline Discovery escalation, HID-BPF lifecycle/fallback, Oracle teaching
+  replay, and non-writing firmware dry-run infrastructure.
+- Safety: unknown/normal-input interfaces remain observation-only; bootloader
+  mutation is rejected into a separate trust domain; stale generations and
+  descriptor mismatches are refused; every new research/firmware result is
+  non-authorizing.
+- Validation: baseline 1,403 passed / one skip; final 1,417 passed / the same
+  private-bus skip. Focused performance tests pass; exact quarantine admission
+  measured 935 ns best-of-five over 10,000 loops. Compileall, diff check,
+  dependency-lock verification, and workflow security policy pass. Ruff was
+  unavailable in the system Python environment.
+- Deferred external gates: live HID-BPF kernel program/attachment, UHID or
+  USB/IP surface, vendor-application exercise, family-specific firmware
+  container parsers, canonical TUI screens, and physical hardware acceptance.

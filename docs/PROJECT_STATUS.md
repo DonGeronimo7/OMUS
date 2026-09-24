@@ -1,5 +1,23 @@
 # OMUS Project Status
 
+## 2026-09-24 — Deferred Discovery autonomy offline checkpoint
+
+- Added exact, generation-bound research-interface quarantine with separate
+  normal-input, configuration, receiver, firmware, bootloader, and unknown
+  roles. Passive observation remains the default; mutation needs an exact
+  descriptor/role policy and still requires the existing experiment authority.
+- Added conservative trace grammar inference, retained byte-order alternatives,
+  operation-specific Protocol Genome records with transitive evidence
+  invalidation, and an offline orchestrator that reports the exact evidence or
+  human action needed when automatic analysis cannot continue.
+- Added a testable HID-BPF loader lifecycle shell, deterministic Virtual Oracle
+  teaching replay, and firmware artifact inspection/dry-run matching. These
+  paths provide no physical write primitive and do not claim live kernel,
+  UHID, vendor-software, firmware-update, or hardware validation.
+- The new modules are outside the input forwarding path. Exact interface
+  admission benchmarks below one microsecond on the development workstation;
+  existing performance regressions remain green.
+
 ## 2026-09-24 — Discovery autonomy P0 software checkpoint
 
 - Reconciled the September 21 deterministic Discovery implementation over the
