@@ -19,7 +19,6 @@ from mouse_control.learned_operations import (
     StableInterfaceIdentity,
     operation_from_grammar,
 )
-from mouse_control.protocol_grammar import SemanticBehavior
 from mouse_control.transaction_inference import demonstration_from_trace, infer_transaction_grammar
 
 

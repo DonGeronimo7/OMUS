@@ -117,3 +117,14 @@ service. Razer hardware was unavailable.
 
 These are documented non-blocking limitations for beginning hosted release
 gates; they are not represented as executed acceptance.
+
+## Hosted gate correction
+
+The first protected CI run for pull request #24 failed the
+`repository-security` job because Ruff found two unused imports in test files.
+All licensing, dependency-lock, workflow-policy, Python 3.12/3.13/3.14, and RPM
+steps that completed in that run passed; the reproducible-wheel step was
+skipped after the lint failure. The two imports were removed without changing
+test behavior or runtime code. This correction requires a new release-candidate
+commit and a complete rerun of local and hosted gates; commit `589ceaed` and
+its local artifact hashes are superseded for publication.

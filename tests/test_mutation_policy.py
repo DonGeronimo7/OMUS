@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import pytest
 
-from mouse_control.experiment_authority import StorageEffect
 from mouse_control.mutation_policy import (
     MutationClassification,
     MutationOutcome,

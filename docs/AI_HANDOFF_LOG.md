@@ -1958,3 +1958,12 @@ Request: user attachment `pasted-text.txt` on
   contents, offline versus physical evidence, hosted-only SBOM status, and
   licensing follow-up. No push, merge, tag, publication, installation, service
   restart, firmware action, or unknown-device write occurred.
+
+## 2026-09-24 — v1.1.0 hosted lint correction
+
+- Protected CI on release pull request #24 found two unused test imports that
+  local gates had not exercised because Ruff was unavailable in the base
+  environment. Runtime behavior and test assertions were unaffected.
+- Removed only the unused imports from `tests/test_discovery_execution.py` and
+  `tests/test_mutation_policy.py`. Per release policy this is a new candidate;
+  the prior commit and artifact hashes are not publication inputs.
