@@ -1846,3 +1846,17 @@ Request: user attachment `pasted-text.txt` on
   reinsert the G305 receiver, and verify that the temporary Generic bind is
   followed by Native HID promotion and resumed one-notification-per-DPI press.
   That physical receiver-reinsert validation remains pending.
+## 2026-09-24 — Discovery autonomy P0 software checkpoint
+
+- Starting point: `codex/autonomous-discovery-ir` at `7f967cf`; reconciled the
+  exact September 21 implementation bundle, then added offline fingerprint,
+  advice, ordered/register, planner, and family-equivalence layers.
+- Safety: all new layers are transport-free and non-authorizing; reversible
+  planner candidates require the existing eligible `ExperimentAuthority`, a
+  current generation, valid evidence, baseline, verifier, and rollback.
+- Validation: pre-change full suite 1,320 passed / one skip; reconciled focused
+  suite 146 passed; final full suite 1,403 passed / one existing private-bus
+  skip. Physical validation was not performed.
+- Deferred: explicit interface quarantine, parser/grammar inference, a real
+  kernel HID-BPF adapter, Virtual Oracle transport adapters, machine-readable
+  Protocol Genome expansion, firmware dry-run infrastructure, and TUI/Lab UI.

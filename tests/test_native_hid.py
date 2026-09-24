@@ -502,3 +502,176 @@ def test_protocol_probe_invalid_slots_never_send(indexes):
         assert session._io.writes == []
     finally:
         session.close()
+
+
+def test_extended_dpi_2202_is_used_when_2201_is_absent_and_preserves_lod():
+    from mouse_control.hidpp_driver import EXTENDED_ADJUSTABLE_DPI_FEATURE_ID
+
+    class ExtendedSession(FakeSession):
+        def __init__(self, *, mismatch=False, independent=True):
+            super().__init__()
+            self.extended_dpi = 800
+            self.extended_y = 800 if independent else 0
+            self.lod = 2
+            self.independent = independent
+            self.mismatch = mismatch
+
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0:
+                feature_id = int.from_bytes(parameters[:2], "big")
+                if feature_id == ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0a, b"\0\0\0")
+                if feature_id == EXTENDED_ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0a, bytes((0x2B, 0, 1)))
+            if feature == 0x2B and function == 0:
+                result = b"\x01"
+            elif feature == 0x2B and function == 1:
+                result = bytes((0, 5, 0x01 if self.independent else 0x00))
+            elif feature == 0x2B and function == 2:
+                # Echo sensor, direction, page; 400, step 50, max 3200, terminator.
+                result = bytes((0, 0, parameters[2])) + bytes.fromhex("0190 e032 0c80 0000")
+            elif feature == 0x2B and function == 5:
+                result = (bytes((0,)) + self.extended_dpi.to_bytes(2, "big")
+                          + (800).to_bytes(2, "big")
+                          + self.extended_y.to_bytes(2, "big")
+                          + (800 if self.independent else 0).to_bytes(2, "big")
+                          + bytes((self.lod,)))
+            elif feature == 0x2B and function == 6:
+                assert len(parameters) == 6
+                assert parameters[5] == self.lod
+                requested_x = int.from_bytes(parameters[1:3], "big")
+                requested_y = int.from_bytes(parameters[3:5], "big")
+                self.extended_dpi = requested_x + 1 if self.mismatch else requested_x
+                self.extended_y = requested_y + 1 if self.mismatch and requested_y else requested_y
+                result = b""
+            else:
+                return super().request(device, feature, function, parameters)
+            self.calls.append((device, feature, function, parameters))
+            return HidppReport(0x11, device, feature, function, 0x0a, result)
+
+    session = ExtendedSession(independent=True)
+    driver = Hidpp20Driver(session, 1)
+    assert ADJUSTABLE_DPI_FEATURE_ID not in driver.features
+    assert driver.features[EXTENDED_ADJUSTABLE_DPI_FEATURE_ID].index == 0x2B
+    assert driver.capabilities.dpi.independent_axes
+    assert driver.capabilities.dpi.stage_count == 5
+    assert driver.capabilities.dpi.ranges[0].minimum == 400
+    assert driver.capabilities.dpi.ranges[0].maximum == 3200
+    assert driver.get_dpi_state() == DpiState(800, 800, confirmed=True)
+    assert driver.set_dpi(1500) == DpiState(1500, 1500, confirmed=True)
+    set_call = next(call for call in session.calls if call[1:3] == (0x2B, 6))
+    assert set_call[3] == bytes.fromhex("00 05dc 05dc 02")
+
+
+def test_extended_dpi_2202_links_y_when_independent_axis_is_unsupported():
+    from mouse_control.hidpp_driver import EXTENDED_ADJUSTABLE_DPI_FEATURE_ID
+
+    class LinkedExtended(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.value = 800
+            self.last_set = None
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0:
+                fid = int.from_bytes(parameters[:2], "big")
+                if fid == ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0a, b"\0\0\0")
+                if fid == EXTENDED_ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0a, bytes((0x2B, 0, 1)))
+            if feature == 0x2B and function == 0:
+                result = b"\x01"
+            elif feature == 0x2B and function == 1:
+                result = bytes((0, 0, 0))
+            elif feature == 0x2B and function == 2:
+                result = bytes((0, 0, parameters[2])) + bytes.fromhex("0320 0640 0000")
+            elif feature == 0x2B and function == 5:
+                result = bytes((0,)) + self.value.to_bytes(2, "big") + (800).to_bytes(2, "big") + bytes(4) + b"\x01"
+            elif feature == 0x2B and function == 6:
+                self.last_set = bytes(parameters)
+                self.value = int.from_bytes(parameters[1:3], "big")
+                result = b""
+            else:
+                return super().request(device, feature, function, parameters)
+            return HidppReport(0x11, device, feature, function, 0x0a, result)
+
+    session = LinkedExtended()
+    driver = Hidpp20Driver(session, 1)
+    assert not driver.capabilities.dpi.independent_axes
+    assert driver.set_dpi(1600) == DpiState(1600, None, confirmed=True)
+    assert session.last_set == bytes.fromhex("00 0640 0000 01")
+
+
+def test_extended_dpi_2202_rejects_malformed_page_echo_and_verification_mismatch():
+    from mouse_control.hidpp_driver import EXTENDED_ADJUSTABLE_DPI_FEATURE_ID
+
+    class BadPage(FakeSession):
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0:
+                fid = int.from_bytes(parameters[:2], "big")
+                if fid == ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0a, b"\0\0\0")
+                if fid == EXTENDED_ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0a, bytes((0x2B, 0, 1)))
+            if feature == 0x2B and function == 0:
+                return HidppReport(0x11, device, feature, function, 0x0a, b"\x01")
+            if feature == 0x2B and function == 1:
+                return HidppReport(0x11, device, feature, function, 0x0a, bytes((0, 0, 0)))
+            if feature == 0x2B and function == 2:
+                return HidppReport(0x11, device, feature, function, 0x0a, bytes((0, 1, 0)) + bytes.fromhex("0320 0000"))
+            return super().request(device, feature, function, parameters)
+
+    driver = Hidpp20Driver(BadPage(), 1)
+    assert not driver.capabilities.dpi.readable
+
+
+def test_extended_dpi_parameter_decoder_rejects_bad_lod():
+    from mouse_control.hidpp_driver import decode_extended_dpi_parameters
+    with pytest.raises(HidppError):
+        decode_extended_dpi_parameters(bytes.fromhex("00 0320 0320 0000 0000 09"))
+
+
+def test_extended_dpi_2202_parameters_changed_event_is_authoritative_without_extra_query():
+    from mouse_control.hidpp_driver import EXTENDED_ADJUSTABLE_DPI_FEATURE_ID
+
+    class ExtendedEvents(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.extended_reads = 0
+
+        def request(self, device, feature, function, parameters=b""):
+            if feature == 0 and function == 0:
+                fid = int.from_bytes(parameters[:2], "big")
+                if fid == ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0A, b"\0\0\0")
+                if fid == EXTENDED_ADJUSTABLE_DPI_FEATURE_ID:
+                    return HidppReport(0x11, device, feature, function, 0x0A, bytes((0x2B, 0, 1)))
+            if feature == 0x2B and function == 0:
+                result = b"\x01"
+            elif feature == 0x2B and function == 1:
+                result = bytes((0, 0, 0x01))
+            elif feature == 0x2B and function == 2:
+                result = bytes((0, 0, parameters[2])) + bytes.fromhex("0320 0640 0000")
+            elif feature == 0x2B and function == 5:
+                self.extended_reads += 1
+                result = bytes.fromhex("00 0320 0320 0320 0320 01")
+            else:
+                return super().request(device, feature, function, parameters)
+            return HidppReport(0x11, device, feature, function, 0x0A, result)
+
+    session = ExtendedEvents()
+    driver = Hidpp20Driver(session, 1)
+    assert driver.capabilities.dpi.events
+    stop, states = threading.Event(), []
+    thread = threading.Thread(target=driver.watch_dpi, args=(states.append, stop))
+    thread.start()
+    while not session.callbacks:
+        time.sleep(0.001)
+    reads_before = session.extended_reads
+    session.callbacks[0](HidppReport(
+        0x11, 1, 0x2B, 0, 0, bytes.fromhex("00 07d0 07d0 02")
+    ))
+    while not states:
+        time.sleep(0.001)
+    stop.set(); thread.join(timeout=1)
+    assert states == [DpiState(2000, 2000, confirmed=True)]
+    assert session.extended_reads == reads_before

@@ -174,7 +174,8 @@ def compile_proof_plan(ir: PeripheralIR, capability: CapabilityKind, baseline: i
 
 
 def patch_candidate_state(baseline: bytes, field: FieldBinding, value: int,
-                          domain: ValueDomain, *, report_size: int) -> bytes:
+                          domain: ValueDomain, *, report_size: int,
+                          mutation_policy=None) -> bytes:
     """Offline RMW proposal. Unknown bytes and untargeted bits remain intact.
 
     Does not synthesize commands/checksums or send reports. An executable driver
@@ -201,4 +202,7 @@ def patch_candidate_state(baseline: bytes, field: FieldBinding, value: int,
     result[field.offset:field.offset + field.width] = encoded
     if decode_value(encoded, codec, width=field.width) != value:
         raise ValueError("codec does not roundtrip")
-    return bytes(result)
+    candidate = bytes(result)
+    if mutation_policy is not None:
+        mutation_policy.require_candidate(baseline, candidate)
+    return candidate

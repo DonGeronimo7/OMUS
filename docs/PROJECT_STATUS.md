@@ -1,5 +1,22 @@
 # OMUS Project Status
 
+## 2026-09-24 — Discovery autonomy P0 software checkpoint
+
+- Reconciled the September 21 deterministic Discovery implementation over the
+  v1.0.4-derived IR branch: bounded experiment execution, mutation policy,
+  public protocol codecs/priors, HID++ 0x2202 vocabulary, symbolic actions,
+  reactive modeling, Virtual Peripheral Oracle core, and HID-BPF admission
+  contract. No public/static evidence grants runtime write authority.
+- Added offline active fingerprint selection, a provenance-bound Advice
+  Compiler, ordered/register dialogue inference, bounded autonomous candidate
+  ranking through the existing `ExperimentAuthority`, and explicit scoped
+  family-equivalence hypotheses. Passive/read evidence is preferred; stale
+  generations, invalidated evidence, missing baselines/verifiers/rollback, and
+  hidden-state conflicts are refused.
+- Automated validation is software-only. No new device, HID-BPF kernel adapter,
+  virtual transport adapter, cross-model writer, or firmware operation is
+  physically validated or enabled by this checkpoint.
+
 ## 2026-09-20 — Offline Discovery IR/evidence foundation
 
 - Dedicated local branch adds capability IR, differential proof-plan compilation,
