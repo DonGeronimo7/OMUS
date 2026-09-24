@@ -1967,3 +1967,8 @@ Request: user attachment `pasted-text.txt` on
 - Removed only the unused imports from `tests/test_discovery_execution.py` and
   `tests/test_mutation_policy.py`. Per release policy this is a new candidate;
   the prior commit and artifact hashes are not publication inputs.
+- The first tagged artifact workflow subsequently exposed Ubuntu 24.04's old
+  system setuptools rejecting the PEP 639 license string during the Debian
+  build. Publication was skipped. The release workflow now supplies the
+  hash-locked build backend through an isolated, system-site-aware venv so the
+  Debian build retains distro runtime dependencies and modern license metadata.

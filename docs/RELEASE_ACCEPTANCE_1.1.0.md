@@ -128,3 +128,12 @@ skipped after the lint failure. The two imports were removed without changing
 test behavior or runtime code. This correction requires a new release-candidate
 commit and a complete rerun of local and hosted gates; commit `589ceaed` and
 its local artifact hashes are superseded for publication.
+
+The first tagged artifact run then failed before publication because Ubuntu
+24.04's system setuptools rejected the modern PEP 639 SPDX-string license
+metadata. Python, AppImage, RPM, and the three Python test jobs passed, while
+the Debian failure correctly skipped publish, SBOM, provenance, and
+VirusTotal. The Debian job now creates a system-site-aware virtual environment
+and installs the repository's hash-locked build backend before invoking
+`dpkg-buildpackage`; reverting to legacy license metadata was rejected because
+it would remove the required wheel `License-Expression` contract.
