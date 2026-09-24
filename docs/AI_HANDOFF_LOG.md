@@ -1878,3 +1878,22 @@ Request: user attachment `pasted-text.txt` on
 - Deferred external gates: live HID-BPF kernel program/attachment, UHID or
   USB/IP surface, vendor-application exercise, family-specific firmware
   container parsers, canonical TUI screens, and physical hardware acceptance.
+## 2026-09-24 — Discovery integration and corpus hardening checkpoint
+
+- Continued from `2f3c074`; connected quarantine, Protocol Genome, active
+  fingerprinting, Advice, grammar inference and escalation through one offline
+  decision pipeline with a TUI-ready presentation model.
+- Populated Genome records from all 20 existing repertoire families (62
+  identity/operation records), preserving operation-specific proof and never
+  translating repertoire knowledge into `WRITE_VERIFIED` authority.
+- Added finite integrity candidates (sum/XOR, reviewed CRC8/16/32 forms),
+  bitfields, repeated records, cross-model alignment, compact recipe
+  validation/invalidation, and non-authorizing community evidence categories.
+- Validation: baseline 1,417 passed / one skip; final 1,429 passed / the same
+  private-bus skip. Compileall, diff check, dependency-lock verification,
+  workflow security policy, and performance tests pass. Recipe decode: 3.41
+  us; interface admission: 923 ns. Ten-thousand recipe loads peaked at
+  5,053,377 bytes with 242,936 bytes current after the temporary list release.
+- Remaining external/feature gates: real kernel HID-BPF attachment, UHID/vendor
+  exercise, family-specific firmware parsers, full-screen TUI controller
+  wiring, exhaustive request/reply timing inference, and physical acceptance.

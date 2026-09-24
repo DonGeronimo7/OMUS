@@ -1,5 +1,24 @@
 # OMUS Project Status
 
+## 2026-09-24 — Discovery integration and corpus hardening checkpoint
+
+- The canonical offline pipeline now joins exact interface quarantine, existing
+  repertoire-to-Genome compilation, active fingerprint selection, Advice
+  compilation, grammar inference, and precise human escalation in one
+  explainable execution trace. Descriptor mismatch fails before corpus work.
+- All 20 existing protocol-repertoire families compile into 62 independent
+  identity/operation Genome records. This includes current HID++, native Razer,
+  LAMZU, Darmoshark, WLMOUSE, RAWM and other established repertoire knowledge;
+  no compiled corpus record is promoted to `WRITE_VERIFIED` by translation.
+- Added bounded checksum/CRC candidates, controlled bitfield inference,
+  repeated-record detection, cross-model alignment, compact runtime recipes,
+  and attributed community evidence. Ambiguity and invalidated evidence fail
+  closed. A small canonical presentation model exposes pipeline decisions and
+  the next requested human action for later full-screen TUI wiring.
+- Compact recipe decode measures 3.41 microseconds and interface admission 923
+  nanoseconds on the development workstation. Research graph traversal and
+  inference remain outside the runtime input path.
+
 ## 2026-09-24 — Deferred Discovery autonomy offline checkpoint
 
 - Added exact, generation-bound research-interface quarantine with separate
