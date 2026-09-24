@@ -33,6 +33,9 @@ class CommunityReport:
 def ingest_report(graph: EvidenceGraph, report: CommunityReport) -> str:
     if not report.model or not report.feature or not report.reference:
         raise ValueError("attributed community report required")
+    if any(len(item) > 4096 for item in (report.model, report.omus_version, report.connection,
+                                         report.feature, report.firmware, report.reference)):
+        raise ValueError("community report field exceeds import bound")
     return graph.add(EvidenceNode("source", json.dumps({"type": "community_report", **asdict_report(report)},
                                                        sort_keys=True), f"community:{report.reference}"))
 

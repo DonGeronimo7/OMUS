@@ -62,6 +62,8 @@ def _crc16_modbus(data: bytes) -> int:
 def infer_integrity(frames: tuple[tuple[bytes, str], ...], *, field_offset: int,
                     width: int = 1) -> tuple[IntegrityCandidate, ...]:
     """Test a finite reviewed family of integrity algorithms."""
+    if len(frames) > 4096 or any(len(frame) > 4096 for frame, _ in frames):
+        raise ValueError("integrity inference input exceeds deterministic bounds")
     if len(frames) < 2 or width not in (1, 2, 4):
         return ()
     evidence = tuple(dict.fromkeys(item[1] for item in frames))
@@ -97,6 +99,8 @@ def infer_integrity(frames: tuple[tuple[bytes, str], ...], *, field_offset: int,
 
 def infer_bitfield(samples: tuple[tuple[int, int, str], ...]) -> BitfieldCandidate | None:
     """Infer changed bits from controlled (raw, semantic, evidence) samples."""
+    if len(samples) > 4096:
+        raise ValueError("bitfield inference input exceeds deterministic bounds")
     if len(samples) < 2 or len({semantic for _, semantic, _ in samples}) < 2:
         return None
     changed = 0
@@ -113,6 +117,8 @@ def infer_bitfield(samples: tuple[tuple[int, int, str], ...]) -> BitfieldCandida
 
 def infer_repeated_records(payload: bytes, *, evidence: tuple[str, ...],
                            allowed_widths: tuple[int, ...] = (2, 4, 8, 16)) -> tuple[RepeatedRecordCandidate, ...]:
+    if len(payload) > 65536 or len(allowed_widths) > 64:
+        raise ValueError("record inference input exceeds deterministic bounds")
     result = []
     for width in allowed_widths:
         for offset in range(min(width, len(payload))):
@@ -126,6 +132,8 @@ def infer_repeated_records(payload: bytes, *, evidence: tuple[str, ...],
 
 
 def align_models(left: bytes, right: bytes) -> CrossModelAlignment:
+    if len(left) > 65536 or len(right) > 65536:
+        raise ValueError("cross-model alignment input exceeds deterministic bounds")
     prefix = 0
     while prefix < min(len(left), len(right)) and left[prefix] == right[prefix]:
         prefix += 1

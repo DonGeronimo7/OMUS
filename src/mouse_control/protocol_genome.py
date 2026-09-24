@@ -40,6 +40,13 @@ class GenomeDevice:
 
 
 def ingest_genome_device(graph: EvidenceGraph, device: GenomeDevice) -> tuple[str, ...]:
+    if (not device.family.strip() or not device.model.strip()
+            or len(device.operations) > 4096):
+        raise ValueError("malformed or excessive Genome device")
+    for operation in device.operations:
+        if (not operation.name.strip() or len(operation.legal_values) > 4096
+                or len(operation.evidence) > 4096 or len(operation.hazards) > 4096):
+            raise ValueError("malformed or excessive Genome operation")
     if any(ref not in graph.valid_ids for op in device.operations for ref in op.evidence):
         raise ValueError("genome references missing or invalidated evidence")
     identity = graph.add(EvidenceNode("hypothesis", json.dumps({

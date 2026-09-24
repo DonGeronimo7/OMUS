@@ -1,5 +1,24 @@
 # OMUS Project Status
 
+## 2026-09-24 — Final Discovery engineering-hardening checkpoint
+
+- Canonical Automatic Discovery outcomes now feed the existing full-screen
+  Hardware Discovery and Lab pages. Recognition, inferred state, proven state,
+  fast-path reuse, stopping reason, and one requested human action are visibly
+  distinct; device rebinding clears the presentation snapshot.
+- Compact runtime recipes now validate generation and evidence revision as well
+  as identity, descriptor, firmware, and evidence ancestry. Parsing is strict
+  and bounded; persistence is atomic and rejects corruption, oversized files,
+  symlinks, schema drift, extra/missing fields, and invalid value domains.
+- EvidenceGraph, Genome, pipeline, community-import, and grammar/integrity/
+  bitfield/record/alignment entry points have explicit deterministic budgets.
+  Unknown or excessive input fails closed without changing runtime authority.
+- Offline HID++ and native Razer corpus paths remain distinct and
+  non-authorizing. Full source suite passes 1,435 tests with the existing
+  private-bus skip; source distribution and wheel builds succeed. Physical
+  G305, Razer, HID-BPF, UHID/vendor-app, and unknown-device acceptance remain
+  separate unexecuted gates.
+
 ## 2026-09-24 — Discovery integration and corpus hardening checkpoint
 
 - The canonical offline pipeline now joins exact interface quarantine, existing

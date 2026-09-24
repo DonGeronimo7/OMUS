@@ -38,6 +38,9 @@ def run_discovery_pipeline(graph: EvidenceGraph, *, interface: ResearchInterface
                            hypotheses: tuple[FingerprintHypothesis, ...],
                            probes: tuple[FingerprintProbe, ...],
                            examples: tuple[TraceExample, ...]) -> DiscoveryResult:
+    if (len(families) > 256 or len(hypotheses) > 4096 or len(probes) > 4096
+            or len(examples) > 4096):
+        raise ValueError("Discovery pipeline input exceeds deterministic bounds")
     trace = []
     admission = admit_interface(interface, InterfaceAccess.READ,
                                 current_generation=current_generation, policies=policies)

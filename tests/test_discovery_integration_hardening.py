@@ -9,7 +9,7 @@ from mouse_control.community_evidence import CommunityReport, ReportCategory, in
 from mouse_control.discovery_pipeline import run_discovery_pipeline
 from mouse_control.discovery_view import build_discovery_view
 from mouse_control.evidence_graph import EvidenceGraph, EvidenceNode
-from mouse_control.fast_recipe import FastRecipe
+from mouse_control.fast_recipe import FastRecipe, FastRecipeStore
 from mouse_control.grammar_inference import TraceExample
 from mouse_control.interface_quarantine import InterfacePolicy, InterfaceRole, ResearchInterface
 from mouse_control.protocol_prior import import_protocol_family_prior
@@ -96,16 +96,59 @@ def test_pipeline_fails_closed_on_descriptor_change_before_corpus_work() -> None
 def test_fast_recipe_is_small_and_invalidates_identity_firmware_descriptor_or_evidence() -> None:
     graph = EvidenceGraph(); eid = graph.add(EvidenceNode("verification", "readback", "test"))
     recipe = FastRecipe("device", 2, "a" * 64, "1.0", "query/set/readback", "u16le",
-                        (800, 1600), "host-mode", "canonical-readback", "generation", (eid,))
+                        (800, 1600), "host-mode", "canonical-readback", "generation", (eid,),
+                        generation=7, evidence_revision="rev-1")
     encoded = recipe.dumps(); assert len(encoded) < 1024 and FastRecipe.loads(encoded) == recipe
     assert recipe.validate(identity_fingerprint="device", descriptor_sha256="a" * 64,
-                           firmware="1.0", valid_evidence=graph.valid_ids)[0]
+                           firmware="1.0", valid_evidence=graph.valid_ids,
+                           current_generation=7, evidence_revision="rev-1")[0]
     graph.invalidate(eid, "contradiction")
     ok, reasons = recipe.validate(identity_fingerprint="other", descriptor_sha256="b" * 64,
-                                  firmware="2.0", valid_evidence=graph.valid_ids)
-    assert not ok and len(reasons) == 4
+                                  firmware="2.0", valid_evidence=graph.valid_ids,
+                                  current_generation=8, evidence_revision="rev-2")
+    assert not ok and len(reasons) == 6
     with pytest.raises((ValueError, TypeError, json.JSONDecodeError)):
         FastRecipe.loads('{"schema":99}')
+
+
+def test_recipe_store_is_atomic_bounded_and_rejects_corruption_and_symlink(tmp_path) -> None:
+    recipe = FastRecipe("device", 2, "a" * 64, "1.0", "query", "u16", (800,),
+                        "host", "readback", "generation", ("e",), 7, "rev")
+    path = tmp_path / "recipe.json"
+    store = FastRecipeStore()
+    store.save(path, recipe)
+    assert store.load(path) == recipe
+    path.write_text("{broken", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid compact recipe"):
+        store.load(path)
+    target = tmp_path / "target"
+    target.write_text(recipe.dumps(), encoding="utf-8")
+    path.unlink()
+    path.symlink_to(target)
+    with pytest.raises(ValueError, match="unsafe"):
+        store.load(path)
+
+
+def test_inference_and_pipeline_budgets_fail_closed() -> None:
+    from mouse_control.grammar_inference import infer_grammars
+    with pytest.raises(ValueError, match="bounds"):
+        infer_grammars(tuple(TraceExample(b"", b"", None, "e") for _ in range(4097)))
+    with pytest.raises(ValueError, match="bounds"):
+        infer_repeated_records(b"x" * 65537, evidence=("e",))
+
+
+def test_known_hidpp_and_native_razer_corpus_remain_distinct_non_authorizing_paths() -> None:
+    hidpp, razer = family("hidpp2"), family("razer-rpc90")
+    graph = EvidenceGraph()
+    hidpp_prior = import_protocol_family_prior(graph, hidpp)
+    razer_prior = import_protocol_family_prior(graph, razer)
+    hidpp_device = compile_family_genome(hidpp, evidence=hidpp_prior.evidence_ids)
+    razer_device = compile_family_genome(razer, evidence=razer_prior.evidence_ids)
+    assert hidpp_device.family != razer_device.family
+    assert {op.name for op in hidpp_device.operations} >= {"sensor-dpi", "report-rate"}
+    assert {op.name for op in razer_device.operations} == {"xy-dpi"}
+    assert all(op.state is not ProofState.WRITE_VERIFIED
+               for op in (*hidpp_device.operations, *razer_device.operations))
 
 
 def test_community_success_is_attributed_but_never_write_authority() -> None:

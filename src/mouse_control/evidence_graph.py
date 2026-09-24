@@ -96,6 +96,10 @@ class EvidenceGraph:
             document = json.loads(text)
             if set(document) != {'schema', 'nodes', 'invalid'} or type(document['schema']) is not int or document['schema'] != 1:
                 raise ValueError('unsupported evidence graph schema')
+            if (not isinstance(document['nodes'], list) or len(document['nodes']) > 100_000
+                    or not isinstance(document['invalid'], dict)
+                    or len(document['invalid']) > 100_000):
+                raise ValueError('evidence graph collections exceed import bounds')
             graph = cls()
             for row in document['nodes']:
                 if set(row) != {'id', 'kind', 'claim', 'source', 'parents'} or not isinstance(row['parents'], list):
@@ -107,6 +111,8 @@ class EvidenceGraph:
                     raise ValueError('altered or duplicate evidence node')
                 graph.add(node)
             for key, reason in document['invalid'].items():
+                if not isinstance(key, str) or not isinstance(reason, str) or not reason.strip():
+                    raise ValueError('malformed evidence invalidation')
                 graph.invalidate(key, reason)
             return graph
         except (KeyError, TypeError, AttributeError) as exc:

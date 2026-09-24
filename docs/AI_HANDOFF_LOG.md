@@ -1897,3 +1897,22 @@ Request: user attachment `pasted-text.txt` on
 - Remaining external/feature gates: real kernel HID-BPF attachment, UHID/vendor
   exercise, family-specific firmware parsers, full-screen TUI controller
   wiring, exhaustive request/reply timing inference, and physical acceptance.
+## 2026-09-24 — Final Discovery engineering-hardening checkpoint
+
+- Continued from `3b264b7`; wired production Automatic Discovery presentation
+  into the canonical Hardware/Lab pages without changing navigation or adding a
+  second execution path. Rebind clears stale UI state; Lab evidence explicitly
+  returns to the same EvidenceGraph/pipeline.
+- Hardened compact recipes with generation/evidence revision, exact schemas,
+  bounded fields, atomic persistence, symlink/corruption refusal, and complete
+  invalidation reasons. Added explicit input budgets across graph, Genome,
+  pipeline, community evidence, and inference entry points.
+- Regression coverage includes existing native HID++/G305 and native Razer
+  suites plus explicit cross-family non-promotion tests. No physical hardware
+  was exercised.
+- Validation: 1,435 passed, one existing private-bus skip; 112 focused TUI,
+  pipeline, HID++ and Razer tests passed; performance suite 4 passed.
+  Compileall, diff check, dependency-lock and workflow-security verification,
+  sdist, and wheel build pass. Recipe decode changed from 3.41 us to 5.35 us
+  after strict validation; TUI view construction is 1.33 us and all 20-family
+  Genome compilation is 53.6 us.

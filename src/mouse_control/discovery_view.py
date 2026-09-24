@@ -27,3 +27,41 @@ def build_discovery_view(result: DiscoveryResult) -> DiscoveryView:
         for item in result.trace
     )
     return DiscoveryView(phase, overview, decisions, result.human_action)
+
+
+def view_from_automatic_outcome(outcome: object) -> DiscoveryView:
+    """Adapt the production Automatic Discovery outcome without duplicating it."""
+    result = getattr(outcome, "result", outcome)
+    protocol = getattr(result, "protocol", None)
+    family = getattr(protocol, "name", None) or "unknown protocol"
+    capabilities = getattr(result, "capabilities", {})
+    proven, inferred = [], []
+    if isinstance(capabilities, dict):
+        for name, capability in sorted(capabilities.items()):
+            mode = str(getattr(capability, "mode", getattr(capability, "status", "unknown")))
+            if any(word in mode.lower() for word in ("proven", "verified", "read_write")):
+                proven.append(str(name))
+            else:
+                inferred.append(f"{name}: {mode}")
+    cached = bool(getattr(outcome, "cached_profile_used", False))
+    plan = getattr(outcome, "research_plan", None)
+    missing = tuple(getattr(plan, "blockers", ()) or ())
+    if getattr(plan, "deeper_learning_recommended", False):
+        human = "complete the guided physical observation requested by Discovery"
+    elif missing:
+        human = str(missing[0])
+    else:
+        human = None
+    overview = (
+        f"Protocol family: {family} [{'PROVEN PATH' if cached else 'RECOGNIZED / UNVERIFIED'}]",
+        "Proven capabilities: " + (", ".join(proven) or "none"),
+        "Inferred or unresolved: " + (", ".join(inferred) or "none reported"),
+        f"Known-device fast path: {'reused' if cached else 'not used'}",
+    )
+    decisions = (
+        "identity: production topology binding retained",
+        f"protocol: {family}",
+        "authority: corpus, inference, and community evidence do not grant writes",
+    )
+    return DiscoveryView("known_fast_path" if cached else "automatic_discovery",
+                         overview, decisions, human)

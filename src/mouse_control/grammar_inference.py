@@ -47,6 +47,9 @@ class GrammarAlternative:
 
 
 def infer_grammars(examples: tuple[TraceExample, ...], *, scope: str = "exact_model") -> tuple[GrammarAlternative, ...]:
+    if len(examples) > 4096 or any(len(item.request) > 4096 or len(item.response) > 4096
+                                   for item in examples):
+        raise ValueError("grammar inference input exceeds deterministic bounds")
     if len(examples) < 2 or any(not item.evidence for item in examples):
         return ()
     evidence = tuple(dict.fromkeys(item.evidence for item in examples))
