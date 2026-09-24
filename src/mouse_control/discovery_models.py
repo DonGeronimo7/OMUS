@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral models for automatic mouse hardware discovery.
 
 Discovery deliberately separates *observation* from *runtime control*.  These

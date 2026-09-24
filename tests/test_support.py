@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Support reports remain local, deterministic, and write-free."""
 from pathlib import Path
 from unittest.mock import Mock, patch

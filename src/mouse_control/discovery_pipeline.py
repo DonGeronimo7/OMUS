@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canonical offline Discovery decision pipeline and explainable trace."""
 from __future__ import annotations
 from dataclasses import dataclass

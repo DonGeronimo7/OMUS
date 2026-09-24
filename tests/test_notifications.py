@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DPI notification tests require neither hardware nor a desktop session."""
 
 from pathlib import Path

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from mouse_control.integrity_inference import infer_integrity
 from mouse_control.transaction_inference import DemonstratedTransaction, infer_transaction_grammar
 

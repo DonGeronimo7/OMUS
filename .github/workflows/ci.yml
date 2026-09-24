@@ -42,6 +42,8 @@ jobs:
         run: python scripts/validate_workflows.py
       - name: Validate dependency hash locks
         run: python scripts/verify_dependency_locks.py
+      - name: Validate licensing metadata
+        run: python scripts/check_license_consistency.py
       - name: Lint high-confidence correctness rules
         run: python -m ruff check src tests scripts fuzz
       - name: Verify reproducible wheel build

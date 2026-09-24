@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral lighting validation and shared-record preservation.
 
 This module contains no transport. Backends retain exact-device binding and

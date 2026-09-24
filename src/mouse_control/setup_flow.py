@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Revisitable, backend-neutral setup choices.
 
 Discovery facts live here only as a snapshot for presentation/validation. Hardware

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Control-ownership regressions for discovery-first hardware handling."""
 
 from types import SimpleNamespace

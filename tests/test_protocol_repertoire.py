@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the vendor-agnostic protocol repertoire and inference core."""
 
 from __future__ import annotations

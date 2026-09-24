@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Offline, provenance-preserving kernel vocabulary miner.
 
 Extracts lexical facts, not C semantics. Comments/string contents are masked

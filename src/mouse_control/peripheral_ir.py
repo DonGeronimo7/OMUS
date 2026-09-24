@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Capability IR and offline proof-plan compiler. No transport or write authority.
 
 Existing protocol_grammar objects remain the vocabulary for frames, records,

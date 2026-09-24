@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from dataclasses import asdict
 from mouse_control.hid_descriptor import parse_report_descriptor
 from mouse_control.hid_report import decode_input_report

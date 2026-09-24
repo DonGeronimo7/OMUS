@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fuzz bounded HID descriptor and report decoding without opening hardware."""
 
 import sys

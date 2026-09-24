@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Conflict-aware provenance records for reusable protocol knowledge."""
 
 from __future__ import annotations

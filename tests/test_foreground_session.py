@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The user manager, not the TUI process, owns foreground restoration."""
 
 from __future__ import annotations

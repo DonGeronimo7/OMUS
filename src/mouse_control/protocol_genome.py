@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Operation-specific, provenance-rich Protocol Genome records."""
 from __future__ import annotations
 from dataclasses import dataclass

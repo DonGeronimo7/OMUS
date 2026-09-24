@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Persistent, path-independent device discovery profiles.
 
 Profiles cache facts discovery has already proven.  They never store

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Temporary exclusive evdev keyboard capture for the setup wizard."""
 
 from contextlib import contextmanager, nullcontext

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral hardware capabilities and state."""
 
 from __future__ import annotations

@@ -38,7 +38,7 @@ privacy-conscious report that helps expand support.
 [![CodeQL](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml/badge.svg)](https://github.com/DonGeronimo7/OMUS/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DonGeronimo7/OMUS/badge)](https://scorecard.dev/viewer/?uri=github.com/DonGeronimo7/OMUS)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14722/badge)](https://www.bestpractices.dev/projects/14722)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-3DA639)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-3DA639)](LICENSE)
 ![Linux](https://img.shields.io/badge/Linux-supported-6f42c1)
 ![Wayland](https://img.shields.io/badge/Wayland-supported-6f42c1)
 
@@ -396,5 +396,14 @@ maintainer review.
 
 ## License
 
-OMUS is licensed under the GNU General Public License, version 3 or
-later. See [`LICENSE`](LICENSE).
+The current OMUS development tree is licensed under the GNU Affero General
+Public License, version 3 or any later version (`AGPL-3.0-or-later`). See
+[`LICENSE`](LICENSE).
+
+Organizations requiring terms other than `AGPL-3.0-or-later` may contact the
+project for separate commercial licensing. Dual licensing changes the available
+legal terms, not the functionality of the public OMUS source. Third-party
+components, research evidence, and assets retain their respective licenses or
+provenance, and versions already distributed remain under the licenses that
+applied to those versions. See [`DUAL-LICENSING.md`](DUAL-LICENSING.md) and
+[`docs/LICENSING_PROVENANCE.md`](docs/LICENSING_PROVENANCE.md).

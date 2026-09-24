@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Teacher-registry isolation and semantic-read regressions."""
 
 from dataclasses import fields

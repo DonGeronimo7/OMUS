@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Thin integration path joining existing discovery evidence layers."""
 
 from __future__ import annotations

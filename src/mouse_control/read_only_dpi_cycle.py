@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only tracking for physically calibrated ordered DPI cycles.
 
 This component deliberately has no hardware backend reference and therefore no

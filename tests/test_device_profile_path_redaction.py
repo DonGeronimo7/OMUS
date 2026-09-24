@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Regression coverage for path-independent discovery profile persistence."""
 
 from __future__ import annotations

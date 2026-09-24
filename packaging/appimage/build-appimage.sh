@@ -103,6 +103,9 @@ chmod +x AppDir/usr/bin/omus-launcher
 install -Dm644 packaging/appimage/omus.desktop AppDir/usr/share/applications/omus.desktop
 install -Dm644 packaging/omus.metainfo.xml AppDir/usr/share/metainfo/io.github.DonGeronimo7.OMUS.metainfo.xml
 install -Dm644 CREDITS.md AppDir/usr/share/doc/omus/CREDITS.md
+install -Dm644 DUAL-LICENSING.md AppDir/usr/share/doc/omus/DUAL-LICENSING.md
+install -Dm644 docs/LICENSING_PROVENANCE.md AppDir/usr/share/doc/omus/LICENSING_PROVENANCE.md
+install -Dm644 LICENSE AppDir/usr/share/doc/omus/LICENSE
 install -Dm644 SECURITY.md AppDir/usr/share/doc/omus/SECURITY.md
 
 for size in 512 256 128 64 48 32 24 16; do

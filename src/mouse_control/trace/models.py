@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Stable, protocol-neutral models for raw USB trace evidence."""
 
 from __future__ import annotations

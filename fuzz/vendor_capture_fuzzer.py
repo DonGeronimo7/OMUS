@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fuzz the bounded offline capture importer with all side effects excluded."""
 
 import sys

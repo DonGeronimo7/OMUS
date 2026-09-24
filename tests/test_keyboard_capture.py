@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import sys
 from contextlib import nullcontext
 from pathlib import Path

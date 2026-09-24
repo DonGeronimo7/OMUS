@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared setup button-capture primitives."""
 
 from __future__ import annotations

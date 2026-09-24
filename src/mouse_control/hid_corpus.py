@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Portable, read-only HID semantic corpus records.
 
 Raw descriptors and Input reports remain the source of truth.  This module

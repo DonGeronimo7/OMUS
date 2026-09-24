@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Regression tests for teacher-free transition/report-shape refinement."""
 
 from mouse_control.contrastive_inference import refine_teacher_free

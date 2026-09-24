@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Property-oriented bounded parser/decoder safety cases."""
 from mouse_control.hid_descriptor import parse_report_descriptor
 

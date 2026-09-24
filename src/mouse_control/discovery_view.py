@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canonical presentation model for Lab/TUI Discovery views."""
 from __future__ import annotations
 from dataclasses import dataclass

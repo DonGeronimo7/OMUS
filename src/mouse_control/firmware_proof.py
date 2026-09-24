@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only firmware artifact inspection and dry-run matching.
 
 No function in this module opens hardware or exposes a flashing primitive.

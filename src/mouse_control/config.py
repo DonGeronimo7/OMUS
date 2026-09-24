@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TOML configuration loading and saving."""
 
 from __future__ import annotations

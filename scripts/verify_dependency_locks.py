@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Validate the repository's generated pip hash-lock contract."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Physical polling-rate verifier for discovery promotion laboratories.
 
 Uses an already-proven native backend only to establish/restore known polling

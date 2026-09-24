@@ -43,6 +43,20 @@ workflow proposals.
 
 ## Pull requests
 
+OMUS is publicly licensed under `AGPL-3.0-or-later` and may also be offered by
+the rights holder under separate commercial terms. The repository does not
+currently have a legally approved contributor license agreement (CLA), and a
+Developer Certificate of Origin (DCO) is not used as a substitute for the
+relicensing rights that dual licensing may require.
+
+Until an appropriate contributor agreement has been reviewed and approved,
+outside code contributions intended for inclusion in separately commercially
+licensed builds must not be accepted or merged. Hardware reports, factual
+observations, and other research evidence must retain their source and
+provenance; submitting them does not represent that the contributor assigned
+copyright. Maintainers should obtain legal review before adopting a contributor
+agreement or changing this gate.
+
 Keep pull requests focused and explain the hardware or workflow they affect.
 Avoid changing validated HID++, remapping, notification, service, permission,
 or backend behavior without first opening an issue that documents the objective
@@ -61,6 +75,7 @@ Before submitting a change, run:
 python3 -m ruff check src tests scripts fuzz
 python3 scripts/validate_workflows.py
 python3 scripts/verify_dependency_locks.py
+python3 scripts/check_license_consistency.py
 scripts/check-wheel-reproducibility.sh
 PYTHONPATH=src python3 -m pytest -q
 python3 -m compileall -q src tests scripts fuzz

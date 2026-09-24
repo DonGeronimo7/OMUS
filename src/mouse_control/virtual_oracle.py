@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Transport-agnostic core for a Virtual Peripheral Oracle.
 
 A future UHID/USB-IP adapter can forward vendor-software GET/SET_REPORT traffic

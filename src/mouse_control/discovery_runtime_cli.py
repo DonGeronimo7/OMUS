@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Acceptance monitor for the Discovery-backed runtime path.
 
 This deliberately bypasses native vendor backends so a known mouse can prove

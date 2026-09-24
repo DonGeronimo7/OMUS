@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import sys
 import tomllib
 from pathlib import Path
@@ -85,12 +86,15 @@ def test_udev_rule_is_not_world_writable_or_keyboard_permissive():
     assert 'ATTRS{idVendor}=="046d"' not in content
 
 
-def test_packaging_declares_gpl_and_installs_udev_rule():
+def test_packaging_declares_agpl_and_installs_udev_rule():
     root = Path(__file__).parents[1]
     metadata = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
     spec = (root / 'omus.spec').read_text(encoding='utf-8')
-    assert metadata['project']['license'] == {'text': 'GPL-3.0-or-later'}
-    assert metadata['tool']['setuptools']['license-files'] == ['LICENSE', 'CREDITS.md']
-    assert 'License:        GPL-3.0-or-later' in spec
+    assert metadata['project']['license'] == 'AGPL-3.0-or-later'
+    assert metadata['project']['license-files'] == [
+        'LICENSE', 'CREDITS.md', 'DUAL-LICENSING.md',
+        'docs/LICENSING_PROVENANCE.md',
+    ]
+    assert 'License:        AGPL-3.0-or-later' in spec
     assert 'LicenseRef-Proprietary' not in spec
     assert '%{_udevrulesdir}/71-mouse-control-uaccess.rules' in spec

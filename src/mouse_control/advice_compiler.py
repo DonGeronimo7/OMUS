@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compile sourced protocol knowledge into declarative Discovery advice.
 
 Advice narrows research choices.  It is neither an authorization receipt nor a

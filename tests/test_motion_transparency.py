@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic physical-to-virtual evdev frame transparency tests."""
 
 import threading

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Native Logitech HID++ 2 protocol driver.
 
 The implementation is independent and based on observed HID++ wire behavior;

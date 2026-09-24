@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reactive event-condition-action model for learned peripheral behavior.
 
 This is an explainable state representation for observations such as profile

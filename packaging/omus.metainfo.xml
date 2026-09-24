@@ -4,7 +4,7 @@
   <name>OMUS</name>
   <summary>One Linux system for every mouse</summary>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0-or-later</project_license>
+  <project_license>AGPL-3.0-or-later</project_license>
   <description>
     <p>OMUS is One Mouse Universal System: a Linux-native application for safely discovering, configuring, and remapping mice across vendors and protocols. Every mouse. One system.</p>
   </description>

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compact verified runtime recipes, separate from the research graph."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass

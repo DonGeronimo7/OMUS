@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Conservative symbolic action alphabet derived from PeripheralIR.
 
 The alphabet is intentionally semantic.  It contains no transport bytes and no

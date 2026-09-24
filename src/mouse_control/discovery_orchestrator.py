@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Offline orchestration of quarantine, grammar inference, and escalation."""
 from __future__ import annotations
 from dataclasses import dataclass

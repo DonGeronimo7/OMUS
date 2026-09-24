@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Guided, read-only behavioral learning for unknown mouse protocols.
 
 A learning session observes repeated user actions across *all readable*

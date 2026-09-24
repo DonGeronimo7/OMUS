@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Evidence-based mutation safety maps for bounded protocol experiments.
 
 The model adapts the useful idea behind region-aware protocol mutation without

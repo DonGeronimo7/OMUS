@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Lifecycle shell for a real HID-BPF loader, with conservative fallback.
 
 The loader is injected so kernel-specific code remains byte instrumentation.

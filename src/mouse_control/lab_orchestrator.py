@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Safe information-gain orchestration for canonical Discovery Lab experiments.
 
 Planning is pure and replayable.  Execution only observes the selected device

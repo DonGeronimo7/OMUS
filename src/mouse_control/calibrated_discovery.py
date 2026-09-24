@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Physical CPI/polling evidence correlated with read-only HID discovery.
 
 This module joins two independently safe evidence streams:

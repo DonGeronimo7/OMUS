@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Content-addressed Discovery evidence DAG, persisted as knowledge, not authority."""
 from __future__ import annotations
 

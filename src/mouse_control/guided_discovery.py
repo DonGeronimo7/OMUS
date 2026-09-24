@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reusable read-only guided learning used by setup and discovery CLI.
 
 This module intentionally owns no write or promotion path. It orchestrates the

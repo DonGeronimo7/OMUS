@@ -2,7 +2,7 @@ Name:           omus
 Version:        1.0.4
 Release:        1%{?dist}
 Summary:        One Mouse Universal System for Linux
-License:        GPL-3.0-or-later
+License:        AGPL-3.0-or-later
 URL:            https://github.com/DonGeronimo7/OMUS
 %global python_version 1.0.4
 Source0:        omus-%{python_version}.tar.gz
@@ -89,8 +89,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=%{buildroot}%{python3_sitelib} \
 %{_userunitdir}/omus.service
 %config(noreplace) %{_sysconfdir}/xdg/autostart/omus.desktop
 %license LICENSE
-%doc README.md CHANGELOG.md CREDITS.md SECURITY.md
+%doc README.md CHANGELOG.md CREDITS.md DUAL-LICENSING.md SECURITY.md
 %doc docs/COMPATIBILITY.md
+%doc docs/LICENSING_PROVENANCE.md
 %{_bindir}/mouse-control
 %{_bindir}/omus
 %{_bindir}/omus-launcher

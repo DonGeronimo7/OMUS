@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only, action-conditioned HID state candidate inference.
 
 This is deliberately a candidate layer: a labelled action can explain why a

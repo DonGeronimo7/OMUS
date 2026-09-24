@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """State-driven setup TUI controller.
 
 The controller contains session/navigation state only. Hardware discovery and

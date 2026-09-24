@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Small repeatable performance suite for OMUS's representative paths."""
 from __future__ import annotations
 

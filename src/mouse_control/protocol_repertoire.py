@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Known protocol-family repertoire and conservative structural matcher.
 
 The repertoire is intentionally *not* a device support table.  It records

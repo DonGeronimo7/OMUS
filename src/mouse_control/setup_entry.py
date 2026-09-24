@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Production setup transaction around the state-driven full-screen TUI."""
 
 from __future__ import annotations

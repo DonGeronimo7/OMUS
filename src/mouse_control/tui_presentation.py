@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared, terminal-independent presentation rules for the setup TUI.
 
 The curses adapter is intentionally thin: geometry, wrapping, scrolling, and

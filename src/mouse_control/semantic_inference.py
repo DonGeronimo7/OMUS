@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Evidence-producing semantic inference for unknown mouse protocols.
 
 Inference is deliberately conservative: it labels hypotheses and candidate

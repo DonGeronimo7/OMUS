@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Evidence-driven receiver/child routing analysis for Discovery Lab.
 
 The mapper consumes existing selected-device observations.  It never probes

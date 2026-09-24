@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pure protocol vocabulary recovered from public, hardware-tested projects.
 
 This module deliberately contains *codecs and parsers only*.  It never opens a

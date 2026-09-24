@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Experimental raw HID demonstration capture feeding generic write discovery.
 
 A proven native backend acts only as a teacher/actuator. The learned pipeline

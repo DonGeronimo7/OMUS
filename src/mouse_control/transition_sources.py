@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral runtime sources for physically calibrated DPI transitions.
 
 The deep learner proves the physical DPI cycle independently from vendor

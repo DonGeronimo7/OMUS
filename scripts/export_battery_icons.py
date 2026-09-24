@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Export OMUS tray battery pixmaps for developer visual inspection."""
 from __future__ import annotations
 

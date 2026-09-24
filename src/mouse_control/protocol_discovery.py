@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Known-protocol detectors used by automatic hardware discovery.
 
 Protocol detection is deliberately conservative.  A detector may only probe a

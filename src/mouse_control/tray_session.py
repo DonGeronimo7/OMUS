@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Recover one exported tray item across watcher and session-bus lifetimes."""
 from __future__ import annotations
 

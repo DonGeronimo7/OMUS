@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Safety-gated HID-BPF observation vocabulary for Discovery.
 
 The kernel/BPF loader is intentionally outside this module.  These types define

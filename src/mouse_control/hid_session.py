@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Single-reader HID session with request/reply and event multiplexing."""
 
 from __future__ import annotations

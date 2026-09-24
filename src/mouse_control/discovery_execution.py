@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Safe bridge from learned Discovery knowledge to bounded executable experiments.
 
 This module deliberately does *not* create runtime write authority.  It compiles

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic transport/replay adapter for VirtualPeripheralOracle."""
 from __future__ import annotations
 from dataclasses import dataclass

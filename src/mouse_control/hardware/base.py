@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Capability contract. Backends translate library failures to HardwareError.
 
 Empty value lists mean enumeration is unavailable, not a guessed range.

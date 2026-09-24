@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bounded advanced grammar inference; hypotheses only, never authority."""
 from __future__ import annotations
 from dataclasses import dataclass

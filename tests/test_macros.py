@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Structured macro parsing, playback, cleanup, and configuration tests."""
 
 import tomllib

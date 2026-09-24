@@ -23,8 +23,10 @@ behavior, and hardware evidence, recorded below.
 This is evidence from the checked repository and its Git history, not a
 forensic proof that a particular constant or algorithm was never translated
 from an upstream work. The unresolved items at the end remain maintainer-review
-requirements. No conclusion here changes the GPL-3.0-or-later license for
-OMUS or substitutes for advice from qualified counsel.
+requirements. No conclusion here changes the `AGPL-3.0-or-later` license for
+the current OMUS development tree or substitutes for advice from qualified
+counsel. Historical versions remain under the licenses applicable when they
+were distributed.
 
 ## Protocol and research credits
 
@@ -48,10 +50,10 @@ the maintainer records its original source and license status.
 
 ## What the project distributes
 
-OMUS distributes its own GPL-3.0-or-later source and the repository's
-`LICENSE`. This credits file is included in source distributions and installed
-documentation for RPM, Debian, Arch, and AppImage artifacts so downstream users
-can inspect the provenance record.
+OMUS distributes its first-party current source under `AGPL-3.0-or-later` and
+the repository's `LICENSE`. This credits file is included in source
+distributions and installed documentation for RPM, Debian, Arch, and AppImage
+artifacts so downstream users can inspect the provenance record.
 
 The audit did not find a copied or vendored upstream work whose full license
 text must be included in the current artifacts. That finding is conditional on
@@ -62,7 +64,8 @@ following in the same change:
 1. retain the upstream copyright and license notice exactly as required;
 2. identify the upstream file, revision, and license in this document;
 3. add any required third-party license text to the source and binary packages;
-4. confirm that the combined distribution is compatible with GPL-3.0-or-later;
+4. confirm that the combined distribution is compatible with
+   `AGPL-3.0-or-later`;
 5. add a focused packaging regression check.
 
 ## Maintainer review queue

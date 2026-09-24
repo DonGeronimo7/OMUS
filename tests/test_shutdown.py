@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Regression coverage for prompt, clean service shutdown."""
 
 from pathlib import Path

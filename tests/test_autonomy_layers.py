@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
 from mouse_control.active_fingerprint import (

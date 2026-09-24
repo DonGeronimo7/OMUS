@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral execution of PROVEN or explicitly promoted learned HID writes."""
 
 from __future__ import annotations

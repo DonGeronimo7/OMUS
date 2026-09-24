@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Import-order regression tests for the standalone discovery command."""
 
 from __future__ import annotations

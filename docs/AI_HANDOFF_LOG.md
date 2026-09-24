@@ -1916,3 +1916,24 @@ Request: user attachment `pasted-text.txt` on
   sdist, and wheel build pass. Recipe decode changed from 3.41 us to 5.35 us
   after strict validation; TUI view construction is 1.33 us and all 20-family
   Genome compilation is 53.6 us.
+
+## 2026-09-24 — AGPL licensing and provenance transition
+
+- Continued from clean `codex/autonomous-discovery-ir` commit `2bf8760` and
+  changed the current tree to `AGPL-3.0-or-later` without retroactively
+  relabeling historical releases or changing runtime behavior.
+- Added the official AGPLv3 text, PEP 639 metadata, first-party Python SPDX
+  headers, dual-licensing and provenance records, a future-contribution gate,
+  distribution-format declarations, SBOM root-license normalization, and a
+  deterministic license-consistency check.
+- Git history identifies Marc-Anthony Geronimo/DonGeronimo7 as the sole human
+  contributor. External protocol facts and generated Linux evidence retain
+  attribution; the unknown `bitmouse-72` source and independent icon provenance
+  remain documented administrative follow-up. No CLA or DCO relicensing grant
+  was found.
+- Validation: 1,436 passed, one existing private-bus skip, and one existing
+  GLib warning; compileall, diff check, dependency-lock, workflow-security,
+  license-consistency, focused release/SBOM tests, sdist, and wheel build pass.
+  Wheel metadata reports `License-Expression: AGPL-3.0-or-later`; required
+  licensing/provenance files are present in wheel and sdist, and the prior
+  setuptools licensing deprecations are absent. Ruff was unavailable locally.

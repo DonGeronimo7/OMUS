@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Interactive Logitech HID++ discovery and passive report capture."""
 
 from __future__ import annotations

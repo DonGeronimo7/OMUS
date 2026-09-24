@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Regression tests for native-teacher semantic transition validation."""
 
 from mouse_control.discovery_models import PhysicalDevice

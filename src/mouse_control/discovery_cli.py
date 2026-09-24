@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Dedicated CLI for automatic-hardware-discovery acceptance and learning.
 
 Keeping this command separate from the normal setup/runtime path lets us test

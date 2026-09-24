@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Exercise real exported SNI interfaces against controllable bus lifetimes."""
 import asyncio
 from types import SimpleNamespace

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Universal mouse hardware backend powered by Automatic Discovery.
 
 Every selected mouse is represented to the rest of OMUS through this

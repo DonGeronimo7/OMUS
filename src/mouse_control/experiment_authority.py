@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Conservative authorization model for bounded discovery experiments.
 
 This module describes eligibility only.  It intentionally owns no transport or

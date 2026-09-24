@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Capture known-good polling transactions that begin in host control mode.
 
 The original polling corpus intentionally demonstrated Onboard -> Host takeover.

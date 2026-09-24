@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Vendor-neutral mouse sensor calibration from Linux evdev events.
 
 The calibration method intentionally mirrors the useful principle behind

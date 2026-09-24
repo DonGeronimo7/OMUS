@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compile the existing reviewed protocol repertoire into Genome records."""
 from __future__ import annotations
 from .protocol_genome import GenomeDevice, GenomeOperation, ProofState

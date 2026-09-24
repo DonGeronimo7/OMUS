@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 
 from mouse_control.research_probe import _choose_other

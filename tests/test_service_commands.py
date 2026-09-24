@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Short service command surfaces share the existing systemd helpers."""
 from pathlib import Path
 import sys

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only generic HID discovery used to develop native device protocols.
 
 USB HID does not standardize mouse DPI or report-rate configuration.  This

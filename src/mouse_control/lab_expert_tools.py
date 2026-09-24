@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Presentation-only inventory for the Discovery Lab expert dashboard.
 
 Every entry maps to existing Discovery/Lab state or to one of the two existing

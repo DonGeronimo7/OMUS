@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only LAMZU Aurora protocol-family knowledge.
 
 Facts in this module are independently expressed from the vendor application

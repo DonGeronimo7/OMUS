@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from dataclasses import replace
 from types import SimpleNamespace
 

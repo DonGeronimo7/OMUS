@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from mouse_control.dependency_inference import DependencyKind, infer_dependencies
 
 

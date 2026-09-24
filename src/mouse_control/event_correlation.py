@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Correlate evdev actions, hidraw input reports, and feature-report changes.
 
 This module does not assign vendor semantics. It can establish facts such as

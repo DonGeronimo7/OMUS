@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Generic fixed-frame to variable logical-record reconstruction tests."""
 
 from dataclasses import replace

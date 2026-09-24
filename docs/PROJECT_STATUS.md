@@ -1,5 +1,27 @@
 # OMUS Project Status
 
+## 2026-09-24 — AGPL licensing and provenance transition
+
+- The current development tree after engineering baseline `2bf8760` is
+  `AGPL-3.0-or-later`; historical releases retain their applicable historical
+  licenses. Public and potential commercial editions differ in licensing terms,
+  not intentional functionality.
+- Git history identifies Marc-Anthony Geronimo/DonGeronimo7 as the sole human
+  contributor through the boundary. Bot-authored history consists of dependency
+  maintenance or repository automation; no CLA or DCO relicensing mechanism
+  exists, so outside code intended for commercial dual licensing is gated
+  pending a legally reviewed contributor agreement.
+- `docs/LICENSING_PROVENANCE.md` and `CREDITS.md` distinguish first-party code,
+  external protocol facts, the generated Linux evidence corpus, fixtures,
+  dependencies, and assets. The unknown origin of the write-disabled
+  `bitmouse-72` research fixture and independent asset provenance remain
+  administrative follow-up, not claimed first-party evidence.
+- Wheel metadata emits `License-Expression: AGPL-3.0-or-later`; wheel and sdist
+  include the canonical AGPL text, credits, dual-licensing terms, and provenance
+  map without the prior setuptools licensing deprecations. Source validation
+  passes 1,436 tests with the existing private-bus skip and GLib warning. No
+  intentional runtime behavior changed.
+
 ## 2026-09-24 — Final Discovery engineering-hardening checkpoint
 
 - Canonical Automatic Discovery outcomes now feed the existing full-screen

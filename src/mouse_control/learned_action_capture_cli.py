@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Guided, read-only promotion of a physical DPI-cycle action trigger."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pair usbmon URB events without assigning vendor semantics."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Add the deterministic document identity required for CycloneDX attestation."""
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import uuid
 
 
 PROJECT_ID = "https://github.com/DonGeronimo7/OMUS"
+PROJECT_LICENSE = "AGPL-3.0-or-later"
 
 
 def finalize(path: Path, version: str) -> str:
@@ -20,6 +22,7 @@ def finalize(path: Path, version: str) -> str:
     component = document.get("metadata", {}).get("component", {})
     if component.get("name") != "omus" or component.get("version") != version:
         raise ValueError("SBOM root component does not match the release version")
+    component["licenses"] = [{"license": {"id": PROJECT_LICENSE}}]
 
     serial = f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'{PROJECT_ID}@{version}')}"
     document["serialNumber"] = serial

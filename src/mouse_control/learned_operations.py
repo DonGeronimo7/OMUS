@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Persistence and safety model for learned writable mouse operations.
 
 Calibrated read profiles and learned write profiles are deliberately separate.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral single-reader session for learned raw HID protocols.
 
 Unlike HidSession, this layer knows nothing about HID++, report layouts, feature

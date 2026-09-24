@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Systemd-supervised ownership for the interactive foreground session."""
 
 from __future__ import annotations

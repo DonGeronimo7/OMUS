@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Protocol-neutral inference and execution for demonstrated polling transactions.
 
 This laboratory layer learns an exact-model polling transaction from the raw
