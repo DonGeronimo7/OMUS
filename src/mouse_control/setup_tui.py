@@ -1675,6 +1675,7 @@ class SetupController:
                 DisplayRow(f"Version {__version__}", role="primary"),
                 DisplayRow(f"Selected backend: {backend}"),
                 DisplayRow("Linux evdev/uinput remapping with evidence-gated hardware control."),
+                DisplayRow("License: AGPL-3.0-or-later", dim=True),
                 DisplayRow("Project: github.com/DonGeronimo7/OMUS", dim=True),
                 DisplayRow("One Mouse Universal System", dim=True),
                 DisplayRow("Every mouse. One system.", dim=True),

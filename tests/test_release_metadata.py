@@ -140,6 +140,7 @@ def test_release_artifacts_smoke_test_primary_cpi_command():
 
 def test_source_archive_includes_repository_security_scripts():
     manifest = _text("MANIFEST.in")
+    assert "include PKGBUILD .SRCINFO" in manifest
     assert "recursive-include scripts *.py *.sh" in manifest
     assert "recursive-include .github *.yml *.yaml" in manifest
     assert "recursive-include requirements *.in *.txt" in manifest

@@ -1,5 +1,20 @@
 # OMUS Project Status
 
+## 2026-09-24 — v1.1.0 local release candidate preparation
+
+- Release metadata now consistently identifies v1.1.0, a minor release for the
+  completed bounded Automatic Discovery and integrated Lab/TUI work. Current
+  package metadata remains `AGPL-3.0-or-later`; historical releases retain
+  their applicable historical licenses.
+- Wheel, sdist, and Fedora RPM artifacts build locally. RPM `%check` passes the
+  complete source suite. Source packaging now includes `.SRCINFO`, closing a
+  release defect found by the RPM build gate.
+- The durable acceptance matrix is `docs/RELEASE_ACCEPTANCE_1.1.0.md`. Candidate
+  physical writes/reconnect/remapping were not executed because the installed
+  service owned the attached Logitech receiver; no active installation was
+  changed. Physical Razer hardware was unavailable and local CycloneDX tooling
+  was unavailable, so those correctly remain external gates.
+
 ## 2026-09-24 — AGPL licensing and provenance transition
 
 - The current development tree after engineering baseline `2bf8760` is

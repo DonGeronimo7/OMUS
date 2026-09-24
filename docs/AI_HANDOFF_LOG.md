@@ -1937,3 +1937,24 @@ Request: user attachment `pasted-text.txt` on
   Wheel metadata reports `License-Expression: AGPL-3.0-or-later`; required
   licensing/provenance files are present in wheel and sdist, and the prior
   setuptools licensing deprecations are absent. Ruff was unavailable locally.
+
+## 2026-09-24 — v1.1.0 final release-preparation checkpoint
+
+- Continued from clean `codex/autonomous-discovery-ir` commit `2fcd588e` and
+  selected v1.1.0 as the semver-minor identity for the completed user-facing
+  Automatic Discovery, Lab, and canonical TUI work. Updated Python, RPM, Arch,
+  Debian, AppImage documentation, README, changelog, release notes, and About
+  surfaces without changing runtime architecture or hardware authority.
+- The RPM build found that `.SRCINFO` was absent from the sdist, causing the
+  packaged license-consistency test to fail. `MANIFEST.in` now includes it and
+  a release-metadata regression covers the requirement. The rebuilt Fedora RPM
+  `%check` passes 1,437 tests with the existing private-bus skip.
+- Read-only host inspection confirmed an attached Logitech `046d:c53f`
+  receiver on hidraw interface 02. The active installed service was left
+  untouched, so candidate HID++ reads/writes, reconnect, remapping, and
+  notifications remain explicitly not executed rather than inferred from old
+  logs. No supported Razer device was available.
+- `docs/RELEASE_ACCEPTANCE_1.1.0.md` records commands, artifact hashes, package
+  contents, offline versus physical evidence, hosted-only SBOM status, and
+  licensing follow-up. No push, merge, tag, publication, installation, service
+  restart, firmware action, or unknown-device write occurred.

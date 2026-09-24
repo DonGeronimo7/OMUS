@@ -39,6 +39,13 @@ def test_canonical_tui_has_required_product_surfaces():
     } <= set(SetupSection)
 
 
+def test_about_surface_reports_current_license():
+    controller, _ = make_controller()
+    controller.section_index = tuple(SetupSection).index(SetupSection.ABOUT)
+    text = "\n".join(row.text for row in controller.detail_rows())
+    assert "License: AGPL-3.0-or-later" in text
+
+
 def test_parser_mechanics_are_not_invented_as_product_capabilities():
     assert all(not item.cli.startswith("--") for item in CAPABILITIES)
 
