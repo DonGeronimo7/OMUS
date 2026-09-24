@@ -138,6 +138,15 @@ def test_release_artifacts_smoke_test_primary_cpi_command():
     assert "AppImage cpi --help" in workflow
 
 
+def test_debian_release_build_uses_locked_pep639_capable_backend():
+    workflow = _text(".github/workflows/release-artifacts.yml")
+    deb = workflow.split("  deb:", 1)[1].split("\n  rpm:", 1)[0]
+    assert "python3-venv" in deb
+    assert "python3 -m venv --system-site-packages /tmp/omus-deb-build" in deb
+    assert "pip install --require-hashes --requirement requirements/build.lock.txt" in deb
+    assert 'PATH="/tmp/omus-deb-build/bin:$PATH" dpkg-buildpackage' in deb
+
+
 def test_source_archive_includes_repository_security_scripts():
     manifest = _text("MANIFEST.in")
     assert "include PKGBUILD .SRCINFO" in manifest

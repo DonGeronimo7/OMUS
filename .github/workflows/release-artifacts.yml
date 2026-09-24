@@ -56,10 +56,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Debian build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential debhelper dh-python pybuild-plugin-pyproject python3-all python3-setuptools python3-evdev python3-dbus-next python3-packaging
+        run: sudo apt-get update && sudo apt-get install -y build-essential debhelper dh-python pybuild-plugin-pyproject python3-all python3-setuptools python3-venv python3-evdev python3-dbus-next python3-packaging
       - name: Build Debian package
         run: |
-          dpkg-buildpackage -us -uc -b
+          python3 -m venv --system-site-packages /tmp/omus-deb-build
+          /tmp/omus-deb-build/bin/python -m pip install --require-hashes --requirement requirements/build.lock.txt
+          PATH="/tmp/omus-deb-build/bin:$PATH" dpkg-buildpackage -us -uc -b
           mkdir artifacts
           mv ../omus_*.deb artifacts/
           sudo apt-get install -y ./artifacts/omus_*.deb
